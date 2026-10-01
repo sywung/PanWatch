@@ -18,19 +18,32 @@ from src.modules.research.context_store import (
 from src.modules.automation.suggestion_pool import save_suggestion
 from src.modules.research.signals import SignalPackBuilder
 from src.modules.research.signals.structured_output import try_parse_action_json
-from src.platform.marketdata.models import DEFAULT_MARKET, MarketCode, StockData, MARKETS
+from src.platform.marketdata.futures_context import (
+    build_futures_context,
+    format_futures_context,
+    futures_prompt_note,
+)
+from src.platform.marketdata.models import (
+    DEFAULT_MARKET,
+    FUTURES_MARKETS,
+    MarketCode,
+    StockData,
+    MARKETS,
+)
 from src.modules.market.capital_flow_text import format_capital_flow_line
 from src.modules.market.chan_analysis import format_chan_summary
 
 logger = logging.getLogger(__name__)
 
 
-def is_market_trading(market: MarketCode) -> bool:
+def is_market_trading(market: MarketCode, now: datetime | None = None) -> bool:
     """按市场判断是否在交易时段。"""
     market_def = MARKETS.get(market)
     if not market_def:
         return False
-    return market_def.is_trading_time()
+    if getattr(market, "value", market) in FUTURES_MARKETS:
+        return market_def.is_day_session_time(now)
+    return market_def.is_trading_time(now)
 
 
 def market_label(market: MarketCode, language: str = "zh-TW") -> str:
@@ -40,6 +53,7 @@ def market_label(market: MarketCode, language: str = "zh-TW") -> str:
             MarketCode.HK: "Hong Kong market",
             MarketCode.US: "U.S. market",
             MarketCode.TW: "Taiwan market",
+            MarketCode.TWF: "Taiwan futures",
         }.get(market, market.value)
     if market == MarketCode.CN:
         return "A股"
@@ -49,6 +63,8 @@ def market_label(market: MarketCode, language: str = "zh-TW") -> str:
         return "美股"
     if market == MarketCode.TW:
         return "台股"
+    if market == MarketCode.TWF:
+        return "期貨"
     return market.value
 
 
@@ -182,7 +198,7 @@ class IntradayMonitorAgent(BaseAgent):
             analysis_date=date.today(),
         )
 
-        return {
+        result = {
             "stocks": [stock_data] if stock_data else [],
             "stock_data": stock_data,
             "kline_summary": kline_summary,
@@ -196,12 +212,19 @@ class IntradayMonitorAgent(BaseAgent):
             "quality_overview": quality_overview,
             "timestamp": datetime.now().isoformat(),
         }
+        if getattr(market, "value", market) == MarketCode.TWF.value:
+            result["futures_context"] = build_futures_context(symbol, stock_data)
+        return result
 
     def build_prompt(self, data: dict, context: AgentContext) -> tuple[str, str]:
         """构建盘中分析 Prompt"""
         system_prompt = PROMPT_PATH.read_text(encoding="utf-8")
         if any(getattr(s, "market", None) == MarketCode.TW for s in getattr(context, "watchlist", [])):
-            system_prompt += "\n台股说明：资金面使用三大法人买卖超（股数），融资融券单位为张，涨跌幅限制±10%，可当冲。\n"
+            system_prompt += "\n台股說明：資金面使用三大法人買賣超（股數），融資融券單位為張，漲跌幅限制±10%，可當沖。\n"
+        language = getattr(context, "report_language", "zh-TW")
+        system_prompt += futures_prompt_note(
+            getattr(context, "watchlist", []), language
+        )
 
         # 辅助函数：安全获取数值，None 转为默认值
         def safe_num(value, default=0):
@@ -247,6 +270,13 @@ class IntradayMonitorAgent(BaseAgent):
             lines.append(f"- 成交量：{volume:.0f} 手")
         if turnover > 0:
             lines.append(f"- 成交额：{turnover / 10000:.0f} 万")
+
+        futures_lines = format_futures_context(
+            data.get("futures_context"), language
+        )
+        if futures_lines:
+            lines.append("\n## 期貨脈絡")
+            lines.extend(futures_lines)
 
         # 系统阈值（帮助 AI 做出更稳定的“提醒/不提醒”判断）
         # 价格异动改为相对个股自身波动率(ATR%)的自适应阈值,固定阈值作为下限/兜底。

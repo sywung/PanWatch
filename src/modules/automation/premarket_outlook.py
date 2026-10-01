@@ -1,5 +1,6 @@
 """盘前分析 Agent - 开盘前展望今日走势"""
 
+import asyncio
 import logging
 import re
 import time
@@ -25,6 +26,11 @@ from src.modules.research.signals.structured_output import (
 )
 from src.platform.observability.log_context import get_log_context
 from src.platform.marketdata.models import MarketCode
+from src.platform.marketdata.futures_context import (
+    build_futures_context,
+    format_futures_context,
+    futures_prompt_note,
+)
 from src.modules.market.capital_flow_text import format_capital_flow_line
 from src.modules.market.chan_analysis import format_chan_summary
 
@@ -119,6 +125,24 @@ class PremarketOutlookAgent(BaseAgent):
             include_events=True,
             events_days=7,
         )
+        futures_symbols = [
+            (item.symbol, packs[item.symbol].quote)
+            for item in context.watchlist
+            if getattr(item.market, "value", item.market) == MarketCode.TWF.value
+            and packs.get(item.symbol)
+            and packs[item.symbol].quote
+        ]
+        futures_values = await asyncio.gather(
+            *(
+                asyncio.to_thread(build_futures_context, symbol, quote)
+                for symbol, quote in futures_symbols
+            )
+        )
+        futures_contexts = {
+            symbol: value
+            for (symbol, _), value in zip(futures_symbols, futures_values)
+            if value
+        }
         quote_ok = 0
         technical_ok = 0
         news_total = 0
@@ -220,6 +244,7 @@ class PremarketOutlookAgent(BaseAgent):
             "us_indices": us_indices,
             "tw_indices": tw_indices,
             "signal_packs": packs,
+            "futures_contexts": futures_contexts,
             "symbol_contexts": symbol_contexts,
             "quality_overview": quality_overview,
             "news": news_items,
@@ -231,7 +256,8 @@ class PremarketOutlookAgent(BaseAgent):
         """构建盘前分析 Prompt"""
         system_prompt = PROMPT_PATH.read_text(encoding="utf-8")
         if any(getattr(s, "market", None) == MarketCode.TW for s in context.watchlist):
-            system_prompt += "\n台股说明：资金面使用三大法人买卖超（股数），融资融券单位为张，涨跌幅限制±10%，可当冲。\n"
+            system_prompt += "\n台股說明：資金面使用三大法人買賣超（股數），融資融券單位為張，漲跌幅限制±10%，可當沖。\n"
+        system_prompt += futures_prompt_note(context.watchlist, context.report_language)
 
         # 辅助函数：安全获取数值，None 转为默认值
         def safe_num(value, default=0):
@@ -328,10 +354,22 @@ class PremarketOutlookAgent(BaseAgent):
             tech = (pack.technical if pack else None) or {}
             if tech.get("error"):
                 lines.append(f"\n### {stock.name}（{stock.symbol}）")
+                futures_lines = format_futures_context(
+                    (data.get("futures_contexts") or {}).get(stock.symbol),
+                    context.report_language,
+                )
+                if futures_lines:
+                    lines.extend(futures_lines)
                 lines.append(f"- 数据获取失败：{tech.get('error')}")
                 continue
 
             lines.append(f"\n### {stock.name}（{stock.symbol}）")
+            futures_lines = format_futures_context(
+                (data.get("futures_contexts") or {}).get(stock.symbol),
+                context.report_language,
+            )
+            if futures_lines:
+                lines.extend(futures_lines)
             chan_text = format_chan_summary(tech.get("chan"), context.report_language)
             if chan_text:
                 lines.append(chan_text)

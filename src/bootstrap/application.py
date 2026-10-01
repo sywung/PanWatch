@@ -26,6 +26,7 @@ from src.modules.assistant.task_runner import assistant_task_runner
 from src.modules.automation.api import agents, suggestions, templates
 from src.modules.market.api import (
     discovery,
+    futures,
     klines,
     market,
     news,
@@ -72,6 +73,9 @@ app.include_router(
 )
 app.include_router(
     quotes.router, prefix="/api/quotes", tags=["quotes"], dependencies=protected
+)
+app.include_router(
+    futures.router, prefix="/api/futures", tags=["futures"], dependencies=protected
 )
 app.include_router(
     klines.router, prefix="/api/klines", tags=["klines"], dependencies=protected

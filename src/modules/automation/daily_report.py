@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 import uuid
@@ -20,6 +21,11 @@ from src.modules.research.signals.structured_output import (
     try_extract_tagged_json,
 )
 from src.platform.marketdata.models import MarketCode, IndexData
+from src.platform.marketdata.futures_context import (
+    build_futures_context,
+    format_futures_context,
+    futures_prompt_note,
+)
 from src.modules.market.capital_flow_text import format_capital_flow_line
 from src.modules.market.chan_analysis import format_chan_summary
 
@@ -114,6 +120,24 @@ class DailyReportAgent(BaseAgent):
             include_events=True,
             events_days=7,
         )
+        futures_symbols = [
+            (item.symbol, packs[item.symbol].quote)
+            for item in context.watchlist
+            if getattr(item.market, "value", item.market) == MarketCode.TWF.value
+            and packs.get(item.symbol)
+            and packs[item.symbol].quote
+        ]
+        futures_values = await asyncio.gather(
+            *(
+                asyncio.to_thread(build_futures_context, symbol, quote)
+                for symbol, quote in futures_symbols
+            )
+        )
+        futures_contexts = {
+            symbol: value
+            for (symbol, _), value in zip(futures_symbols, futures_values)
+            if value
+        }
 
         context_builder = ContextBuilder()
         context_pack = await context_builder.build_symbol_contexts(
@@ -133,6 +157,7 @@ class DailyReportAgent(BaseAgent):
         return {
             "indices": all_indices,
             "signal_packs": packs,
+            "futures_contexts": futures_contexts,
             "symbol_contexts": context_pack.get("symbols", {}),
             "quality_overview": context_pack.get("quality_overview", {}),
             "timestamp": datetime.now().isoformat(),
@@ -142,7 +167,8 @@ class DailyReportAgent(BaseAgent):
         """构建日报 Prompt"""
         system_prompt = PROMPT_PATH.read_text(encoding="utf-8")
         if any(getattr(s, "market", None) == MarketCode.TW for s in context.watchlist):
-            system_prompt += "\n台股说明：资金面使用三大法人买卖超（股数），融资融券单位为张，涨跌幅限制±10%，可当冲。\n"
+            system_prompt += "\n台股說明：資金面使用三大法人買賣超（股數），融資融券單位為張，漲跌幅限制±10%，可當沖。\n"
+        system_prompt += futures_prompt_note(context.watchlist, context.report_language)
 
         # 辅助函数：安全获取数值，None 转为默认值
         def safe_num(value, default=0):
@@ -186,6 +212,12 @@ class DailyReportAgent(BaseAgent):
             quote = pack.quote if pack else None
             stock_name = (w.name or (quote.name if quote else "") or w.symbol).strip()
             lines.append(f"\n### {stock_name}（{w.symbol}）")
+            futures_lines = format_futures_context(
+                (data.get("futures_contexts") or {}).get(w.symbol),
+                context.report_language,
+            )
+            if futures_lines:
+                lines.extend(futures_lines)
             if stock_quality:
                 lines.append(
                     f"- 数据质量：{stock_quality.get('score', 0)}（实时新闻 {stock_quality.get('realtime_news_count', 0)} 条，扩展新闻 {stock_quality.get('extended_news_count', 0)} 条，历史新闻 {stock_quality.get('history_news_count', 0)} 条）"

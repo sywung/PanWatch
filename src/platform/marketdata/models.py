@@ -70,6 +70,26 @@ class MarketDef:
                     return True
         return False
 
+    def is_day_session_time(self, dt: datetime | None = None) -> bool:
+        """判断给定时间是否在日盘时段内。"""
+        if self.code != MarketCode.TWF:
+            return self.is_trading_time(dt)
+
+        if dt is None:
+            dt = datetime.now(self.get_tz())
+        else:
+            dt = dt.astimezone(self.get_tz())
+
+        from src.platform.scheduling.trading_calendar import is_trading_day
+
+        current_time = dt.time()
+        return any(
+            not session.crosses_midnight
+            and session.start <= current_time <= session.end
+            and is_trading_day(self.code, dt.date())
+            for session in self.sessions
+        )
+
 
 # 预定义市场
 MARKETS: dict[MarketCode, MarketDef] = {
@@ -137,6 +157,8 @@ class StockData:
     low_price: float
     prev_close: float
     timestamp: datetime = field(default_factory=datetime.now)
+    contract: str | None = None
+    session: str | None = None
 
 
 @dataclass

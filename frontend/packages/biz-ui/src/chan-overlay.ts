@@ -148,3 +148,27 @@ export function chanPointLabel(type: string, isBuy: boolean): string {
   const locale = getCurrentLocale()
   return i18n.t(key, { ns: 'bizUi', type, locale })
 }
+
+/**
+ * 把稀疏的转折点展开成「每根 K 线都有值」(在 K 线序号上线性内插)。
+ * lightweight-charts v5 绘制线条时会逐一取每个可见时间点的资料,稀疏线会取到 null
+ * 而抛 "Value is null",整张图停止绘制(2855 实例)。形状不变,只是补齐中间点。
+ */
+export function densifyLine(points: ChanLinePoint[], chartDates: string[]): ChanLinePoint[] {
+  if (points.length < 2 || chartDates.length === 0) return points
+  const index = new Map(chartDates.map((date, i) => [date, i]))
+  const out: ChanLinePoint[] = []
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const a = points[i]
+    const b = points[i + 1]
+    const ia = index.get(dayKey(a.time))
+    const ib = index.get(dayKey(b.time))
+    if (ia == null || ib == null || ib <= ia) continue
+    for (let k = ia; k <= ib; k += 1) {
+      if (out.length && k === ia && dayKey(out[out.length - 1].time) === chartDates[k]) continue
+      const value = a.value + (b.value - a.value) * (k - ia) / (ib - ia)
+      out.push({ time: toDay(chartDates[k]) as ChanTime, value })
+    }
+  }
+  return out
+}

@@ -186,3 +186,22 @@ describe('buildChanOverlay range clipping (2855 regression)', () => {
     expect(o.markers.map(m => m.text)).toEqual(['B2'])
   })
 })
+
+describe('densifyLine (lightweight-charts v5 "Value is null" regression)', () => {
+  it('fills every chart date between turning points by bar-index interpolation', async () => {
+    const { densifyLine } = await import('@panwatch/biz-ui/chan-overlay')
+    const dates = ['2026-01-02', '2026-01-05', '2026-01-06', '2026-01-07', '2026-01-08']
+    const out = densifyLine([{ time: day('2026-01-02'), value: 10 }, { time: day('2026-01-08'), value: 18 }], dates)
+    expect(out.map(p => p.value)).toEqual([10, 12, 14, 16, 18])
+    expect(out.map(p => p.time)).toEqual(dates.map(day))
+  })
+
+  it('joins consecutive segments without duplicating the shared point', async () => {
+    const { densifyLine } = await import('@panwatch/biz-ui/chan-overlay')
+    const dates = ['2026-01-02', '2026-01-05', '2026-01-06']
+    const out = densifyLine([
+      { time: day('2026-01-02'), value: 10 }, { time: day('2026-01-05'), value: 20 }, { time: day('2026-01-06'), value: 15 },
+    ], dates)
+    expect(out.map(p => p.value)).toEqual([10, 20, 15])
+  })
+})

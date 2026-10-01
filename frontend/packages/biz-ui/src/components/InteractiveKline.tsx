@@ -5,7 +5,7 @@ import { Button } from '@panwatch/base-ui/components/ui/button'
 import { useTranslation } from 'react-i18next'
 import { useMarketColors } from '@/hooks/use-market-colors'
 import { marketColorWithAlpha, marketSignTextClass } from '@/lib/market-colors'
-import { applySeriesMarkers, buildChanOverlay, chanPointLabel, type ChanLevel } from '@panwatch/biz-ui/chan-overlay'
+import { applySeriesMarkers, buildChanOverlay, chanPointLabel, densifyLine, type ChanLevel } from '@panwatch/biz-ui/chan-overlay'
 
 type BusinessDay = { year: number; month: number; day: number }
 
@@ -408,9 +408,19 @@ export default function InteractiveKline(props: {
           ? { from: series.klines[0].date, to: series.klines[series.klines.length - 1].date }
           : undefined,
       })
+      const chartDates = series.klines.map(k => k.date)
       const chanLine = (points: unknown[], color: string, lineWidth: number, lineStyle?: number) => {
-        const line = addLine(chart, LW, { color, lineWidth, ...(lineStyle == null ? {} : { lineStyle }) })
-        line.setData(points as any)
+        // 缠论线只在少数日期有点:关掉十字游标标记/最后值标签/价格线,
+        // 否则游标落在没有资料的日期时 lightweight-charts v5 会抛 "Value is null",整张图停止绘制
+        const line = addLine(chart, LW, {
+          color,
+          lineWidth,
+          crosshairMarkerVisible: false,
+          lastValueVisible: false,
+          priceLineVisible: false,
+          ...(lineStyle == null ? {} : { lineStyle }),
+        })
+        line.setData(densifyLine(points as any, chartDates) as any)
         return line
       }
       chanLine(overlay.biLine, palette.flat, 1)

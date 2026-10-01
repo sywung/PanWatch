@@ -79,7 +79,7 @@ def test_market_status_lists_taiwan_first():
     rows = res if isinstance(res, list) else res.get("data", res)
     codes = [r.get("code") or r.get("market") for r in rows]
     assert codes[0] == "TW"
-    assert codes == ["TW", "CN", "HK", "US"]
+    assert codes == ["TW", "TWF", "CN", "HK", "US"]   # F5:期货排在台股之后
 
 
 # ---------------------------------------------------------------- 机会发现

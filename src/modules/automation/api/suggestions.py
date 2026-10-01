@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from src.platform.persistence.database import get_db
+from src.platform.marketdata.models import DEFAULT_MARKET
 from src.modules.automation.suggestion_pool import (
     get_suggestions_for_stock,
     get_latest_suggestions,
@@ -67,7 +68,7 @@ def get_all_latest_suggestions(
                 parsed.append((text.strip().upper(), "CN"))
                 continue
             market, symbol = text.split(":", 1)
-            mkt = (market or "CN").strip().upper() or "CN"
+            mkt = (market or DEFAULT_MARKET.value).strip().upper() or DEFAULT_MARKET.value
             sym = (symbol or "").strip().upper()
             if sym:
                 parsed.append((sym, mkt))

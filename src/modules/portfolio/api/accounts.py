@@ -11,7 +11,7 @@ from src.platform.persistence.database import get_db
 from src.platform.persistence.models import Account, PriceAlertRule, Position, Stock
 from src.platform.marketdata.marketdata_client import md_quote_rows
 from src.platform.marketdata.collectors.market_http import TTLCache
-from src.platform.marketdata.models import MarketCode
+from src.platform.marketdata.models import DEFAULT_MARKET, MarketCode
 from src.platform.marketdata.models import BASE_CURRENCY
 from src.platform.marketdata import fx
 from src.web.errors import ai_api_error, api_error
@@ -672,7 +672,7 @@ def portfolio_todos(db: Session = Depends(get_db)):
             {
                 "type": "alert_expiring",
                 "symbol": stock.symbol if stock else "",
-                "market": stock.market if stock else "CN",
+            "market": stock.market if stock else DEFAULT_MARKET.value,
                 "name": r.name or "",
                 "message": f"{(r.name or '提醒')} 即将到期",
             }

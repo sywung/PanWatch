@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 import httpx
+from src.platform.marketdata.models import DEFAULT_MARKET
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +130,7 @@ class EastMoneyEventsCollector:
         md_items = await _asyncio.to_thread(
             get_market_data().events,
             symbols_list,
-            market="CN",
+            market=DEFAULT_MARKET.value,
             since_days=since_days,
         )
 

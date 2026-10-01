@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from src.platform.marketdata.collectors.kline_collector import KlineCollector, kline_source
 from src.platform.notifications.notifier import NotifierManager
 from src.platform.marketdata.marketdata_client import md_quote_rows
-from src.platform.marketdata.models import MarketCode, MARKETS
+from src.platform.marketdata.models import DEFAULT_MARKET, MarketCode, MARKETS
 from src.platform.persistence.database import SessionLocal
 from src.platform.persistence.models import NotifyChannel, PriceAlertHit, PriceAlertRule, Stock
 from src.platform.language import resolve_report_language
@@ -39,7 +39,7 @@ def _to_market(market: str) -> MarketCode:
     try:
         return MarketCode(market)
     except Exception:
-        return MarketCode.CN
+        return DEFAULT_MARKET
 
 
 def _is_trading_time(market: MarketCode) -> bool:

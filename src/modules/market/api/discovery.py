@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from src.platform.runtime.config import Settings
 from src.platform.notifications.notifier import get_global_proxy
 from src.platform.marketdata.collectors.discovery_collector import EastMoneyDiscoveryCollector
+from src.platform.marketdata.models import ALL_MARKETS, DEFAULT_MARKET
 from src.platform.persistence.database import get_db
 from src.platform.persistence.models import MarketScanSnapshot, Stock
 from src.web.errors import api_error
@@ -68,8 +69,8 @@ def _pick_num(mapping: dict, keys: list[str]) -> float | None:
 
 
 def _normalize_market(market: str) -> str:
-    m = (market or "CN").strip().upper()
-    return m if m in ("CN", "HK", "US") else "CN"
+    m = (market or DEFAULT_MARKET.value).strip().upper()
+    return m if m in ALL_MARKETS else DEFAULT_MARKET.value
 
 
 def _latest_snapshot_stocks(db: Session, market: str, limit: int = 120) -> list[dict]:
@@ -227,7 +228,7 @@ def _stocks_by_synthetic_board(
 
 @router.get("/stocks")
 async def get_hot_stocks(
-    market: str = "CN",
+    market: str = DEFAULT_MARKET.value,
     mode: str = "turnover",
     limit: int = 20,
     db: Session = Depends(get_db),
@@ -268,7 +269,7 @@ async def get_hot_stocks(
 
 @router.get("/boards")
 async def get_hot_boards(
-    market: str = "CN",
+    market: str = DEFAULT_MARKET.value,
     mode: str = "gainers",
     limit: int = 12,
     db: Session = Depends(get_db),
@@ -336,7 +337,7 @@ async def get_board_stocks(
     board_code: str,
     mode: str = "gainers",
     limit: int = 20,
-    market: str = "CN",
+    market: str = DEFAULT_MARKET.value,
     db: Session = Depends(get_db),
 ):
     """Top stocks in a board."""

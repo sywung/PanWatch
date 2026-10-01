@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from zoneinfo import ZoneInfo
 
 from src.platform.runtime.config import Settings
+from src.platform.marketdata.models import DEFAULT_MARKET
 from src.modules.market import price_alert_service
 from src.modules.market.price_alert_engine import ENGINE
 from src.platform.persistence.database import get_db
@@ -193,7 +194,7 @@ def list_today_hits(limit: int = 50, db: Session = Depends(get_db)):
                 "rule_name": (rule.name if rule else "") or "提醒",
                 "symbol": stock.symbol if stock else "",
                 "name": stock.name if stock else "",
-                "market": stock.market if stock else "CN",
+            "market": stock.market if stock else DEFAULT_MARKET.value,
                 "trigger_time": _format_datetime(h.trigger_time),
                 "snapshot": h.trigger_snapshot or {},
             }

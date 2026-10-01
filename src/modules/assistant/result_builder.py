@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import re
+from src.platform.marketdata.models import DEFAULT_MARKET
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlencode
@@ -208,7 +209,7 @@ def _evidence_and_facts(
         raw_result_data = getattr(invocation, "result_data", None)
         data = raw_result_data if isinstance(raw_result_data, dict) else {}
         symbol = str(data.get("symbol") or arguments.get("symbol") or "").strip().upper()
-        market = str(data.get("market") or arguments.get("market") or "CN").strip().upper()
+        market = str(data.get("market") or arguments.get("market") or DEFAULT_MARKET.value).strip().upper()
         target = f"{market}:{symbol}" if symbol else ""
         tool_name = invocation.tool_name
         fact_text = ""
@@ -371,7 +372,7 @@ def _next_actions(task_id: int, invocations: list[Any], language: str) -> list[A
         arguments = row.arguments if isinstance(row.arguments, dict) else {}
         if arguments.get("symbol"):
             symbol = str(arguments["symbol"]).strip().upper()
-            market = str(arguments.get("market") or "CN").strip().upper()
+            market = str(arguments.get("market") or DEFAULT_MARKET.value).strip().upper()
             break
 
     actions: list[AssistantNextAction] = []

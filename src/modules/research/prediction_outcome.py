@@ -8,7 +8,7 @@ from src.modules.research.context_store import (
     list_pending_prediction_outcomes,
     mark_agent_prediction_outcome,
 )
-from src.platform.marketdata.models import MarketCode
+from src.platform.marketdata.models import DEFAULT_MARKET, MarketCode
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +29,9 @@ def _parse_day(value: str | None) -> date | None:
 
 def _to_market(value: str | None) -> MarketCode:
     try:
-        return MarketCode((value or "CN").strip().upper())
+        return MarketCode((value or DEFAULT_MARKET.value).strip().upper())
     except Exception:
-        return MarketCode.CN
+        return DEFAULT_MARKET
 
 
 def _pick_close_on_or_before(klines: list, target: date) -> float | None:

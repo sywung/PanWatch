@@ -28,6 +28,7 @@ from src.platform.ai.errors import (
     safe_ai_error_message,
 )
 from src.platform.language import resolve_report_language
+from src.platform.marketdata.models import DEFAULT_MARKET
 
 from .tool_metadata import localized_tool_presentation
 
@@ -178,7 +179,7 @@ async def _execute_step(db, ai_client, execute_tool, step: dict, portfolio_text:
     if action == "analyze_stock":
         p = step.get("params") or {}
         symbol = p.get("symbol", "")
-        market = p.get("market", "CN")
+        market = p.get("market", DEFAULT_MARKET.value)
         tech = await execute_tool(db, "get_technical_analysis", {"symbol": symbol, "market": market})
         sug = await execute_tool(db, "get_stock_suggestions", {"symbol": symbol, "market": market})
         msgs = [

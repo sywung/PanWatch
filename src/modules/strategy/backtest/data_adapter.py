@@ -49,12 +49,12 @@ def from_klines(klines) -> list[PriceBar]:
 def load_price_history(symbol: str, market, days: int = 250) -> list[PriceBar]:
     """走 KlineCollector 拉历史(延迟导入,避免顶层耦合网络库)。"""
     from src.platform.marketdata.collectors.kline_collector import KlineCollector
-    from src.platform.marketdata.models import MarketCode
+    from src.platform.marketdata.models import DEFAULT_MARKET, MarketCode
 
     try:
         mc = market if isinstance(market, MarketCode) else MarketCode(str(market).upper())
     except Exception:
-        mc = MarketCode.CN
+        mc = DEFAULT_MARKET
     try:
         klines = KlineCollector(mc).get_klines(symbol, days=days)
     except Exception as e:

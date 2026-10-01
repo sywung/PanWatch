@@ -11,7 +11,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from src.platform.marketdata.marketdata_client import md_quote_rows
-from src.platform.marketdata.models import MarketCode, MARKETS
+from src.platform.marketdata.models import ALL_MARKETS, DEFAULT_MARKET, MarketCode, MARKETS
 from src.platform.persistence.database import SessionLocal
 from src.platform.persistence.models import (
     PaperTradingAccount,
@@ -23,11 +23,36 @@ from src.modules.strategy.backtest.cost_model import CostModel
 
 logger = logging.getLogger(__name__)
 
-# 模拟盘交易成本(A股口径,Phase 1)。与回测共用同一成本模型。
+# 模拟盘交易成本：未特别指定时沿用 A 股口径；台股使用台湾费率。
 COST_MODEL = CostModel()
+TW_COST_MODEL = CostModel(
+    config=CostModel().cfg.__class__(
+        commission_rate=0.001425,
+        min_commission=0.0,
+        stamp_duty_rate=0.003,
+        transfer_fee_rate=0.0,
+        slippage_bps=5.0,
+    )
+)
+TW_ETF_COST_MODEL = CostModel(
+    config=TW_COST_MODEL.cfg.__class__(
+        commission_rate=0.001425,
+        min_commission=0.0,
+        stamp_duty_rate=0.001,
+        transfer_fee_rate=0.0,
+        slippage_bps=5.0,
+    )
+)
 
 # 建仓股数下限(A股一手)
 FIXED_QUANTITY = 100
+
+
+def _cost_model_for(market: str, symbol: str = "") -> CostModel:
+    """返回市场交易成本；台股 00 开头代码按 ETF 卖出税率处理。"""
+    if str(market).upper() == MarketCode.TW.value:
+        return TW_ETF_COST_MODEL if str(symbol).startswith("00") else TW_COST_MODEL
+    return COST_MODEL
 
 # 移动止损:浮盈超过 MIN_PROFIT_FOR_TRAILING 后启用,从持仓最高价回撤超 TRAILING_STOP_PCT 即离场
 MIN_PROFIT_FOR_TRAILING = 0.05
@@ -83,7 +108,7 @@ def _to_market(market: str) -> MarketCode:
     try:
         return MarketCode(market)
     except Exception:
-        return MarketCode.CN
+        return DEFAULT_MARKET
 
 
 def _is_trading_time(market: str) -> bool:
@@ -107,8 +132,7 @@ def _safe_float(v: Any) -> float | None:
 # 分市场资金配置（投资比例 → 子池现金）
 # ---------------------------------------------------------------------------
 
-ALL_MARKETS: tuple[str, ...] = ("CN", "HK", "US")
-DEFAULT_ALLOCATIONS: dict[str, float] = {"CN": 0.5, "HK": 0.3, "US": 0.2}
+DEFAULT_ALLOCATIONS: dict[str, float] = {"TW": 0.5, "CN": 0.2, "HK": 0.1, "US": 0.2}
 
 
 def normalize_allocations(raw: dict | None) -> dict[str, float]:
@@ -139,7 +163,7 @@ def allocations_from_excluded(excluded: list[str] | None) -> dict[str, float]:
     total = sum(weights.values())
     if total <= 0:
         # 全部被排除：兜底投 A 股
-        return {"CN": 1.0, "HK": 0.0, "US": 0.0}
+        return {m: float(m == DEFAULT_MARKET.value) for m in ALL_MARKETS}
     return {m: round(weights.get(m, 0.0) / total, 6) for m in ALL_MARKETS}
 
 
@@ -353,13 +377,14 @@ class PaperTradingEngine:
                 market_budget=market_budget,
                 price=entry_price,
                 available_cash=avail,
-                cost_model=COST_MODEL,
+                cost_model=_cost_model_for(mkt, sig.stock_symbol),
+                lot=1 if mkt == MarketCode.TW.value else FIXED_QUANTITY,
             )
             if quantity <= 0:
                 continue  # 子池额度不足以买入最小一手
 
             # 含交易成本的实际买入流出
-            buy_fill = COST_MODEL.fill("buy", entry_price, quantity)
+            buy_fill = _cost_model_for(mkt, sig.stock_symbol).fill("buy", entry_price, quantity)
             buy_outlay = -buy_fill.cash_delta
 
             # 基于入场价计算止损/止盈
@@ -432,8 +457,9 @@ class PaperTradingEngine:
         """平仓单个持仓，返回交易记录。"""
         now = _utc_now()
         # 含交易成本的净盈亏:卖出净回收 − 建仓含费投入(与建仓口径一致,资金守恒)
-        buy_cost = -COST_MODEL.fill("buy", pos.entry_price, pos.quantity).cash_delta
-        sell_fill = COST_MODEL.fill("sell", exit_price, pos.quantity)
+        cost_model = _cost_model_for(pos.stock_market, pos.stock_symbol)
+        buy_cost = -cost_model.fill("buy", pos.entry_price, pos.quantity).cash_delta
+        sell_fill = cost_model.fill("sell", exit_price, pos.quantity)
         sell_proceeds = sell_fill.cash_delta
         pnl = round(sell_proceeds - buy_cost, 4)
         pnl_pct = (pnl / buy_cost * 100) if buy_cost > 0 else 0.0

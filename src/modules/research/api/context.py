@@ -9,6 +9,7 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
 from src.platform.runtime.config import Settings
+from src.platform.marketdata.models import DEFAULT_MARKET
 from src.modules.research.context_store import (
     cleanup_context_data,
     get_latest_news_topic_snapshot,
@@ -77,7 +78,7 @@ class AgentPredictionOutcomeResponse(BaseModel):
 @router.get("/snapshots/{symbol}", response_model=list[StockContextSnapshotResponse])
 def list_stock_context_snapshots(
     symbol: str,
-    market: str = "CN",
+    market: str = DEFAULT_MARKET.value,
     context_type: str | None = None,
     days: int = Query(default=30, ge=1, le=365),
     limit: int = Query(default=30, ge=1, le=200),

@@ -15,6 +15,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from src.platform.persistence.database import Base
+from src.platform.marketdata.models import DEFAULT_MARKET
 
 
 class AIService(Base):
@@ -394,7 +395,7 @@ class AgentPredictionOutcome(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     agent_name = Column(String, nullable=False)
     stock_symbol = Column(String, nullable=False)
-    stock_market = Column(String, nullable=False, default="CN")
+    stock_market = Column(String, nullable=False, default=DEFAULT_MARKET.value)
     prediction_date = Column(String, nullable=False)  # YYYY-MM-DD
     horizon_days = Column(Integer, nullable=False, default=1)  # 1/5/10...
     # 同一次建议的各 horizon 共用 UUID；历史记录为空时由查询侧兼容聚合。
@@ -420,7 +421,7 @@ class StockSuggestion(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     stock_symbol = Column(String, nullable=False, index=True)
-    stock_market = Column(String, nullable=False, default="CN", index=True)
+    stock_market = Column(String, nullable=False, default=DEFAULT_MARKET.value, index=True)
     stock_name = Column(String, default="")
 
     # 建议内容
@@ -479,7 +480,7 @@ class EntryCandidate(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     stock_symbol = Column(String, nullable=False)
-    stock_market = Column(String, nullable=False, default="CN")
+    stock_market = Column(String, nullable=False, default=DEFAULT_MARKET.value)
     stock_name = Column(String, default="")
     snapshot_date = Column(String, nullable=False)  # YYYY-MM-DD
     status = Column(String, default="active")  # active / inactive / invalidated
@@ -526,7 +527,7 @@ class MarketScanSnapshot(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     snapshot_date = Column(String, nullable=False)  # YYYY-MM-DD
     stock_symbol = Column(String, nullable=False)
-    stock_market = Column(String, nullable=False, default="CN")
+    stock_market = Column(String, nullable=False, default=DEFAULT_MARKET.value)
     stock_name = Column(String, default="")
     source = Column(String, nullable=False, default="market_scan")
     score_seed = Column(Float, nullable=False, default=0.0)
@@ -549,7 +550,7 @@ class EntryCandidateFeedback(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     snapshot_date = Column(String, nullable=False, default="")  # YYYY-MM-DD
     stock_symbol = Column(String, nullable=False)
-    stock_market = Column(String, nullable=False, default="CN")
+    stock_market = Column(String, nullable=False, default=DEFAULT_MARKET.value)
     candidate_source = Column(String, nullable=False, default="watchlist")
     strategy_tags = Column(JSON, default=[])
     useful = Column(Boolean, default=True)
@@ -575,7 +576,7 @@ class EntryCandidateOutcome(Base):
     candidate_id = Column(Integer, ForeignKey("entry_candidates.id", ondelete="CASCADE"), nullable=False)
     snapshot_date = Column(String, nullable=False, default="")
     stock_symbol = Column(String, nullable=False)
-    stock_market = Column(String, nullable=False, default="CN")
+    stock_market = Column(String, nullable=False, default=DEFAULT_MARKET.value)
     candidate_source = Column(String, nullable=False, default="watchlist")
     strategy_tags = Column(JSON, default=[])
     horizon_days = Column(Integer, nullable=False, default=1)
@@ -635,7 +636,7 @@ class StrategySignalRun(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     snapshot_date = Column(String, nullable=False)  # YYYY-MM-DD
     stock_symbol = Column(String, nullable=False)
-    stock_market = Column(String, nullable=False, default="CN")
+    stock_market = Column(String, nullable=False, default=DEFAULT_MARKET.value)
     stock_name = Column(String, default="")
 
     strategy_code = Column(String, nullable=False)
@@ -695,7 +696,7 @@ class StrategyOutcome(Base):
     strategy_code = Column(String, nullable=False)
     snapshot_date = Column(String, nullable=False, default="")
     stock_symbol = Column(String, nullable=False)
-    stock_market = Column(String, nullable=False, default="CN")
+    stock_market = Column(String, nullable=False, default=DEFAULT_MARKET.value)
     source_pool = Column(String, default="watchlist")
     horizon_days = Column(Integer, nullable=False, default=1)
     target_date = Column(String, nullable=False, default="")  # YYYY-MM-DD
@@ -723,7 +724,7 @@ class BacktestRun(Base):
     status = Column(String, nullable=False, default="queued")  # queued/running/succeeded/failed
     strategy_code = Column(String, nullable=False)
     strategy_version = Column(String, default="")
-    market = Column(String, nullable=False, default="CN")
+    market = Column(String, nullable=False, default=DEFAULT_MARKET.value)
     start_date = Column(String, nullable=False)
     end_date = Column(String, nullable=False)
     config = Column(JSON, default={})
@@ -798,7 +799,7 @@ class FactorWeight(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     factor_code = Column(String, nullable=False)
-    market = Column(String, nullable=False, default="CN")  # CN/HK/US
+    market = Column(String, nullable=False, default=DEFAULT_MARKET.value)  # CN/HK/US
     weight = Column(Float, nullable=False, default=1.0)
     is_pinned = Column(Boolean, nullable=False, default=False)  # 手动锁定,标定跳过
     auto_calibrate = Column(Boolean, nullable=False, default=True)  # 关掉则标定跳过
@@ -820,7 +821,7 @@ class FactorWeightHistory(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     factor_code = Column(String, nullable=False)
-    market = Column(String, nullable=False, default="CN")
+    market = Column(String, nullable=False, default=DEFAULT_MARKET.value)
     old_weight = Column(Float, nullable=False, default=1.0)
     new_weight = Column(Float, nullable=False, default=1.0)
     ic = Column(Float, nullable=True)
@@ -847,7 +848,7 @@ class MarketRegimeSnapshot(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     snapshot_date = Column(String, nullable=False)  # YYYY-MM-DD
-    market = Column(String, nullable=False, default="CN")  # CN/HK/US
+    market = Column(String, nullable=False, default=DEFAULT_MARKET.value)  # CN/HK/US
     regime = Column(String, nullable=False, default="neutral")  # bullish/neutral/bearish
     regime_score = Column(Float, nullable=False, default=0.0)  # [-1, 1]
     confidence = Column(Float, nullable=False, default=0.0)  # [0, 1]
@@ -877,7 +878,7 @@ class StrategyFactorSnapshot(Base):
     )
     snapshot_date = Column(String, nullable=False)  # YYYY-MM-DD
     stock_symbol = Column(String, nullable=False)
-    stock_market = Column(String, nullable=False, default="CN")
+    stock_market = Column(String, nullable=False, default=DEFAULT_MARKET.value)
     strategy_code = Column(String, nullable=False)
     alpha_score = Column(Float, default=0.0)
     catalyst_score = Column(Float, default=0.0)
@@ -907,7 +908,7 @@ class PortfolioRiskSnapshot(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     snapshot_date = Column(String, nullable=False)  # YYYY-MM-DD
-    market = Column(String, nullable=False, default="CN")
+    market = Column(String, nullable=False, default=DEFAULT_MARKET.value)
     total_signals = Column(Integer, default=0)
     active_signals = Column(Integer, default=0)
     held_signals = Column(Integer, default=0)
@@ -1032,7 +1033,7 @@ class PaperTradingPosition(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     stock_symbol = Column(String, nullable=False)
-    stock_market = Column(String, nullable=False, default="CN")
+    stock_market = Column(String, nullable=False, default=DEFAULT_MARKET.value)
     stock_name = Column(String, default="")
     quantity = Column(Integer, nullable=False, default=100)
     entry_price = Column(Float, nullable=False)
@@ -1062,7 +1063,7 @@ class PaperTradingTrade(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     stock_symbol = Column(String, nullable=False)
-    stock_market = Column(String, nullable=False, default="CN")
+    stock_market = Column(String, nullable=False, default=DEFAULT_MARKET.value)
     stock_name = Column(String, default="")
     quantity = Column(Integer, nullable=False, default=100)
     entry_price = Column(Float, nullable=False)

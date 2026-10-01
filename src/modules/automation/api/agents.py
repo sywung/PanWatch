@@ -15,6 +15,7 @@ from src.platform.persistence.models import AgentConfig, AgentRun, LogEntry
 from src.platform.scheduling.schedule_parser import preview_schedule
 from src.platform.scheduling.schedule_parser import count_runs_within
 from src.platform.runtime.config import Settings
+from src.platform.marketdata.models import DEFAULT_MARKET
 from src.web.errors import ai_api_error, api_error
 from src.modules.automation.agent_catalog import (
     AGENT_KIND_CAPABILITY,
@@ -1069,7 +1070,7 @@ async def scan_intraday(analyze: bool = False, db: Session = Depends(get_db)):
 
     async def _build_result_item(quote):
         change_pct = quote.change_pct or 0
-        market = stock_market_map.get(quote.symbol, MarketCode.CN)
+        market = stock_market_map.get(quote.symbol, DEFAULT_MARKET)
 
         # 获取持仓信息
         positions = portfolio.get_positions_for_stock(quote.symbol)
@@ -1202,7 +1203,7 @@ async def scan_intraday(analyze: bool = False, db: Session = Depends(get_db)):
                             expires_hours=expires_hours,
                             prompt_context=user_content,
                             ai_response=response,
-                            stock_market=item.get("market") or "CN",
+        stock_market=item.get("market") or DEFAULT_MARKET.value,
                             meta={
                                 "source": "intraday_scan",
                                 "quote": {

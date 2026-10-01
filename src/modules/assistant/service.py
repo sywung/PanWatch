@@ -39,6 +39,7 @@ from src.platform.persistence.models import (
     StockSuggestion,
 )
 from src.platform.runtime.config import Settings
+from src.platform.marketdata.models import DEFAULT_MARKET
 
 from .context_schemas import (
     AssistantConfigDTO,
@@ -129,7 +130,7 @@ class AssistantService:
             for row in self._repository.list_conversations(limit)
         ]
 
-    def get_suggested_questions(self, symbol: str, market: str = "CN") -> list[str]:
+    def get_suggested_questions(self, symbol: str, market: str = DEFAULT_MARKET.value) -> list[str]:
         """Build deterministic prompts from the current local stock context."""
         questions: list[str] = []
         latest_suggestion = (
@@ -887,7 +888,7 @@ class AssistantService:
                 "summary": f"Run {pending.tool_name}." if english else f"将调用 {pending.tool_name}。",
             }
 
-        market = str(arguments.get("market") or "CN").upper()
+        market = str(arguments.get("market") or DEFAULT_MARKET.value).upper()
         symbol = str(arguments.get("symbol") or "").upper()
         direction = "≥" if arguments.get("direction") == "above" else "≤"
         target_price = arguments.get("target_price")

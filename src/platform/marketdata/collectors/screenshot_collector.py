@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 from src.platform.marketdata.cn_symbol import get_cn_prefix
+from src.platform.marketdata.models import DEFAULT_MARKET
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +115,7 @@ class ScreenshotCollector:
         self,
         symbol: str,
         name: str,
-        market: str = "CN",
+        market: str = DEFAULT_MARKET.value,
         period: str = "daily",
         provider: str = "xueqiu",
     ) -> ChartScreenshot | None:
@@ -131,6 +132,10 @@ class ScreenshotCollector:
         Returns:
             ChartScreenshot 或 None（失败时）
         """
+        if market.upper() == "TW":
+            logger.info("台股暂不支持雪球/东方财富/新浪截图，跳过浏览器启动: %s", symbol)
+            return None
+
         await self._ensure_browser()
 
         url = self._get_url(symbol, market, provider)
@@ -427,7 +432,7 @@ class ScreenshotCollector:
             screenshot = await self.capture(
                 symbol=stock.get("symbol", ""),
                 name=stock.get("name", ""),
-                market=stock.get("market", "CN"),
+            market=stock.get("market", DEFAULT_MARKET.value),
                 period=period,
                 provider=provider,
             )

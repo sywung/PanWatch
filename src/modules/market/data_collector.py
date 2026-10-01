@@ -11,7 +11,7 @@ from marketdata import PACKAGE_VENDORS_BY_TYPE, capture_errors
 
 from src.platform.persistence.database import SessionLocal
 from src.platform.persistence.models import DataSource
-from src.platform.marketdata.models import MarketCode
+from src.platform.marketdata.models import DEFAULT_MARKET, MarketCode
 
 # 数据源测试的统一样本。每个市场固定两个稳定、容易识别的代码，避免新建数据源
 # 时只测到 A 股，导致港股/美股 provider 的市场路由问题直到生产才暴露。
@@ -237,7 +237,7 @@ class DataCollectorManager:
             return CollectorResult(success=False, error=str(e), duration_ms=duration_ms)
 
     async def collect_kline(
-        self, symbol: str, market: str = "CN", days: int = 60
+    self, symbol: str, market: str = DEFAULT_MARKET.value, days: int = 60
     ) -> CollectorResult:
         """采集 K 线数据"""
         from src.platform.marketdata.collectors.kline_collector import KlineCollector
@@ -478,7 +478,7 @@ class DataCollectorManager:
                 screenshot = await collector.capture(
                     symbol=symbol,
                     name="测试",
-                    market="CN",
+        market=DEFAULT_MARKET.value,
                     provider=source.provider,
                 )
                 if screenshot and screenshot.exists:

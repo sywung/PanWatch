@@ -10,6 +10,7 @@ from src.platform.persistence.database import SessionLocal
 from src.platform.persistence.models import StockSuggestion
 from src.platform.scheduling.timezone import utc_now, to_iso_with_tz
 from src.platform.persistence.json_safe import to_jsonable
+from src.platform.marketdata.models import DEFAULT_MARKET
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +55,7 @@ def save_suggestion(
     expires_hours: Optional[int] = None,
     prompt_context: str = "",
     ai_response: str = "",
-    stock_market: str = "CN",
+    stock_market: str = DEFAULT_MARKET.value,
     meta: dict | None = None,
 ) -> bool:
     """
@@ -78,7 +79,7 @@ def save_suggestion(
     """
     db = SessionLocal()
     try:
-        market = (stock_market or "CN").strip().upper() or "CN"
+        market = (stock_market or DEFAULT_MARKET.value).strip().upper() or DEFAULT_MARKET.value
 
         # 计算过期时间（使用 UTC）
         if expires_hours is None:
@@ -217,7 +218,7 @@ def get_suggestions_for_stock(
             query = query.filter(StockSuggestion.agent_name != "news_digest")
         if stock_market:
             query = query.filter(
-                StockSuggestion.stock_market == (stock_market or "CN").strip().upper()
+                StockSuggestion.stock_market == (stock_market or DEFAULT_MARKET.value).strip().upper()
             )
 
         now = utc_now()
@@ -278,7 +279,7 @@ def get_latest_suggestions(
             norm_keys = []
             for symbol, market in stock_keys:
                 sym = (symbol or "").strip().upper()
-                mkt = (market or "CN").strip().upper()
+                mkt = (market or DEFAULT_MARKET.value).strip().upper()
                 if sym:
                     norm_keys.append((sym, mkt))
             if norm_keys:
@@ -309,7 +310,7 @@ def get_latest_suggestions(
 
         result: dict[str, dict] = {}
         for s in suggestions:
-            key = f"{(s.stock_market or 'CN').upper()}:{s.stock_symbol}"
+            key = f"{(s.stock_market or DEFAULT_MARKET.value).upper()}:{s.stock_symbol}"
             result[key] = _to_dict(s, now)
         return result
 
@@ -354,7 +355,7 @@ def _to_dict(suggestion: StockSuggestion, now: Optional[datetime] = None) -> dic
     return {
         "id": suggestion.id,
         "stock_symbol": suggestion.stock_symbol,
-        "stock_market": suggestion.stock_market or "CN",
+        "stock_market": suggestion.stock_market or DEFAULT_MARKET.value,
         "stock_name": suggestion.stock_name,
         "action": suggestion.action,
         "action_label": suggestion.action_label,

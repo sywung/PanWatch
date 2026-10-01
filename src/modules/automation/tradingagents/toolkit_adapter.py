@@ -25,6 +25,7 @@ import contextvars
 import logging
 import re
 import threading
+from src.platform.marketdata.models import DEFAULT_MARKET
 from contextlib import contextmanager
 from typing import Any
 
@@ -51,8 +52,10 @@ _CANCEL_EVENT: contextvars.ContextVar[threading.Event | None] = contextvars.Cont
 __all__ = [
     "TradingAgentsCancelled",
     "hk_symbol_to_yfinance",
+    "tw_symbol_to_yfinance",
     "is_a_share",
     "is_hk_share",
+    "is_tw_share",
     "is_panwatch_routable",
     "panwatch_data_context",
     "patch_route_to_vendor",
@@ -128,13 +131,18 @@ def is_hk_share(symbol: str) -> bool:
     return bool(symbol) and len(symbol) == 5 and symbol.isdigit()
 
 
+def is_tw_share(symbol: str) -> bool:
+    """台股代码判定:4 位纯数字(含 ETF 0050 等)。"""
+    return bool(symbol) and len(symbol) == 4 and symbol.isdigit()
+
+
 def is_panwatch_routable(symbol: str) -> bool:
     """该 ticker 是否应该走 PanWatch 数据(而不是上游 yfinance)。
 
     A 股(6 位数字)yfinance 拉不到,港股(5 位数字)yfinance 也要 .HK 后缀,
     都需要 PanWatch 兜底。美股(字母 ticker)继续走 yfinance。
     """
-    return is_a_share(symbol) or is_hk_share(symbol)
+    return is_a_share(symbol) or is_hk_share(symbol) or is_tw_share(symbol)
 
 
 def _looks_like_cn_keyword(symbol: str) -> bool:
@@ -157,6 +165,11 @@ def hk_symbol_to_yfinance(symbol: str) -> str:
     if len(s) > 4:
         s = s[-4:]
     return s.zfill(4) + ".HK"
+
+
+def tw_symbol_to_yfinance(symbol: str) -> str:
+    """台股上市代码转换为 yfinance 格式；上柜 .TWO 由调用方提示时使用。"""
+    return f"{symbol.strip().upper()}.TW" if is_tw_share(symbol) else symbol
 
 
 def _yfinance_response_has_data(text: str) -> bool:
@@ -493,6 +506,8 @@ def _market_for_symbol(symbol: str):
 
     if is_a_share(symbol):
         return MarketCode.CN
+    if is_tw_share(symbol):
+        return MarketCode.TW
     if is_hk_share(symbol):
         return MarketCode.HK
     return MarketCode.US
@@ -751,7 +766,7 @@ def _stock_meta_header(symbol: str) -> str:
     if stock is not None:
         name = getattr(stock, "name", "") or ""
         market_obj = getattr(stock, "market", None)
-        market = getattr(market_obj, "value", str(market_obj or "CN"))
+    market = getattr(market_obj, "value", str(market_obj or DEFAULT_MARKET.value))
     if not name and isinstance(quote, dict):
         name = quote.get("name") or ""
     if isinstance(quote, dict):

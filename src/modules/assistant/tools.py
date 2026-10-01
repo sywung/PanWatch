@@ -36,7 +36,7 @@ from src.platform.marketdata.marketdata_client import (
     md_news,
     md_quote_rows,
 )
-from src.platform.marketdata.models import MARKETS, MarketCode
+from src.platform.marketdata.models import ALL_MARKETS, DEFAULT_MARKET, MARKETS, MarketCode
 from src.platform.marketdata.stock_list import search_stocks
 from src.platform.persistence.models import Stock
 from src.platform.runtime.config import Settings
@@ -49,7 +49,7 @@ def _symbol_and_market(arguments: dict[str, Any]) -> tuple[str, MarketCode] | No
     """Validate the small symbol contract shared by all market tools."""
     symbol = str(arguments.get("symbol") or "").strip().upper()
     try:
-        market = MarketCode(str(arguments.get("market") or "CN").strip().upper())
+        market = MarketCode(str(arguments.get("market") or DEFAULT_MARKET.value).strip().upper())
     except ValueError:
         return None
     return (symbol, market) if symbol else None
@@ -111,7 +111,7 @@ def _json_safe(value: object) -> object:
 
 
 def _market_argument(arguments: dict[str, Any]) -> MarketCode | None:
-    raw = str(arguments.get("market") or "CN").strip().upper()
+    raw = str(arguments.get("market") or DEFAULT_MARKET.value).strip().upper()
     try:
         return MarketCode(raw)
     except ValueError:
@@ -168,7 +168,7 @@ def _compact_research_candidate(item: dict[str, Any]) -> dict[str, Any]:
     quote = source_meta.get("quote") if isinstance(source_meta.get("quote"), dict) else {}
     return {
         "symbol": str(item.get("stock_symbol") or ""),
-        "market": str(item.get("stock_market") or "CN"),
+        "market": str(item.get("stock_market") or DEFAULT_MARKET.value),
         "name": str(item.get("stock_name") or item.get("stock_symbol") or ""),
         "score": item.get("rank_score", item.get("score")),
         "action": item.get("action_label") or item.get("action") or "观望",
@@ -233,7 +233,7 @@ def build_panwatch_tool_registry(session: Session) -> ToolRegistry:
                 error_code="candidate_filter_invalid",
             )
         if (
-            (market and market not in {"CN", "HK", "US"})
+            (market and market not in set(ALL_MARKETS))
             or holding not in {"all", "held", "unheld"}
             or (risk_level and risk_level not in {"all", "low", "medium", "high"})
             or not 0 <= min_score <= 100
@@ -983,7 +983,7 @@ def build_panwatch_tool_registry(session: Session) -> ToolRegistry:
                     },
                     "market": {
                         "type": "string",
-                        "default": "CN",
+                        "default": DEFAULT_MARKET.value,
                         "description": "市场代码",
                     },
                 },
@@ -1002,7 +1002,7 @@ def build_panwatch_tool_registry(session: Session) -> ToolRegistry:
                 "properties": {
                     "market": {
                         "type": "string",
-                        "enum": ["CN", "HK", "US"],
+                        "enum": list(ALL_MARKETS),
                         "description": "可选市场代码；不填表示全部市场",
                     },
                     "holding": {
@@ -1103,7 +1103,7 @@ def build_panwatch_tool_registry(session: Session) -> ToolRegistry:
                     "query": {"type": "string", "description": "股票代码或名称"},
                     "market": {
                         "type": "string",
-                        "enum": ["CN", "HK", "US"],
+                        "enum": list(ALL_MARKETS),
                         "description": "可选市场代码；不填表示全部市场",
                     },
                     "limit": {
@@ -1138,7 +1138,7 @@ def build_panwatch_tool_registry(session: Session) -> ToolRegistry:
                 "properties": {
                     "market": {
                         "type": "string",
-                        "enum": ["CN", "HK", "US"],
+                        "enum": list(ALL_MARKETS),
                         "default": "CN",
                     },
                     "mode": {
@@ -1168,7 +1168,7 @@ def build_panwatch_tool_registry(session: Session) -> ToolRegistry:
                 "properties": {
                     "market": {
                         "type": "string",
-                        "enum": ["CN", "HK", "US"],
+                        "enum": list(ALL_MARKETS),
                         "default": "CN",
                     },
                     "mode": {
@@ -1283,7 +1283,7 @@ def build_panwatch_tool_registry(session: Session) -> ToolRegistry:
                     },
                     "market": {
                         "type": "string",
-                        "enum": ["CN", "HK", "US"],
+                        "enum": list(ALL_MARKETS),
                         "description": "可选市场代码",
                     },
                     "enabled": {

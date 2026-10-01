@@ -35,31 +35,32 @@ class TestNormalizeAllocations(unittest.TestCase):
         self.assertEqual(out["US"], 1.0)
 
     def test_none_input(self):
-        """归一化 — 入参为 None 时三市场全 0"""
+        """归一化 — 入参为 None 时四市场全 0"""
         out = normalize_allocations(None)
-        self.assertEqual(out, {"CN": 0.0, "HK": 0.0, "US": 0.0})
+        self.assertEqual(out, {"TW": 0.0, "CN": 0.0, "HK": 0.0, "US": 0.0})
 
 
 class TestAllocationsFromExcluded(unittest.TestCase):
     def test_exclude_us_renormalizes_rest(self):
-        """迁移 — 排除美股后 A/港 归一化到合计 1"""
+        """迁移 — 排除美股后 台/A/港 归一化到合计 1"""
         out = allocations_from_excluded(["US"])
         self.assertEqual(out["US"], 0.0)
-        self.assertAlmostEqual(out["CN"] + out["HK"], 1.0, places=4)
-        # 0.5 / 0.3 → 0.625 / 0.375
-        self.assertAlmostEqual(out["CN"], 0.625, places=4)
-        self.assertAlmostEqual(out["HK"], 0.375, places=4)
+        self.assertAlmostEqual(out["TW"] + out["CN"] + out["HK"], 1.0, places=4)
+        # 0.5 / 0.2 / 0.1 → 0.625 / 0.25 / 0.125
+        self.assertAlmostEqual(out["TW"], 0.625, places=4)
+        self.assertAlmostEqual(out["CN"], 0.25, places=4)
+        self.assertAlmostEqual(out["HK"], 0.125, places=4)
 
     def test_empty_returns_default(self):
-        """迁移 — 无排除时回落默认 50/30/20"""
+        """迁移 — 无排除时回落默认 50/20/10/20"""
         out = allocations_from_excluded([])
         for m in ALL_MARKETS:
             self.assertAlmostEqual(out[m], DEFAULT_ALLOCATIONS[m], places=4)
 
     def test_all_excluded_fallback_cn(self):
-        """迁移 — 全部排除时兜底投 A 股"""
-        out = allocations_from_excluded(["CN", "HK", "US"])
-        self.assertEqual(out, {"CN": 1.0, "HK": 0.0, "US": 0.0})
+        """迁移 — 全部排除时兜底投默认市场(台股)"""
+        out = allocations_from_excluded(["TW", "CN", "HK", "US"])
+        self.assertEqual(out, {"TW": 1.0, "CN": 0.0, "HK": 0.0, "US": 0.0})
 
 
 class TestComputeMarketCash(unittest.TestCase):
@@ -93,7 +94,7 @@ class TestMarketAllocationsOrDefault(unittest.TestCase):
             market_allocations={"CN": 1.0, "HK": 0, "US": 0}, initial_capital=1_000_000
         )
         out = market_allocations_or_default(acc)
-        self.assertEqual(out, {"CN": 1.0, "HK": 0.0, "US": 0.0})
+        self.assertEqual(out, {"TW": 0.0, "CN": 1.0, "HK": 0.0, "US": 0.0})
 
     def test_sum_le_one_invariant(self):
         """账户比例 — 合理配置合计不超过 1"""

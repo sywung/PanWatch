@@ -13,7 +13,7 @@ from src.platform.persistence.json_safe import to_jsonable
 from src.platform.marketdata.marketdata_client import md_stock_data
 from src.platform.notifications.notifier import get_global_proxy
 from src.platform.scheduling.timezone import to_iso_with_tz, utc_now
-from src.platform.marketdata.models import MarketCode
+from src.platform.marketdata.models import ALL_MARKETS, DEFAULT_MARKET, MarketCode
 from src.platform.persistence.database import SessionLocal
 from src.platform.persistence.models import (
     EntryCandidate,
@@ -65,6 +65,7 @@ STRATEGY_LABELS: dict[str, str] = {
 }
 
 MARKET_SCAN_SEED_SYMBOLS: dict[str, list[str]] = {
+    "TW": ["2330", "2317", "2454", "2308", "2382", "2412", "2881", "2882", "2891", "2303", "3711", "2886", "1301", "2002", "0050"],
     "CN": [
         "600519",
         "601318",
@@ -131,9 +132,9 @@ def _safe_float(value) -> float | None:
 
 def _to_market(value: str | None) -> MarketCode:
     try:
-        return MarketCode((value or "CN").strip().upper())
+        return MarketCode((value or DEFAULT_MARKET.value).strip().upper())
     except Exception:
-        return MarketCode.CN
+        return DEFAULT_MARKET
 
 
 def _resolve_market_scan_proxy() -> str | None:
@@ -579,7 +580,7 @@ def _load_holding_keys() -> set[str]:
             .all()
         )
         return {
-            f"{(m or 'CN').strip().upper()}:{(s or '').strip()}"
+        f"{(m or DEFAULT_MARKET.value).strip().upper()}:{(s or '').strip()}"
             for m, s in rows
             if s
         }
@@ -748,7 +749,7 @@ def _load_market_scan_history_inputs(
     if limit <= 0:
         return {}
 
-    mkt = (market or "CN").strip().upper()
+    mkt = (market or DEFAULT_MARKET.value).strip().upper()
     cutoff = (date.today() - timedelta(days=max(1, int(max_days)))).strftime("%Y-%m-%d")
     db = SessionLocal()
     try:
@@ -830,7 +831,7 @@ def _load_market_scan_snapshot_inputs(
     if limit <= 0:
         return {}
 
-    mkt = (market or "CN").strip().upper()
+    mkt = (market or DEFAULT_MARKET.value).strip().upper()
     cutoff = (date.today() - timedelta(days=max(1, int(max_days)))).strftime("%Y-%m-%d")
     db = SessionLocal()
     try:
@@ -885,7 +886,7 @@ def _load_market_scan_snapshot_inputs(
 def _load_market_scan_seed_inputs(*, market: str, limit: int) -> dict[str, dict]:
     if limit <= 0:
         return {}
-    mkt = (market or "CN").strip().upper()
+    mkt = (market or DEFAULT_MARKET.value).strip().upper()
     symbols = list(
         dict.fromkeys(
             [str(s).strip() for s in MARKET_SCAN_SEED_SYMBOLS.get(mkt, []) if str(s).strip()]
@@ -940,7 +941,7 @@ def _merge_market_scan_seed(
 ) -> int:
     if not incoming:
         return 0
-    mkt = (market or "CN").strip().upper()
+    mkt = (market or DEFAULT_MARKET.value).strip().upper()
     added = 0
     for key, item in incoming.items():
         if not key.startswith(f"{mkt}:"):
@@ -981,7 +982,7 @@ def _load_market_scan_inputs(limit_per_market: int = 60) -> dict[str, dict]:
     safe_limit = max(20, int(limit_per_market))
     min_required = min(max(12, int(safe_limit * 0.55)), safe_limit)
 
-    for market in ("CN", "HK", "US"):
+    for market in ALL_MARKETS:
         try:
             turnover = _run_async(
                 collector.fetch_hot_stocks(
@@ -1102,7 +1103,7 @@ def _load_market_scan_inputs(limit_per_market: int = 60) -> dict[str, dict]:
                 )
 
     # Final per-market cap and stable ordering.
-    for market in ("CN", "HK", "US"):
+    for market in ALL_MARKETS:
         keys = [k for k in result.keys() if k.startswith(f"{market}:")]
         if len(keys) <= safe_limit:
             continue
@@ -1132,7 +1133,7 @@ def _persist_market_scan_snapshot(snapshot: str, market_scan_map: dict[str, dict
         )
         for item in rows:
             symbol = str(item.get("symbol") or "").strip()
-            market = str(item.get("market") or "CN").strip().upper() or "CN"
+            market = str(item.get("market") or DEFAULT_MARKET.value).strip().upper() or DEFAULT_MARKET.value
             if not symbol:
                 continue
             quote = item.get("quote_seed") if isinstance(item.get("quote_seed"), dict) else {}
@@ -1635,7 +1636,7 @@ def save_entry_candidate_feedback(
     reason: str = "",
 ) -> bool:
     symbol = (stock_symbol or "").strip().upper()
-    market = (stock_market or "CN").strip().upper() or "CN"
+    market = (stock_market or DEFAULT_MARKET.value).strip().upper() or DEFAULT_MARKET.value
     if not symbol:
         return False
     snap = (snapshot_date or "").strip() or date.today().strftime("%Y-%m-%d")
@@ -1713,7 +1714,7 @@ def evaluate_entry_candidate_outcomes(
             if snap_day is None:
                 continue
 
-            key = ((c.stock_symbol or "").strip(), (c.stock_market or "CN").strip().upper())
+            key = ((c.stock_symbol or "").strip(), (c.stock_market or DEFAULT_MARKET.value).strip().upper())
             if key not in kline_cache:
                 try:
                     lookback = max(120, (today - snap_day).days + 30)
@@ -2003,7 +2004,7 @@ def get_entry_candidate_stats(*, days: int = 30) -> dict:
             u = int(u or 0)
             by_market.append(
                 {
-                    "market": (m or "CN").strip().upper(),
+        "market": (m or DEFAULT_MARKET.value).strip().upper(),
                     "total": cnt,
                     "useful": u,
                     "useful_rate": round((u / cnt * 100.0), 2) if cnt > 0 else 0.0,

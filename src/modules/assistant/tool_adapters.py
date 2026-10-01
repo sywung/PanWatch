@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from src.modules.portfolio import build_portfolio_service
 from src.platform.persistence.models import AnalysisHistory, Stock, StockSuggestion
+from src.platform.marketdata.models import ALL_MARKETS, DEFAULT_MARKET, MarketCode
 
 
 logger = logging.getLogger(__name__)
@@ -139,7 +140,7 @@ async def fetch_realtime_context(symbol: str, market: str) -> str:
         from src.platform.marketdata.marketdata_client import md_quote_rows
         from src.platform.marketdata.models import MarketCode
 
-        code = MarketCode(market) if market in ("CN", "HK", "US") else MarketCode.CN
+        code = MarketCode(market) if market in ALL_MARKETS else DEFAULT_MARKET
         rows = await asyncio.to_thread(md_quote_rows, [symbol], code.value)
         if not rows:
             return ""
@@ -179,13 +180,13 @@ async def execute_tool(db: Session, name: str, arguments: dict) -> str:
         if name == "get_portfolio":
             return build_portfolio_context(db) or "用户暂无持仓。"
         if name == "get_stock_quote":
-            symbol, market = arguments.get("symbol", ""), arguments.get("market", "CN")
+            symbol, market = arguments.get("symbol", ""), arguments.get("market", DEFAULT_MARKET.value)
             return await fetch_realtime_context(symbol, market) or f"未能获取 {market}:{symbol} 的行情数据。"
         if name == "get_technical_analysis":
-            symbol, market = arguments.get("symbol", ""), arguments.get("market", "CN")
+            symbol, market = arguments.get("symbol", ""), arguments.get("market", DEFAULT_MARKET.value)
             return await fetch_technical_context(symbol, market) or f"未能获取 {market}:{symbol} 的技术面数据。"
         if name == "get_stock_suggestions":
-            symbol, market = arguments.get("symbol", ""), arguments.get("market", "CN")
+            symbol, market = arguments.get("symbol", ""), arguments.get("market", DEFAULT_MARKET.value)
             return build_stock_context(db, symbol, market) or f"暂无 {market}:{symbol} 的 AI 建议。"
         if name == "get_watchlist":
             return build_watchlist_context(db)

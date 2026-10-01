@@ -4,7 +4,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from src.platform.marketdata.marketdata_client import md_quote_rows
-from src.platform.marketdata.models import MarketCode
+from src.platform.marketdata.models import DEFAULT_MARKET, MarketCode
 from src.web.errors import api_error
 
 router = APIRouter()
@@ -68,7 +68,7 @@ def _quote_to_response(symbol: str, market: MarketCode, quote: dict | None) -> d
 
 
 @router.get("/{symbol}")
-async def get_quote(symbol: str, market: str = "CN"):
+async def get_quote(symbol: str, market: str = DEFAULT_MARKET.value):
     """获取单只股票实时行情"""
     market_code = _parse_market(market)
     rows = await asyncio.to_thread(md_quote_rows, [symbol], market_code.value)

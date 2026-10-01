@@ -18,7 +18,7 @@ from src.modules.research.context_store import (
 from src.modules.automation.suggestion_pool import save_suggestion
 from src.modules.research.signals import SignalPackBuilder
 from src.modules.research.signals.structured_output import try_parse_action_json
-from src.platform.marketdata.models import MarketCode, StockData, MARKETS
+from src.platform.marketdata.models import DEFAULT_MARKET, MarketCode, StockData, MARKETS
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +113,7 @@ class IntradayMonitorAgent(BaseAgent):
 
         # SignalPack: 统一结构化输入（quote/technical/position）
         stock_config = context.watchlist[0] if context.watchlist else None
-        market = stock_config.market if stock_config else MarketCode.CN
+        market = stock_config.market if stock_config else DEFAULT_MARKET
         symbol = stock_config.symbol if stock_config else ""
         name = stock_config.name if stock_config else symbol
 

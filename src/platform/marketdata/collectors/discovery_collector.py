@@ -1,4 +1,5 @@
 import logging
+from src.platform.marketdata.models import DEFAULT_MARKET
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -40,7 +41,7 @@ class EastMoneyDiscoveryCollector:
     async def fetch_hot_stocks(
         self,
         *,
-        market: str = "CN",
+    market: str = DEFAULT_MARKET.value,
         mode: str = "turnover",
         limit: int = 20,
     ) -> list[HotStock]:
@@ -69,7 +70,7 @@ class EastMoneyDiscoveryCollector:
     async def fetch_hot_boards(
         self,
         *,
-        market: str = "CN",
+    market: str = DEFAULT_MARKET.value,
         mode: str = "gainers",
         limit: int = 12,
     ) -> list[HotBoard]:

@@ -11,6 +11,14 @@ class MarketCode(str, Enum):
     TW = "TW"  # 台股
 
 
+ALL_MARKETS: tuple[str, ...] = (
+    "TW",
+    "CN",
+    "HK",
+    "US",
+)
+
+
 @dataclass
 class TradingSession:
     """一个交易时段"""

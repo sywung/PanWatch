@@ -19,7 +19,7 @@ from src.platform.persistence.models import (
 )
 from src.platform.marketdata.stock_list import search_stocks, refresh_stock_list
 from src.platform.marketdata.marketdata_client import md_quote_rows
-from src.platform.marketdata.models import MarketCode, MARKETS
+from src.platform.marketdata.models import DEFAULT_MARKET, MarketCode, MARKETS
 from src.modules.automation.agent_catalog import AGENT_KIND_WORKFLOW, infer_agent_kind
 from src.web.errors import api_error
 
@@ -30,7 +30,7 @@ router = APIRouter()
 class StockCreate(BaseModel):
     symbol: str
     name: str
-    market: str = "CN"
+    market: str = DEFAULT_MARKET.value
 
 
 class StockUpdate(BaseModel):
@@ -404,7 +404,7 @@ async def trigger_stock_agent(
         if not allow_unbound:
             raise api_error(400, "stock_agent_unbound_not_allowed", "当 stock_id<=0 时，需设置 allow_unbound=true")
 
-        market = (market or "CN").strip().upper() or "CN"
+        market = (market or DEFAULT_MARKET.value).strip().upper() or DEFAULT_MARKET.value
         name = (name or "").strip() or symbol
         db_stock = db.query(Stock).filter(
             Stock.symbol == symbol, Stock.market == market

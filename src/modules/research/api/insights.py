@@ -4,7 +4,7 @@ from typing import List
 
 from sqlalchemy.orm import Session
 
-from src.platform.marketdata.models import MarketCode
+from src.platform.marketdata.models import ALL_MARKETS, DEFAULT_MARKET, MarketCode
 from src.platform.marketdata.marketdata_client import md_quote_rows
 from src.platform.marketdata.collectors.kline_collector import KlineCollector
 from src.modules.automation.suggestion_pool import get_latest_suggestions
@@ -123,7 +123,7 @@ def insights_batch(payload: InsightsBatchRequest):
 
 class AddPositionEvalRequest(BaseModel):
     symbol: str
-    market: str = "CN"
+    market: str = DEFAULT_MARKET.value
     current_quantity: float = Field(0, ge=0, description="当前持仓股数(0=建仓)")
     current_cost: float = Field(0, ge=0, description="当前成本(单价)")
     add_quantity: float = Field(..., gt=0, description="加仓股数")
@@ -146,7 +146,7 @@ def _parse_verdict(text: str) -> str:
 async def _fetch_fundamental_context(symbol: str, market: str) -> str:
     """基本面摘要:PE / 换手率 / 市值 / 今日振幅(取自实时行情,失败返回空)。"""
     try:
-        mc = MarketCode(market) if market in ("CN", "HK", "US") else MarketCode.CN
+        mc = MarketCode(market) if market in ALL_MARKETS else DEFAULT_MARKET
         rows = await asyncio.to_thread(md_quote_rows, [symbol], mc.value)
         if not rows:
             return ""
@@ -308,7 +308,7 @@ async def _fetch_recent_announcements(symbol: str, name: str, limit: int = 5) ->
 
 class AnnouncementEvalRequest(BaseModel):
     symbol: str
-    market: str = "CN"
+    market: str = DEFAULT_MARKET.value
     model_id: int | None = None
 
 

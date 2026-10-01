@@ -23,7 +23,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from src.platform.marketdata.collectors.kline_collector import KlineCollector
-from src.platform.marketdata.models import MarketCode
+from src.platform.marketdata.models import DEFAULT_MARKET, MarketCode
 from src.platform.persistence.database import SessionLocal
 from src.platform.persistence.models import (
     AgentConfig,
@@ -331,13 +331,17 @@ def backfill_tradingagents_suggestions(days: int = 7) -> dict:
 # History comparison
 # ============================================================================
 
-def _resolve_market(market: str) -> MarketCode:
-    code = (market or "CN").strip().upper()
+def _resolve_market(market: str | None) -> MarketCode:
+    code = (market or DEFAULT_MARKET.value).strip().upper()
+    if code == "TW":
+        return MarketCode.TW
     if code == "US":
         return MarketCode.US
     if code == "HK":
         return MarketCode.HK
-    return MarketCode.CN
+    if code == "CN":
+        return MarketCode.CN
+    return DEFAULT_MARKET
 
 
 def _classify_hit(action: str, ret_pct: float | None) -> bool | None:
@@ -382,7 +386,7 @@ def _find_close_after_n_trading_days(
 
 def build_history_comparison(
     stock_symbol: str,
-    market: str = "CN",
+    market: str = DEFAULT_MARKET.value,
     days: int = 90,
 ) -> dict:
     """构建某只股票 TradingAgents 历史决策对比数据。

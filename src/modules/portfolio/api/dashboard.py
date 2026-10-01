@@ -13,6 +13,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from src.platform.runtime.config import Settings
+from src.platform.marketdata import fx as fx_module
+from src.platform.marketdata.models import ALL_MARKETS, DEFAULT_MARKET
 from src.modules.strategy.strategy_engine import get_strategy_stats, list_strategy_signals
 from src.platform.ai.ai_failover import get_configured_failover_client
 from src.platform.persistence.database import get_db
@@ -44,7 +46,7 @@ def _format_datetime(dt) -> str:
 
 def _to_market(market: str) -> str:
     m = (market or "ALL").strip().upper()
-    return m if m in ("ALL", "CN", "HK", "US") else "ALL"
+    return m if m == "ALL" or m in ALL_MARKETS else "ALL"
 
 
 def _action_priority(item: dict) -> int:
@@ -61,7 +63,7 @@ def _action_priority(item: dict) -> int:
 def _group_signals(items: list[dict]) -> list[dict]:
     grouped: dict[str, dict] = {}
     for row in items or []:
-        key = f"{row.get('stock_market') or 'CN'}:{row.get('stock_symbol') or ''}"
+        key = f"{row.get('stock_market') or DEFAULT_MARKET.value}:{row.get('stock_symbol') or ''}"
         if ":" == key[-1]:
             continue
         prev = grouped.get(key)
@@ -233,13 +235,9 @@ def get_dashboard_overview(
     by_market: dict[str, dict] = {}
     invested_cost = 0.0
     for pos, stock in positions:
-        market_code = (stock.market or "CN").strip().upper() or "CN"
-        fx = 1.0
-        if market_code == "HK":
-            fx = 0.92
-        elif market_code == "US":
-            fx = 7.25
-        cost = float(pos.cost_price or 0.0) * float(pos.quantity or 0) * fx
+        market_code = (stock.market or DEFAULT_MARKET.value).strip().upper() or DEFAULT_MARKET.value
+        fx_rate = fx_module.rate_for_market(stock.market)
+        cost = float(pos.cost_price or 0.0) * float(pos.quantity or 0) * fx_rate
         invested_cost += cost
         bucket = by_market.setdefault(
             market_code,
@@ -396,7 +394,7 @@ class CurateCandidate(BaseModel):
     type: str
     symbol: str = ""
     name: str = ""
-    market: str = "CN"
+    market: str = DEFAULT_MARKET.value
     signal: str = ""
     change_pct: float | None = None
 

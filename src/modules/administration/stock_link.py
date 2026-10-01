@@ -63,6 +63,8 @@ def stock_link_markdown(symbol: str, market: str, platform: str = "") -> str:
 # ---------------------------------------------------------------------------
 
 def _xueqiu_url(symbol: str, market: str) -> str:
+    if market == "TW":
+        return f"https://tw.stock.yahoo.com/quote/{symbol}"
     if market == "US":
         return f"https://xueqiu.com/S/{symbol}"
     if market == "HK":

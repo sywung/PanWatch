@@ -29,6 +29,7 @@ from src.modules.strategy.strategy_engine import (
 from src.modules.strategy.factor_eval import evaluate_factor_ic
 from src.modules.research.signal_explain import enrich_signal
 from src.platform.persistence.database import SessionLocal
+from src.platform.marketdata.models import DEFAULT_MARKET
 from src.platform.persistence.models import StrategySignalRun
 
 router = APIRouter()
@@ -133,7 +134,7 @@ def _start_refresh_job(**kwargs) -> tuple[bool, dict]:
 class CandidateFeedbackIn(BaseModel):
     snapshot_date: str = ""
     stock_symbol: str
-    stock_market: str = "CN"
+    stock_market: str = DEFAULT_MARKET.value
     useful: bool = True
     candidate_source: str = "watchlist"
     strategy_tags: list[str] = Field(default_factory=list)

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import math
+from src.platform.marketdata.models import DEFAULT_MARKET
 from collections.abc import Iterable
 from typing import Any
 
@@ -247,7 +248,7 @@ def render_cashflow(data: dict) -> str:
 def build_stock_metadata_context(
     stock_symbol: str,
     stock_name: str = "",
-    market: str = "CN",
+    market: str = DEFAULT_MARKET.value,
     current_price: float | None = None,
     industry: str = "",
 ) -> str:

@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 
 from src.platform.scheduling.timezone import utc_now
+from src.platform.marketdata.models import ALL_MARKETS
 from src.platform.persistence.database import SessionLocal
 from src.platform.persistence.models import FactorWeight, FactorWeightHistory
 
@@ -30,7 +31,7 @@ CALIBRATABLE_FACTORS = (
 # 惩罚类因子:在 raw_score 中被减,IC 预期为负。
 PENALTY_FACTORS = frozenset({"risk_penalty", "crowd_penalty"})
 
-MARKETS = ("CN", "HK", "US")
+MARKETS = ALL_MARKETS
 
 
 def get_factor_weights(market: str, *, db=None) -> dict[str, float]:

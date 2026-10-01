@@ -476,7 +476,7 @@ def update_settings(body: UpdateSettingsBody, db: Session = Depends(get_db)):
         # 同步派生 excluded_markets（比例 0 即排除），兼容旧读取
         acc.excluded_markets = [m for m in ALL_MARKETS if alloc.get(m, 0.0) <= 0]
     elif body.excluded_markets is not None:
-        valid = {"CN", "HK", "US"}
+        valid = set(ALL_MARKETS)
         acc.excluded_markets = [m for m in body.excluded_markets if m in valid]
 
     if body.initial_capital is not None and body.initial_capital > 0:

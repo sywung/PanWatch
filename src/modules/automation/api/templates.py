@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from src.platform.persistence.database import get_db
+from src.platform.marketdata.models import FUTURES_MARKETS
 from src.web.errors import api_error
 from src.platform.persistence.models import (
     AIModel,
@@ -378,6 +379,12 @@ def import_template(
     if mode not in ("merge", "replace"):
         raise api_error(400, "template_mode_invalid", "mode 仅支持 merge/replace")
     selected = _selected_modules(modules, payload)
+    if "portfolio" in selected and any(
+        position.market.strip().upper() in FUTURES_MARKETS
+        for account in payload.accounts or []
+        for position in account.positions or []
+    ):
+        raise api_error(400, "futures_position_unsupported", "期貨持倉尚未支援")
 
     updated_settings = 0
     created_ai_services = 0

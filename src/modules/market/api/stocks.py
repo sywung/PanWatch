@@ -20,7 +20,8 @@ from src.platform.persistence.models import (
 )
 from src.platform.marketdata.stock_list import search_stocks, refresh_stock_list
 from src.platform.marketdata.marketdata_client import md_quote_rows
-from src.platform.marketdata.models import ALL_MARKETS, DEFAULT_MARKET, MarketCode, MarketDef, MARKETS
+from src.platform.marketdata.models import DEFAULT_MARKET, MarketCode, MarketDef, MARKETS
+from src.platform.marketdata import futures
 from src.platform.scheduling.trading_calendar import is_trading_day
 from src.modules.automation.agent_catalog import AGENT_KIND_WORKFLOW, infer_agent_kind
 from src.web.errors import api_error
@@ -123,9 +124,9 @@ def _stock_to_response(stock: Stock, agent_display_names: dict[str, str] | None 
 def get_market_status():
     """获取各市场的交易状态"""
     result = []
-    for market_code, market_def in MARKETS.items():
-        if market_code.value not in ALL_MARKETS:
-            continue
+    market_codes = (MarketCode.TW, MarketCode.TWF, MarketCode.CN, MarketCode.HK, MarketCode.US)
+    for market_code in market_codes:
+        market_def = MARKETS[market_code]
         try:
             now = datetime.now(market_def.get_tz())
             result.append(build_market_status(market_def, now))
@@ -257,12 +258,19 @@ def get_quotes(db: Session = Depends(get_db)):
         try:
             items = md_quote_rows(symbols, market)
             for item in items:
-                quotes[item["symbol"]] = {
+                quote = {
                     "current_price": item["current_price"],
                     "change_pct": item["change_pct"],
                     "change_amount": item["change_amount"],
                     "prev_close": item["prev_close"],
                 }
+                if market == "TWF":
+                    quote.update({
+                        "contract": item.get("contract"),
+                        "session": item.get("session"),
+                        "volume": item.get("volume"),
+                    })
+                quotes[item["symbol"]] = quote
         except Exception as e:
             logger.error(f"获取 {market} 行情失败: {e}")
 
@@ -271,14 +279,21 @@ def get_quotes(db: Session = Depends(get_db)):
 
 @router.post("", response_model=StockResponse)
 def create_stock(stock: StockCreate, db: Session = Depends(get_db)):
+    data = stock.model_dump()
+    data["market"] = data["market"].strip().upper()
+    if data["market"] == "TWF":
+        data["symbol"] = data["symbol"].upper()
+        if futures.get_futures_product(data["symbol"]) is None:
+            raise api_error(400, "unknown_futures", f"未知的期貨商品代碼：{data['symbol']}")
+
     existing = db.query(Stock).filter(
-        Stock.symbol == stock.symbol, Stock.market == stock.market
+        Stock.symbol == data["symbol"], Stock.market == data["market"]
     ).first()
     if existing:
-        raise api_error(400, "stock_already_exists", f"股票 {stock.symbol} 已存在")
+        raise api_error(400, "stock_already_exists", f"股票 {data['symbol']} 已存在")
 
     max_order = db.query(func.max(Stock.sort_order)).scalar() or 0
-    db_stock = Stock(**stock.model_dump(), sort_order=int(max_order) + 1)
+    db_stock = Stock(**data, sort_order=int(max_order) + 1)
     db.add(db_stock)
     db.commit()
     db.refresh(db_stock)

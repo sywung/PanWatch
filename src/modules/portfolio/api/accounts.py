@@ -11,7 +11,7 @@ from src.platform.persistence.database import get_db
 from src.platform.persistence.models import Account, PriceAlertRule, Position, Stock
 from src.platform.marketdata.marketdata_client import md_quote_rows
 from src.platform.marketdata.collectors.market_http import TTLCache
-from src.platform.marketdata.models import DEFAULT_MARKET, MarketCode
+from src.platform.marketdata.models import DEFAULT_MARKET, FUTURES_MARKETS, MarketCode
 from src.platform.marketdata.models import BASE_CURRENCY
 from src.platform.marketdata import fx
 from src.web.errors import ai_api_error, api_error
@@ -195,6 +195,8 @@ def create_position(data: PositionCreate, db: Session = Depends(get_db)):
     stock = db.query(Stock).filter(Stock.id == data.stock_id).first()
     if not stock:
         raise api_error(400, "stock_not_found", "股票不存在")
+    if stock.market in FUTURES_MARKETS:
+        raise api_error(400, "futures_position_unsupported", "期貨持倉尚未支援")
 
     # 检查是否已存在该账户的该股票持仓
     existing = db.query(Position).filter(

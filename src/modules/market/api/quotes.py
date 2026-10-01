@@ -47,7 +47,7 @@ def _quote_to_response(symbol: str, market: MarketCode, quote: dict | None) -> d
             "circulating_market_value": None,
         }
 
-    return {
+    response = {
         "symbol": symbol,
         "market": market.value,
         "name": quote.get("name"),
@@ -65,6 +65,11 @@ def _quote_to_response(symbol: str, market: MarketCode, quote: dict | None) -> d
         "total_market_value": quote.get("total_market_value"),
         "circulating_market_value": quote.get("circulating_market_value"),
     }
+    # 期货报价带实际合约与日/夜盘;股票回应格式不变
+    for key in ("contract", "session"):
+        if quote.get(key) is not None:
+            response[key] = quote[key]
+    return response
 
 
 @router.get("/{symbol}")

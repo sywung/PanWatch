@@ -608,16 +608,24 @@ def search_stocks(query: str, market: str = "", limit: int = 20) -> list[dict]:
     if not q:
         return []
 
+    if market == "TWF":
+        from src.platform.marketdata.futures import search_futures
+
+        return search_futures(q, limit)
+
     if market == "TW":
         return _cached_search(q, market, limit) or _lookup_tw_code(q)
 
     if market == "":
         tw_results = _cached_search(q, "TW", limit) or _lookup_tw_code(q)
+        from src.platform.marketdata.futures import search_futures
+
+        futures_results = search_futures(q, limit)
         realtime_results = _realtime_search(q, market, limit) or _yahoo_search(q, market, limit)
         cached_results = _cached_search(q, market, limit)
         results = []
         seen = set()
-        for item in (*tw_results, *realtime_results):
+        for item in (*tw_results, *futures_results, *realtime_results):
             key = (item.get("market"), item.get("symbol"))
             if key in seen:
                 continue

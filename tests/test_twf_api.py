@@ -185,3 +185,42 @@ def test_futures_position_rejected(db):
         create_position(PositionCreate(account_id=acc.id, stock_id=stock.id, cost_price=48000, quantity=1), db)
     assert exc.value.status_code == 400
     assert "期貨" in str(exc.value.detail)
+
+
+# ---------------------------------------------------------------- /quotes/batch(前端实际使用的报价端点)
+
+
+def test_quotes_batch_includes_futures_contract_and_session(monkeypatch):
+    import asyncio
+
+    from src.modules.market.api import quotes as qapi
+
+    def fake_rows(symbols, market):
+        if market == "TWF":
+            return [{"symbol": "RLF", "name": "元晶期貨", "current_price": 27.8, "prev_close": 28.45,
+                     "volume": 85.0, "contract": "RLFL6", "session": "day"}]
+        return [{"symbol": "2330", "name": "台積電", "current_price": 2510.0, "volume": 1.0}]
+
+    monkeypatch.setattr(qapi, "md_quote_rows", fake_rows)
+    payload = qapi.QuoteBatchRequest(items=[
+        qapi.QuoteItem(symbol="RLF", market="TWF"),
+        qapi.QuoteItem(symbol="2330", market="TW"),
+        qapi.QuoteItem(symbol="TXF", market="TWF"),
+    ])
+    rows = {r["symbol"]: r for r in asyncio.run(qapi.get_quotes_batch(payload))}
+
+    assert (rows["RLF"]["contract"], rows["RLF"]["session"]) == ("RLFL6", "day")
+    assert "contract" not in rows["2330"] and "session" not in rows["2330"]   # 股票格式不变
+    assert rows["TXF"]["current_price"] is None and "contract" not in rows["TXF"]   # 没报价时不硬塞
+
+
+def test_single_quote_includes_futures_contract(monkeypatch):
+    import asyncio
+
+    from src.modules.market.api import quotes as qapi
+
+    monkeypatch.setattr(qapi, "md_quote_rows", lambda symbols, market: [
+        {"symbol": "TXF", "current_price": 48474.0, "contract": "TXFJ6", "session": "night"}
+    ])
+    row = asyncio.run(qapi.get_quote("TXF", "TWF"))
+    assert (row["contract"], row["session"]) == ("TXFJ6", "night")

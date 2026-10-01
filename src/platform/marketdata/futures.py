@@ -244,6 +244,45 @@ def get_futures_product(code: str) -> FuturesProduct | None:
     return next((product for product in get_futures_products() if product.code == code), None)
 
 
+def search_futures(query: str, limit: int = 20) -> list[dict]:
+    """按代码、标的代码或名称搜索期货商品。"""
+    q = query.strip()
+    if not q or limit <= 0:
+        return []
+
+    folded = q.casefold()
+    matches = []
+    for order, product in enumerate(get_futures_products()):
+        code = product.code.casefold()
+        underlying = (product.underlying_code or "").casefold()
+        name = product.name.casefold()
+        if code == folded:
+            rank = 0
+        elif code.startswith(folded):
+            rank = 1
+        elif underlying == folded:
+            rank = 2
+        elif name.startswith(folded):
+            rank = 3
+        elif folded in name:
+            rank = 4
+        else:
+            continue
+        matches.append((rank, order, product))
+
+    matches.sort(key=lambda item: (item[0], item[1]))
+    return [
+        {
+            "symbol": product.code,
+            "name": product.name,
+            "market": "TWF",
+            "board": "FUT",
+            "underlying": product.underlying_code,
+        }
+        for _, _, product in matches[:limit]
+    ]
+
+
 def futures_for_stock(stock_code: str) -> list[FuturesProduct]:
     matches = [
         product

@@ -132,8 +132,53 @@ def test_discovery_api_tw_boards_empty_not_error(offline_tw):
 
 
 def test_default_account_name_follows_default_language():
-    text = (ROOT / "src/platform/persistence/database.py").read_text(encoding="utf-8")
-    assert "'默认账户'" not in text and '"默认账户"' not in text
     from src.platform.persistence import database
 
     assert database.default_account_name() == "預設帳戶"
+
+
+def _accounts_engine(tmp_path, names):
+    from sqlalchemy import create_engine, text
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'accounts.db'}")
+    with engine.begin() as conn:
+        conn.execute(text("CREATE TABLE accounts (id INTEGER PRIMARY KEY, name TEXT)"))
+        for name in names:
+            conn.execute(text("INSERT INTO accounts (name) VALUES (:n)"), {"n": name})
+    return engine
+
+
+def _account_names(engine):
+    from sqlalchemy import text
+
+    with engine.connect() as conn:
+        return [r.name for r in conn.execute(text("SELECT name FROM accounts ORDER BY id"))]
+
+
+@pytest.mark.parametrize("legacy", ["默认账户", "Default account"])
+def test_legacy_default_account_name_is_migrated(tmp_path, monkeypatch, legacy):
+    from src.platform.persistence import database
+
+    backups = []
+    monkeypatch.setattr(database, "_backup_db_before_migration", lambda: backups.append(1))
+    engine = _accounts_engine(tmp_path, [legacy, "默认账户"])
+
+    database._migrate_default_account_name(engine)
+
+    # 只改第一個（內建）帳戶，第二個同名帳戶是使用者建的，不動
+    assert _account_names(engine) == ["預設帳戶", "默认账户"]
+    assert backups == [1]
+
+
+@pytest.mark.parametrize("name", ["我的帳戶", "預設帳戶"])
+def test_default_account_name_migration_leaves_others_alone(tmp_path, monkeypatch, name):
+    from src.platform.persistence import database
+
+    backups = []
+    monkeypatch.setattr(database, "_backup_db_before_migration", lambda: backups.append(1))
+    engine = _accounts_engine(tmp_path, [name])
+
+    database._migrate_default_account_name(engine)
+
+    assert _account_names(engine) == [name]
+    assert backups == []

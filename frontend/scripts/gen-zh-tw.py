@@ -14,7 +14,7 @@ TARGET_DIR = ROOT / "src/i18n/locales/zh-TW"
 
 # Keep manual vocabulary decisions in one place so regeneration is reproducible.
 POSTPROCESS = (
-    ("臺", "台"), ("賬", "帳"), ("質量", "品質"), ("智慧體", "智慧代理"), ("盯盤俠", "盯盤俠"),
+    ("臺", "台"), ("賬", "帳"), ("日志", "日誌"), ("質量", "品質"), ("智慧體", "智慧代理"), ("盯盤俠", "盯盤俠"),
     # 台湾惯用直角引号
     ("“", "「"), ("”", "」"), ("‘", "『"), ("’", "』"),
 )
@@ -23,6 +23,12 @@ OVERRIDES: dict[str, str] = {
     # 语系名称以该语系自己的文字显示(与上游 en-US 显示「简体中文」一致)
     "language.simplifiedChinese": "简体中文",
     "language.quickSwitch": "简体中文",
+    "normalVolatility": "正常波動",
+    "bollSqueeze": "波幅收斂",
+    "bollExpansion": "波動擴大",
+    "dataSources.credentials.finmindLabel": "FinMind Token（選填）",
+    "dataSources.credentials.finmindPlaceholder": "貼上 FinMind API Token",
+    "dataSources.credentials.finmindHelp": "公開 API 可免 Token 使用；註冊免費帳號可提高請求額度。",
 }
 
 _STRING = re.compile(r"(?P<quote>['\"])(?P<body>(?:\\.|(?!\1).)*)(?P=quote)")

@@ -102,6 +102,7 @@ def _init_db_once() -> None:
     if has_pending_migrations(engine):
         _backup_db_before_migration()
     run_versioned_migrations(engine)
+    _migrate_default_account_name(engine)
 
 
 def _is_sqlite_lock_error(exc: BaseException) -> bool:
@@ -545,6 +546,28 @@ def _migrate_positions_to_accounts(engine):
 
         conn.commit()
         logger.info(f"已迁移 {len(stocks_with_position)} 条持仓数据到默认账户")
+
+
+def _migrate_default_account_name(engine):
+    """將歷史資料庫中未自訂的預設帳戶名稱切換為目前的預設語系。"""
+    legacy_names = ("默认账户", "預設帳戶", "Default account")
+    with engine.connect() as conn:
+        if not _has_table(conn, "accounts"):
+            return
+        row = conn.execute(
+            text("SELECT id, name FROM accounts ORDER BY id LIMIT 1")
+        ).first()
+    if not row or row.name not in legacy_names or row.name == default_account_name():
+        return
+
+    # This only changes the built-in name, but preserve the persistent DB before the update.
+    _backup_db_before_migration()
+    with engine.begin() as conn:
+        conn.execute(
+            text("UPDATE accounts SET name = :name WHERE id = :id AND name = :old_name"),
+            {"name": default_account_name(), "id": row.id, "old_name": row.name},
+        )
+    logger.info("已將預設帳戶名稱更新為目前語系")
 
 
 def _migrate_remove_stock_enabled(engine):

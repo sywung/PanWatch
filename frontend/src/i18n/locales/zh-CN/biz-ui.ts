@@ -15,7 +15,7 @@ export const bizUi = {
   },
   kline: {
     title: 'K线 / 技术指标', period: '周期：{{value}}', dataAsOf: '数据截至：{{value}}', calculatedAt: '计算时间：{{value}}', loading: '加载中...', empty: '暂无数据', held: '已持仓', notHeld: '未持仓', score: '评分 {{value}}', disclaimer: '仅基于技术指标规则生成，非投资建议', hoverHint: '提示：悬停指标标签可查看详细说明', current: '当前：{{value}}',
-    statuses: { bullish: '多头排列', bearish: '空头排列', mixed: '均线交织', goldenCross: '金叉', deathCross: '死叉', overbought: '超买', oversold: '超卖', strong: '偏强', weak: '偏弱', volumeUp: '放量', volumeDown: '缩量', upperBreak: '突破上轨', lowerBreak: '跌破下轨', positive: '为正', negative: '为负', neutral: '接近0' },
+    statuses: { bullish: '多头排列', bearish: '空头排列', mixed: '均线交织', goldenCross: '金叉', deathCross: '死叉', overbought: '超买', oversold: '超卖', strong: '偏强', weak: '偏弱', volumeUp: '放量', volumeDown: '缩量', upperBreak: '突破上轨', lowerBreak: '跌破下轨', normalVolatility: '正常波动', bollSqueeze: '收口窄幅', bollExpansion: '开口放大', positive: '为正', negative: '为负', neutral: '接近0' },
     actions: { buy: '买入', add: '加仓', sell: '卖出', reduce: '减仓', avoid: '回避', hold: '持有', watch: '观望', alert: '提醒' },
     neutralSignal: '技术面中性',
     items: { trendBull: '均线多头排列，趋势偏强', trendBear: '均线空头排列，趋势偏弱', trendMixed: '均线交织，趋势不明', macdGolden: 'MACD 金叉，短线动能偏强', macdDeath: 'MACD 死叉，短线动能转弱', macdHist: 'MACD 柱体{{status}}', macdPositive: 'MACD 柱体为正（动能偏多）', macdNegative: 'MACD 柱体为负（动能偏空）', rsiOversold: 'RSI 超卖，可能存在反弹', rsiStrong: 'RSI 偏强，买盘占优', rsiOverbought: 'RSI 超买，注意回调风险', rsiWeak: 'RSI 偏弱，短线承压', rsiNeutral: 'RSI 中性', kdjGolden: 'KDJ 金叉，短线转强', kdjDeath: 'KDJ 死叉，短线转弱', bollUpper: '突破布林上轨，趋势强势', bollLower: '跌破布林下轨，走势偏弱', volumeUp: '放量配合，资金参与度提升', volumeDown: '缩量，动能不足', nearSupport: '价格接近支撑位，止跌反弹概率提升', nearResistance: '价格接近压力位，上行空间受限' },

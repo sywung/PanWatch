@@ -17,6 +17,7 @@ export function localizeTechnicalStatus(value: string | null | undefined, tr: Tr
     ['超卖', 'oversold'], ['偏强', 'strong'], ['偏弱', 'weak'],
     ['放量', 'volumeUp'], ['缩量', 'volumeDown'], ['突破上轨', 'upperBreak'],
     ['跌破下轨', 'lowerBreak'],
+    ['正常波动', 'normalVolatility'], ['收口窄幅', 'bollSqueeze'], ['开口放大', 'bollExpansion'],
   ]
   const match = rules.find(([source]) => value.includes(source))
   return match ? tr(`statuses.${match[1]}`) : value

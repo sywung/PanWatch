@@ -1,0 +1,22 @@
+[
+ {
+  "Number": "1",
+  "Code": "2330",
+  "Name": "台積電",
+  "NumberOfAnnouncement": "1",
+  "TradingInfoForAttention": "最近六個營業日累積收盤價漲幅達32.12%",
+  "Date": "1150930",
+  "ClosingPrice": "2480.00",
+  "PE": "25.10"
+ },
+ {
+  "Number": "2",
+  "Code": "086845",
+  "Name": "全友台新64購01",
+  "NumberOfAnnouncement": "1",
+  "TradingInfoForAttention": "權證",
+  "Date": "1150930",
+  "ClosingPrice": "1.2",
+  "PE": "0"
+ }
+]

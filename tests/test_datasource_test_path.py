@@ -89,21 +89,31 @@ class TestKlineSourceTestPath(unittest.IsolatedAsyncioTestCase):
         )
 
     def test_default_kline_symbols_cover_each_market_twice(self):
-        """默认 K 线测试样本应覆盖 A/HK/US,每个市场两个代码。"""
+        """默认 K 线测试样本应覆盖 TW/A/HK/US,每个市场两个代码(台股为默认市场,排第一)。"""
         from src.modules.market.data_collector import DEFAULT_TEST_SYMBOLS_BY_MARKET, DEFAULT_TEST_SYMBOLS
 
+        self.assertEqual(DEFAULT_TEST_SYMBOLS_BY_MARKET["TW"], ("2330", "6488"))
         self.assertEqual(DEFAULT_TEST_SYMBOLS_BY_MARKET["CN"], ("600519", "601127"))
         self.assertEqual(DEFAULT_TEST_SYMBOLS_BY_MARKET["HK"], ("00700", "00386"))
         self.assertEqual(DEFAULT_TEST_SYMBOLS_BY_MARKET["US"], ("AAPL", "NVDA"))
-        self.assertEqual(DEFAULT_TEST_SYMBOLS, ("600519", "601127", "00700", "00386", "AAPL", "NVDA"))
+        self.assertEqual(
+            DEFAULT_TEST_SYMBOLS,
+            ("2330", "6488", "600519", "601127", "00700", "00386", "AAPL", "NVDA"),
+        )
 
     def test_all_symbol_based_seed_tests_use_balanced_defaults(self):
-        """所有带股票代码的内置数据源测试都应使用三市场各两条默认样本。"""
+        """带股票代码的内置数据源测试:多市场源用四市场各两条默认样本;只支持台股的源用台股样本。"""
+        from marketdata.registry import VENDOR_CLASSES_BY_TYPE
         from server import DATA_SOURCE_SEEDS
-        from src.modules.market.data_collector import DEFAULT_TEST_SYMBOLS
+        from src.modules.market.data_collector import DEFAULT_TEST_SYMBOLS, DEFAULT_TEST_SYMBOLS_BY_MARKET
 
         for seed in DATA_SOURCE_SEEDS:
-            if seed["test_symbols"]:
+            if not seed["test_symbols"]:
+                continue
+            cls = VENDOR_CLASSES_BY_TYPE.get(seed["type"], {}).get(seed["provider"])
+            if cls is not None and getattr(cls, "supports_markets", None) == {"TW"}:
+                self.assertEqual(seed["test_symbols"], list(DEFAULT_TEST_SYMBOLS_BY_MARKET["TW"]), seed["name"])
+            else:
                 self.assertEqual(seed["test_symbols"], list(DEFAULT_TEST_SYMBOLS), seed["name"])
 
     async def test_empty_symbols_report_effective_defaults(self):
@@ -119,7 +129,7 @@ class TestKlineSourceTestPath(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             result.test_symbols,
-            ["600519", "601127", "00700", "00386", "AAPL", "NVDA"],
+            ["2330", "6488", "600519", "601127", "00700", "00386", "AAPL", "NVDA"],
         )
 
     async def test_success_returns_items_and_count(self):

@@ -116,7 +116,8 @@ class TestKlineSourceTestPath(unittest.IsolatedAsyncioTestCase):
             if seed["provider"] in ("fugle", "tpex_esb"):
                 # 兴柜专用报价源:样本要含兴柜代码,否则测试按钮测不到
                 self.assertEqual(seed["test_symbols"], list(ESB_TEST_SYMBOLS), seed["name"])
-            elif cls is not None and getattr(cls, "supports_markets", None) == {"TW"}:
+            elif cls is not None and getattr(cls, "supports_markets", None) in ({"TW"}, {"TW", "TWF"}):
+                # 台股＋期货共用的源(FinMind 日 K):测试按钮用台股样本
                 self.assertEqual(seed["test_symbols"], list(DEFAULT_TEST_SYMBOLS_BY_MARKET["TW"]), seed["name"])
             elif cls is not None and getattr(cls, "supports_markets", None) == {"TWF"}:
                 # 期货报价源:样本必须是期货连续代码,股票代码查不到

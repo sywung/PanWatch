@@ -1078,7 +1078,7 @@ def _build_notifier(channels: list[NotifyChannel]) -> NotifierManager:
         dedupe_ttl_overrides=parse_dedupe_overrides(overrides_raw),
     )
 
-    notifier = NotifierManager(policy=policy)
+    notifier = NotifierManager(policy=policy, language=_get_report_language())
     for ch in channels:
         notifier.add_channel(ch.type, ch.config or {})
     return notifier

@@ -138,3 +138,13 @@ def test_settings_api_accepts_zh_tw():
     src = inspect.getsource(settings)
     assert '{"zh-CN", "en-US"}' not in src
     assert "zh-TW" in src
+
+
+def test_server_agent_notifier_passes_report_language(monkeypatch):
+    """收盘复盘等 Agent 通知走 server._build_notifier,必须带上报告语言才会转繁体。"""
+    import server
+
+    monkeypatch.setattr(server, "_get_report_language", lambda: "zh-TW")
+    notifier = server._build_notifier([])
+    assert notifier.language == "zh-TW"
+    assert notifier.localize("账户") == "帳戶"

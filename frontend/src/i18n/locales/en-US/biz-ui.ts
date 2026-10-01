@@ -2,6 +2,7 @@ import type { TranslationShape } from '../../resource-types'
 import { bizUi as zhBizUi } from '../zh-CN/biz-ui'
 
 export const bizUi = {
+  markets: { TW: 'Taiwan', TWF: 'Futures', CN: 'A-shares', HK: 'Hong Kong', US: 'U.S.' },
   logsLogger: 'Logger', amountWithCurrency: 'Amount ({{currency}})', approximatelyWithCurrency: 'About {{currency}} {{amount}}',
   klineModal: { title: 'Chart: {{symbol}}', fallbackTitle: 'Chart', description: 'Switch between daily, weekly, and monthly charts with MA, volume, and MACD.', noStock: 'No stock selected' },
   interactiveKline: { loadFailed: 'Failed to load chart', title: 'Candlestick chart', rsi: 'RSI', chan: 'Chan', chanDisabled: 'Chan is available only on daily charts', intervals: { day: 'Daily', week: 'Weekly', month: 'Monthly' }, refresh: 'Refresh', libraryFailed: 'The chart library failed to load, possibly because of network restrictions. Try again later or check your network and proxy.', metrics: { latest: 'Latest', change: 'Change', amplitude: 'Range', range: 'Period high/low', averageVolume: 'Avg. volume' }, hover: { open: 'Open', close: 'Close', high: 'High', low: 'Low', ma5: '5-day MA', ma10: '10-day MA', ma20: '20-day MA', macd: 'MACD', signal: 'Signal', rsi: 'RSI' }, momentum: 'Momentum (MACD{{rsi}})', momentumRsi: ' + RSI', help: 'MACD highlights trend momentum and turning points. RSI indicates overheated or weak conditions—typically above 70 is hot and below 30 is weak.', tenThousand: '{{value}}0K' },
@@ -40,7 +41,7 @@ export const bizUi = {
   },
   stockInsight: {
     description: 'View overview, charts, AI suggestions, news, and analysis history in one place',
-    markets: { TW: 'Taiwan', CN: 'A-shares', HK: 'Hong Kong', US: 'U.S.' },
+    markets: { TW: 'Taiwan', TWF: 'Futures', CN: 'A-shares', HK: 'Hong Kong', US: 'U.S.' },
     actions: { generating: 'Generating', image: 'Image', share: 'Share', copy: 'Copy', processing: 'Working...', held: 'Held', unfollow: 'Unfollow', follow: 'Follow', setting: 'Setting...', setAlert: 'Set alert', askAI: 'Ask AI', refresh: 'Refresh', holdingCannotUnfollow: 'A held stock cannot be unfollowed', more: 'More', openDetails: 'Open details ↗' },
     tabs: { overview: 'Overview', suggestions: 'Suggestions ({{count}})', reports: 'Reports ({{count}})', deep: 'Deep analysis', deepCount: 'Deep analysis (1)', kline: 'Chart', announcements: 'Filings ({{count}})', news: 'News ({{count}})' },
     autoRefresh: 'Auto refresh', seconds: '{{count}} sec',

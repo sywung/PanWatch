@@ -1,5 +1,6 @@
 // 由 gen-zh-tw.py 自 zh-CN 產生；手動修正請寫進腳本的 OVERRIDES，不要直接改本檔。
 export const bizUi = {
+  markets: { TW: '台股', TWF: '期貨', CN: 'A股', HK: '港股', US: '美股' },
   logsLogger: '日誌源', amountWithCurrency: '加倉金額（{{currency}}）', approximatelyWithCurrency: '約 {{currency}} {{amount}}',
   klineModal: { title: 'K線：{{symbol}}', fallbackTitle: 'K線', description: '日K/周K/月K切換，含MA/成交量/MACD。', noStock: '未選擇股票' },
   interactiveKline: { loadFailed: '載入K線失敗', title: 'K線圖', rsi: '強弱線', chan: '纏論', chanDisabled: '纏論僅適用於日線', intervals: { day: '日K', week: '周K', month: '月K' }, refresh: '重新整理', libraryFailed: '圖表庫載入失敗（網路受限時可能發生）。可稍後重試或檢查網路/代理。', metrics: { latest: '最新價', change: '漲跌', amplitude: '振幅', range: '區間高低', averageVolume: '均量' }, hover: { open: '開盤價', close: '收盤價', high: '最高價', low: '最低價', ma5: '5日均線', ma10: '10日均線', ma20: '20日均線', macd: 'MACD線', signal: '訊號線', rsi: 'RSI強弱' }, momentum: '動能指標（MACD{{rsi}}）', momentumRsi: ' + RSI強弱線', help: 'MACD 用來看趨勢動能和拐點；RSI 用來看是否偏熱/偏弱（一般 70 以上偏熱，30 以下偏弱）。', tenThousand: '{{value}}萬' },
@@ -38,7 +39,7 @@ export const bizUi = {
   },
   stockInsight: {
     description: '概覽、K線、AI建議、新聞、歷史分析都在同一彈窗檢視',
-    markets: { TW: '台股', CN: 'A股', HK: '港股', US: '美股' },
+    markets: { TW: '台股', TWF: '期貨', CN: 'A股', HK: '港股', US: '美股' },
     actions: { generating: '生成中', image: '圖片', share: '分享', copy: '複製', processing: '處理中...', held: '持倉中', unfollow: '取消關注', follow: '快速關注', setting: '設定中...', setAlert: '一鍵設提醒', askAI: '問 AI', refresh: '重新整理', holdingCannotUnfollow: '持倉中的股票無法取消關注', more: '更多', openDetails: '開啟詳情頁 ↗' },
     tabs: { overview: '概覽', suggestions: '建議 ({{count}})', reports: '報告 ({{count}})', deep: '深度', deepCount: '深度 (1)', kline: 'K線', announcements: '公告 ({{count}})', news: '新聞 ({{count}})' },
     autoRefresh: '自動重新整理', seconds: '{{count}}秒',

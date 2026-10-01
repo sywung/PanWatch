@@ -60,7 +60,7 @@ export const common = {
   },
   markets: {
     all: 'All markets',
-    TW: 'Taiwan', CN: 'China A-shares',
+    TW: 'Taiwan', TWF: 'Futures', CN: 'China A-shares',
     HK: 'Hong Kong',
     US: 'United States',
   },

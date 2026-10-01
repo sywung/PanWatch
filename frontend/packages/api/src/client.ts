@@ -58,6 +58,7 @@ const API_ERROR_TEXT_EN: Record<string, string> = {
   datasource_not_found: 'The data source could not be found.',
   discovery_mode_invalid: 'The selected ranking mode is not supported.',
   factor_weight_invalid: 'The factor-weight settings are invalid.',
+  futures_position_unsupported: 'Futures positions are not supported yet. Add futures to your watchlist instead.',
   hot_boards_unavailable: 'Hot-sector data is temporarily unavailable.',
   hot_stocks_unavailable: 'Hot-stock data is temporarily unavailable.',
   invalid_credentials: 'The username or password is incorrect.',
@@ -200,7 +201,9 @@ export async function fetchAPI<T>(path: string, options?: ApiRequestOptions): Pr
     message: `HTTP ${res.status}`,
   }))
   if (body.code !== 0 || body.success === false) {
-    throw new Error(localizedApiError(body, res.status))
+    const error = new Error(localizedApiError(body, res.status)) as Error & { errorCode?: string }
+    error.errorCode = body.error_code
+    throw error
   }
   return body.data
 }

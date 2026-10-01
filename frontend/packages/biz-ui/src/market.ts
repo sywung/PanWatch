@@ -5,14 +5,25 @@ export interface MarketBadgeInfo {
 
 export const DEFAULT_MARKET = 'TW' as const
 export const BASE_CURRENCY = 'TWD' as const
+export const FUTURES_MARKET = 'TWF' as const
 export const MARKET_CODES = ['TW', 'CN', 'HK', 'US'] as const
 export type MarketCode = typeof MARKET_CODES[number]
 
 type Translate = (key: string) => string
 
+export function isFuturesMarket(market?: string): boolean {
+  return String(market || '').trim().toUpperCase() === FUTURES_MARKET
+}
+
+export function futuresContractMonth(contract?: string | null): number | null {
+  if (!contract || !/^[A-Z][A-Z0-9]{2}[A-L]\d$/.test(contract)) return null
+  return contract.charCodeAt(3) - 'A'.charCodeAt(0) + 1
+}
+
 export function marketCurrency(market?: string): string {
   switch (String(market || '').trim().toUpperCase()) {
     case 'TW': return 'TWD'
+    case FUTURES_MARKET: return 'TWD'
     case 'CN': return 'CNY'
     case 'HK': return 'HKD'
     case 'US': return 'USD'
@@ -33,5 +44,6 @@ export function getMarketBadge(market: string | undefined, t: Translate): Market
   if (code === 'CN') return { style: 'bg-blue-500/10 text-blue-600', label: t('CN') }
   if (code === 'HK') return { style: 'bg-orange-500/10 text-orange-600', label: t('HK') }
   if (code === 'US') return { style: 'bg-green-500/10 text-green-600', label: t('US') }
+  if (code === FUTURES_MARKET) return { style: 'bg-purple-500/10 text-purple-600', label: t(FUTURES_MARKET) }
   return { style: 'bg-slate-500/10 text-slate-600', label: code || '—' }
 }

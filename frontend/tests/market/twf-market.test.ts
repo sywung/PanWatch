@@ -67,7 +67,7 @@ describe('TWF labels', () => {
   it('has Taiwan Traditional labels', async () => {
     await changeLocale('zh-TW')
     expect(i18n.t('configuration:stocksPage.markets.twf')).toBe('期貨')
-    expect(i18n.t('biz-ui:markets.TWF')).toBe('期貨')
+    expect(i18n.t('bizUi:markets.TWF')).toBe('期貨')
     expect(i18n.t('configuration:stocksPage.futures.night')).toBe('夜盤')
     expect(i18n.t('configuration:stocksPage.futures.untraded')).toBe('未成交')
     expect(i18n.t('configuration:stocksPage.futures.contractMonth', { month: 12 })).toBe('12 月')

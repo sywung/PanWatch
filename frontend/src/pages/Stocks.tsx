@@ -30,7 +30,7 @@ import { localizeAgentDescription, localizeAgentName } from '@/i18n/agent-labels
 import { getCurrentLocale } from '@/i18n'
 import { marketSignTextClass } from '@/lib/market-colors'
 import { parseAssistantPortfolioTarget } from '@/lib/assistant-navigation'
-import { BASE_CURRENCY, DEFAULT_MARKET, getMarketBadge, marketCurrency } from '@panwatch/biz-ui'
+import { BASE_CURRENCY, DEFAULT_MARKET, futuresContractMonth, getMarketBadge, isFuturesMarket, marketCurrency } from '@panwatch/biz-ui'
 
 interface AgentResult {
   success?: boolean
@@ -153,6 +153,17 @@ interface QuoteResponse {
   market: string
   current_price: number | null
   change_pct: number | null
+  volume?: number | null
+  contract?: string | null
+  session?: string | null
+}
+
+interface StockQuote {
+  current_price: number | null
+  change_pct: number | null
+  volume?: number | null
+  contract?: string | null
+  session?: string | null
 }
 
 interface StockForm {
@@ -255,12 +266,15 @@ const buildQuoteItemsFrom = (stockList: Stock[], portfolio: PortfolioSummary | n
   return items
 }
 
-const toQuoteMap = (rows: QuoteResponse[]): Record<string, { current_price: number | null; change_pct: number | null }> => {
-  const map: Record<string, { current_price: number | null; change_pct: number | null }> = {}
+const toQuoteMap = (rows: QuoteResponse[]): Record<string, StockQuote> => {
+  const map: Record<string, StockQuote> = {}
   for (const item of rows || []) {
     map[`${item.market}:${item.symbol}`] = {
       current_price: item.current_price ?? null,
       change_pct: item.change_pct ?? null,
+      volume: item.volume ?? null,
+      contract: item.contract ?? null,
+      session: item.session ?? null,
     }
   }
   return map
@@ -407,7 +421,7 @@ export default function StocksPage() {
   const [expandedAccounts, setExpandedAccounts] = useState<Set<number>>(new Set())
 
   // Quotes for all stocks (used in stock list)
-  const [quotes, setQuotes] = useState<Record<string, { current_price: number | null; change_pct: number | null }>>({})
+  const [quotes, setQuotes] = useState<Record<string, StockQuote>>({})
   const [quotesLoading, setQuotesLoading] = useState(false)
   // Keyed by `${market}:${symbol}` to avoid cross-market symbol collisions
   const [klineSummaries, setKlineSummaries] = useState<Record<string, KlineSummary>>({})
@@ -1231,8 +1245,10 @@ export default function StocksPage() {
     try {
       const marketParam = market ? `&market=${market}` : ''
       const results = await fetchAPI<SearchResult[]>(`/stocks/search?q=${encodeURIComponent(q)}${marketParam}`)
-      setPositionSearchResults(results)
-      setShowPositionDropdown(results.length > 0)
+      // 期货持仓尚未支援(Phase 2a),持仓对话框不列期货
+      const selectableResults = results.filter(item => !isFuturesMarket(item.market))
+      setPositionSearchResults(selectableResults)
+      setShowPositionDropdown(selectableResults.length > 0)
     } catch { setPositionSearchResults([]) }
     finally { setPositionSearching(false) }
   }
@@ -1316,7 +1332,13 @@ export default function StocksPage() {
       loadPortfolio()
       toast(editPositionId ? stockT('stocksPage.messages.positionUpdated') : stockT('stocksPage.messages.positionAdded'), 'success')
     } catch (e) {
-      toast(e instanceof Error ? e.message : stockT('stocksPage.messages.savePositionFailed'), 'error')
+      const errorCode = e instanceof Error ? (e as Error & { errorCode?: string }).errorCode : undefined
+      toast(
+        errorCode === 'futures_position_unsupported'
+          ? stockT('stocksPage.messages.futuresPositionUnsupported')
+          : e instanceof Error ? e.message : stockT('stocksPage.messages.savePositionFailed'),
+        'error',
+      )
     }
   }
 
@@ -1437,8 +1459,8 @@ export default function StocksPage() {
     return value.toFixed(2)
   }
 
-  const marketLabel = (m: string) => m === 'TW' ? stockT('stocksPage.markets.tw') : m === 'CN' ? stockT('stocksPage.markets.cn') : m === 'HK' ? stockT('stocksPage.markets.hk') : m === 'US' ? stockT('stocksPage.markets.us') : m
-  const badgeFor = (m: string) => getMarketBadge(m, code => stockT(`stocksPage.markets.${code === 'CN' ? 'cnShort' : code === 'HK' ? 'hkShort' : code === 'US' ? 'usShort' : code}`))
+  const marketLabel = (m: string) => m === 'TW' ? stockT('stocksPage.markets.tw') : isFuturesMarket(m) ? stockT('stocksPage.markets.twf') : m === 'CN' ? stockT('stocksPage.markets.cn') : m === 'HK' ? stockT('stocksPage.markets.hk') : m === 'US' ? stockT('stocksPage.markets.us') : m
+  const badgeFor = (m: string) => getMarketBadge(m, code => stockT(`stocksPage.markets.${code === 'TWF' ? 'twf' : code === 'CN' ? 'cnShort' : code === 'HK' ? 'hkShort' : code === 'US' ? 'usShort' : code}`))
   const marketStatusLabel = (status: string, fallback: string) =>
     stockT(`stocksPage.marketStatus.${status}`, { defaultValue: fallback })
 
@@ -1866,6 +1888,7 @@ export default function StocksPage() {
                   {[
                     { value: '', label: stockT('stocksPage.markets.all') },
                     { value: 'TW', label: stockT('stocksPage.markets.tw') },
+                    { value: 'TWF', label: stockT('stocksPage.markets.twf') },
                     { value: 'CN', label: stockT('stocksPage.markets.cn') },
                     { value: 'HK', label: stockT('stocksPage.markets.hk') },
                     { value: 'US', label: stockT('stocksPage.markets.us') },
@@ -1908,7 +1931,7 @@ export default function StocksPage() {
                   value={searchQuery}
                   onChange={e => handleSearchInput(e.target.value)}
                   onFocus={() => searchResults.length > 0 && setShowDropdown(true)}
-                  placeholder={stockT('stocksPage.messages.searchPlaceholder', { example: searchMarket === 'TW' ? '2330 or 台積電' : searchMarket === 'HK' ? '00700 or Tencent' : searchMarket === 'US' ? 'AAPL or Apple' : '600519 or Kweichow Moutai' })}
+                  placeholder={stockT('stocksPage.messages.searchPlaceholder', { example: searchMarket === 'TWF' ? 'TXF、台指期 或 2330' : searchMarket === 'TW' ? '2330 or 台積電' : searchMarket === 'HK' ? '00700 or Tencent' : searchMarket === 'US' ? 'AAPL or Apple' : '600519 or Kweichow Moutai' })}
                   className="pl-10"
                   autoComplete="off"
                 />
@@ -2385,6 +2408,7 @@ export default function StocksPage() {
               {[
                 { value: '', label: stockT('stocksPage.markets.all'), count: stocks.length },
                 { value: 'TW', label: stockT('stocksPage.markets.tw'), count: stocks.filter(s => s.market === 'TW').length },
+                { value: 'TWF', label: stockT('stocksPage.markets.twf'), count: stocks.filter(s => isFuturesMarket(s.market)).length },
                 { value: 'CN', label: stockT('stocksPage.markets.cn'), count: stocks.filter(s => s.market === 'CN').length },
                 { value: 'HK', label: stockT('stocksPage.markets.hk'), count: stocks.filter(s => s.market === 'HK').length },
                 { value: 'US', label: stockT('stocksPage.markets.us'), count: stocks.filter(s => s.market === 'US').length },
@@ -2499,6 +2523,25 @@ export default function StocksPage() {
                         <div className={`font-mono text-[11px] leading-tight ${changeColor}`}>
                           {quote?.change_pct != null ? `${quote.change_pct >= 0 ? '+' : ''}${quote.change_pct.toFixed(2)}%` : '--'}
                         </div>
+                        {isFuturesMarket(stock.market) && (quote?.contract || quote?.session === 'night' || quote?.volume === 0) && (
+                          <div className="mt-0.5 flex justify-end gap-1 flex-wrap">
+                            {quote.contract && futuresContractMonth(quote.contract) != null && (
+                              <span className="rounded bg-accent/50 px-1 py-0.5 text-[9px] leading-none text-muted-foreground">
+                                {stockT('stocksPage.futures.contractMonth', { month: futuresContractMonth(quote.contract) })}
+                              </span>
+                            )}
+                            {quote.session === 'night' && (
+                              <span className="rounded bg-accent/50 px-1 py-0.5 text-[9px] leading-none text-muted-foreground">
+                                {stockT('stocksPage.futures.night')}
+                              </span>
+                            )}
+                            {quote.volume === 0 && (
+                              <span className="rounded bg-accent/50 px-1 py-0.5 text-[9px] leading-none text-muted-foreground">
+                                {stockT('stocksPage.futures.untraded')}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
 

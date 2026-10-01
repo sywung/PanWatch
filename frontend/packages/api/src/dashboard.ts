@@ -102,6 +102,9 @@ export interface DashboardQuoteResponse {
   market: string
   current_price: number | null
   change_pct: number | null
+  volume?: number | null
+  contract?: string | null
+  session?: string | null
 }
 
 export interface DashboardHistoryItem {

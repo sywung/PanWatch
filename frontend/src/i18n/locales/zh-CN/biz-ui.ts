@@ -1,4 +1,5 @@
 export const bizUi = {
+  markets: { TW: '台股', TWF: '期货', CN: 'A股', HK: '港股', US: '美股' },
   logsLogger: '日志源', amountWithCurrency: '加仓金额（{{currency}}）', approximatelyWithCurrency: '约 {{currency}} {{amount}}',
   klineModal: { title: 'K线：{{symbol}}', fallbackTitle: 'K线', description: '日K/周K/月K切换，含MA/成交量/MACD。', noStock: '未选择股票' },
   interactiveKline: { loadFailed: '加载K线失败', title: 'K线图', rsi: '强弱线', chan: '缠论', chanDisabled: '缠论仅适用于日线', intervals: { day: '日K', week: '周K', month: '月K' }, refresh: '刷新', libraryFailed: '图表库加载失败（网络受限时可能发生）。可稍后重试或检查网络/代理。', metrics: { latest: '最新价', change: '涨跌', amplitude: '振幅', range: '区间高低', averageVolume: '均量' }, hover: { open: '开盘价', close: '收盘价', high: '最高价', low: '最低价', ma5: '5日均线', ma10: '10日均线', ma20: '20日均线', macd: 'MACD线', signal: '信号线', rsi: 'RSI强弱' }, momentum: '动能指标（MACD{{rsi}}）', momentumRsi: ' + RSI强弱线', help: 'MACD 用来看趋势动能和拐点；RSI 用来看是否偏热/偏弱（一般 70 以上偏热，30 以下偏弱）。', tenThousand: '{{value}}万' },
@@ -37,7 +38,7 @@ export const bizUi = {
   },
   stockInsight: {
     description: '概览、K线、AI建议、新闻、历史分析都在同一弹窗查看',
-    markets: { TW: '台股', CN: 'A股', HK: '港股', US: '美股' },
+    markets: { TW: '台股', TWF: '期货', CN: 'A股', HK: '港股', US: '美股' },
     actions: { generating: '生成中', image: '图片', share: '分享', copy: '复制', processing: '处理中...', held: '持仓中', unfollow: '取消关注', follow: '快速关注', setting: '设置中...', setAlert: '一键设提醒', askAI: '问 AI', refresh: '刷新', holdingCannotUnfollow: '持仓中的股票无法取消关注', more: '更多', openDetails: '打开详情页 ↗' },
     tabs: { overview: '概览', suggestions: '建议 ({{count}})', reports: '报告 ({{count}})', deep: '深度', deepCount: '深度 (1)', kline: 'K线', announcements: '公告 ({{count}})', news: '新闻 ({{count}})' },
     autoRefresh: '自动刷新', seconds: '{{count}}秒',

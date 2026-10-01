@@ -22,6 +22,7 @@ _DEFAULT_PATTERNS = [
     re.compile(r"""\belse\s+["']CN["']"""),                      # ... if ... else "CN"
     re.compile(r"""\belse\s+MarketCode\.CN\b"""),                # ... if ... else MarketCode.CN
     re.compile(r"""market\s*=\s*["']CN["']\s*[,)]"""),           # 调用时 market="CN"
+    re.compile(r"""Query\(\s*["']CN["']"""),                    # FastAPI 参数 Query("CN")
 ]
 
 # 写死三市场清单(应改用 models.ALL_MARKETS)

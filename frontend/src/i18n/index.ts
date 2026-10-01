@@ -4,7 +4,8 @@ import { initReactI18next } from 'react-i18next'
 import { resources } from './resources'
 
 export const DEFAULT_LOCALE = 'zh-TW' as const
-export const LOCALE_STORAGE_KEY = 'panwatch-locale'
+// v2:上游原版在同一网址自动写入的 zh-CN 不再沿用,新版预设繁中才会生效
+export const LOCALE_STORAGE_KEY = 'panwatch-locale-v2'
 export const SUPPORTED_LOCALES = ['zh-TW', 'zh-CN', 'en-US'] as const
 
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number]

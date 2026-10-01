@@ -108,7 +108,7 @@ ENV DATA_DIR=/app/data
 ENV DOCKER=1
 
 # 默认时区（可在 docker run 时用 -e TZ=... 覆盖）
-ENV TZ=Asia/Shanghai
+ENV TZ=Asia/Taipei
 
 # 暴露端口（保持 8000 不变，避免影响存量用户升级）
 EXPOSE 8000

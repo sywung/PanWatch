@@ -54,13 +54,13 @@ class Settings(BaseSettings):
 
     # 调度
     # day_of_week 使用 POSIX cron 语义(1-5=周一到周五)
-    daily_report_cron: str = "30 15 * * 1-5"
+    daily_report_cron: str = "0 14 * * 1-5"
 
     # 默认时区（用于调度、时间展示等）。
-    # 统一使用一个环境变量控制：TZ（默认 Asia/Shanghai）。
+    # 统一使用一个环境变量控制：TZ（默认 Asia/Taipei）。
     # 建议使用 IANA 时区名，如 Asia/Shanghai, America/New_York。
     app_timezone: str = Field(
-        default="Asia/Shanghai",
+        default="Asia/Taipei",
         validation_alias=AliasChoices("TZ", "APP_TIMEZONE"),
     )
 

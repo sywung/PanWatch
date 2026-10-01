@@ -5,11 +5,11 @@ import { readSSE } from '../../packages/api/src/sse'
 describe('SSE HTTP errors', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
-    localStorage.removeItem('panwatch-locale')
+    localStorage.removeItem('panwatch-locale-v2')
   })
 
   it('uses the structured API error instead of an opaque HTTP status', async () => {
-    localStorage.setItem('panwatch-locale', 'en-US')
+    localStorage.setItem('panwatch-locale-v2', 'en-US')
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
       code: 429,
       error_code: 'ai_quota_exhausted',

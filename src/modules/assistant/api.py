@@ -20,6 +20,7 @@ from pan_agent import (
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from src.platform.marketdata.models import DEFAULT_MARKET
 from src.platform.ai.errors import descriptor_for_code
 from src.platform.persistence.database import get_db
 from src.platform.tasking.contracts import TaskStatus
@@ -624,7 +625,7 @@ def health() -> dict[str, str]:
 @router.get("/suggested-questions")
 def suggested_questions(
     symbol: str = Query(..., description="股票代码"),
-    market: str = Query("CN", description="市场"),
+    market: str = Query(DEFAULT_MARKET.value, description="市场"),
     service: AssistantService = Depends(get_assistant_service),
 ) -> dict[str, list[str]]:
     return {"questions": service.get_suggested_questions(symbol, market)}

@@ -8,7 +8,7 @@ describe('fetchAPI error localization', () => {
   })
 
   it('maps a stable API error code for the English interface', async () => {
-    localStorage.setItem('panwatch-locale', 'en-US')
+    localStorage.setItem('panwatch-locale-v2', 'en-US')
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       status: 400,
       json: async () => ({
@@ -39,7 +39,7 @@ describe('fetchAPI error localization', () => {
   })
 
   it('maps an unauthenticated error instead of treating sign-in failure as an expired session', async () => {
-    localStorage.setItem('panwatch-locale', 'en-US')
+    localStorage.setItem('panwatch-locale-v2', 'en-US')
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       status: 401,
       json: async () => ({

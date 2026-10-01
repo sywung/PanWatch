@@ -46,6 +46,8 @@ class Quote:
     circulating_market_value: float | None = None
     total_market_value: float | None = None
     timestamp: datetime = field(default_factory=datetime.now)
+    contract: str | None = None
+    session: str | None = None
 
 
 @dataclass

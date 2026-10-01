@@ -118,6 +118,9 @@ class TestKlineSourceTestPath(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(seed["test_symbols"], list(ESB_TEST_SYMBOLS), seed["name"])
             elif cls is not None and getattr(cls, "supports_markets", None) == {"TW"}:
                 self.assertEqual(seed["test_symbols"], list(DEFAULT_TEST_SYMBOLS_BY_MARKET["TW"]), seed["name"])
+            elif cls is not None and getattr(cls, "supports_markets", None) == {"TWF"}:
+                # 期货报价源:样本必须是期货连续代码,股票代码查不到
+                self.assertEqual(seed["test_symbols"], list(DEFAULT_TEST_SYMBOLS_BY_MARKET["TWF"]), seed["name"])
             else:
                 self.assertEqual(seed["test_symbols"], list(DEFAULT_TEST_SYMBOLS), seed["name"])
 

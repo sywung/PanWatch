@@ -33,7 +33,10 @@ def _sym(code):
     return Symbol(Market.TWF, code)
 
 
-def _install(monkeypatch, rows=None, payload_override=None):
+_NO_OVERRIDE = object()
+
+
+def _install(monkeypatch, rows=None, payload_override=_NO_OVERRIDE):
     rows = _ROWS if rows is None else rows
     calls = []
 
@@ -42,7 +45,7 @@ def _install(monkeypatch, rows=None, payload_override=None):
         inspect.signature(real_market_post).bind(url, **kwargs)
         ids = kwargs["json_body"]["SymbolID"]
         calls.append((url, kwargs))
-        if payload_override is not None:
+        if payload_override is not _NO_OVERRIDE:
             return payload_override
         quote_list = [copy.deepcopy(rows.get(i, _BLANK)) for i in ids]
         return {"RtCode": "0", "RtMsg": "", "RtData": {"QuoteList": quote_list}}
@@ -158,3 +161,38 @@ def test_duplicate_symbols_requested_once(monkeypatch):
 def test_bad_payload_returns_empty(monkeypatch, payload):
     _install(monkeypatch, payload_override=payload)
     assert tx.TaifexMisQuoteVendor().fetch([_sym("TXFJ6")], {}) == []
+
+
+# ---------------------------------------------------------------- 有挂牌但今天没成交 / 网络失败
+
+
+def _untraded_row(symbol_id, name, ref):
+    # 2026-10-01 实测:冷门个股期货近月有挂牌但当日无成交(318 档里 24 档),CLastPrice 为 0.00
+    row = copy.deepcopy(_BLANK)
+    row.update(SymbolID=symbol_id, DispCName=name, Status="TC", CLastPrice="0.00", CRefPrice=ref,
+               COpenPrice="0.00", CHighPrice="0.00", CLowPrice="0.00", CTotalVolume="0",
+               CDate="20261001", CTime="")
+    return row
+
+
+def test_listed_contract_without_trade_uses_reference_price(monkeypatch):
+    rows = {**_ROWS, "DZFJ6-F": _untraded_row("DZFJ6-F", "大成期貨106", "51.90")}
+    calls = _install(monkeypatch, rows)
+    q = _by_symbol(tx.TaifexMisQuoteVendor().fetch([_sym("DZFJ6")], {}))["DZFJ6"]
+    assert (q.current_price, q.prev_close, q.change_amount, q.change_pct) == (51.9, 51.9, 0.0, 0.0)
+    assert (q.contract, q.session, q.volume) == ("DZFJ6", "day", 0.0)
+    assert len(calls) == 1          # 有挂牌就不能往后找远月
+
+
+def test_traded_session_beats_untraded_listing(monkeypatch):
+    rows = copy.deepcopy(_ROWS)
+    rows["CDFJ6-M"].update(CLastPrice="0.00", CDate="20261002", CTime="")
+    _install(monkeypatch, rows)
+    q = _by_symbol(tx.TaifexMisQuoteVendor().fetch([_sym("CDFJ6")], {}))["CDFJ6"]
+    assert (q.current_price, q.session) == (2530.0, "day")
+
+
+def test_network_failure_does_not_trigger_month_roll(monkeypatch):
+    calls = _install(monkeypatch, payload_override=None)
+    assert tx.TaifexMisQuoteVendor().fetch([_sym("TXFJ6"), _sym("CDFJ6")], {}) == []
+    assert len(calls) == 1          # 失败时不能再发 6 个月 × 日夜盘的请求放大流量

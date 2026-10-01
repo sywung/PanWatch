@@ -18,6 +18,7 @@ from src.platform.marketdata.models import DEFAULT_MARKET, MarketCode
 # 时只测到 A 股，导致港股/美股 provider 的市场路由问题直到生产才暴露。
 DEFAULT_TEST_SYMBOLS_BY_MARKET: dict[str, tuple[str, ...]] = {
     "TW": ("2330", "6488"),
+    "TWF": ("TXF", "CDF"),
     "CN": ("600519", "601127"),
     "HK": ("00700", "00386"),
     "US": ("AAPL", "NVDA"),
@@ -27,7 +28,8 @@ ESB_TEST_SYMBOLS: tuple[str, ...] = ("1260", "2330")
 
 DEFAULT_TEST_SYMBOLS: tuple[str, ...] = tuple(
     symbol
-    for symbols in DEFAULT_TEST_SYMBOLS_BY_MARKET.values()
+    for market, symbols in DEFAULT_TEST_SYMBOLS_BY_MARKET.items()
+    if market != "TWF"
     for symbol in symbols
 )
 
@@ -673,11 +675,16 @@ class DataCollectorManager:
         )
 
         try:
-            quotes = md.quotes(list(test_symbols[:_TEST_SYMBOL_LIMIT]))
+            if source.provider == "taifex":
+                from src.platform.marketdata.marketdata_client import futures_quote_rows
+
+                rows = futures_quote_rows(md, list(test_symbols[:_TEST_SYMBOL_LIMIT]))
+            else:
+                quotes = md.quotes(list(test_symbols[:_TEST_SYMBOL_LIMIT]))
+                rows = [_quote_to_row(q) for q in quotes]
         except Exception as e:
             return CollectorResult(success=False, error=str(e))
 
-        rows = [_quote_to_row(q) for q in quotes]
         return CollectorResult(
             success=len(rows) > 0,
             data=[

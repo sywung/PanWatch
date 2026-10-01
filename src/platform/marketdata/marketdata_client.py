@@ -101,6 +101,47 @@ def _quote_to_row(q: Quote) -> dict:
     }
 
 
+def futures_quote_rows(md, codes: list[str], now=None) -> list[dict]:
+    """将连续期货代码解析为近月合约,并把报价对应回连续代码。"""
+    from datetime import datetime
+
+    from src.platform.marketdata import futures
+
+    current = now
+    if current is None:
+        from zoneinfo import ZoneInfo
+
+        current = datetime.now(ZoneInfo("Asia/Taipei"))
+
+    resolved = []
+    seen = set()
+    for raw_code in codes:
+        code = str(raw_code).strip().upper()
+        if not code or code in seen:
+            continue
+        seen.add(code)
+        contract = futures.resolve_contract(code, current)
+        if contract is not None:
+            resolved.append((code, contract.symbol, contract.product))
+    if not resolved:
+        return []
+
+    quotes = md.quotes([contract for _, contract, _ in resolved], market="TWF")
+    quotes_by_contract = {quote.symbol: quote for quote in quotes}
+    rows = []
+    for code, contract, product in resolved:
+        quote = quotes_by_contract.get(contract)
+        if quote is None:
+            continue
+        row = _quote_to_row(quote)
+        row["symbol"] = code
+        row["name"] = product.name
+        row["contract"] = quote.contract or contract
+        row["session"] = quote.session
+        rows.append(row)
+    return rows
+
+
 def md_quote_rows(symbols: list[str], market: str) -> list[dict]:
     """批量报价,返回 list[dict](与旧 orchestrator 输出同形)。
 
@@ -109,7 +150,10 @@ def md_quote_rows(symbols: list[str], market: str) -> list[dict]:
     syms = list(symbols)
     if not syms:
         return []
-    quotes = get_market_data().quotes(syms, market=market)
+    md = get_market_data()
+    if market == "TWF":
+        return futures_quote_rows(md, syms)
+    quotes = md.quotes(syms, market=market)
     return [_quote_to_row(q) for q in quotes]
 
 

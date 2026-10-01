@@ -43,6 +43,7 @@ from marketdata.vendors.northbound import HexinNorthboundVendor
 from marketdata.vendors.sina import SinaQuoteVendor
 from marketdata.vendors.tencent import TencentQuoteVendor
 from marketdata.vendors.twse import TwseMisQuoteVendor
+from marketdata.vendors.taifex import TaifexMisQuoteVendor
 from marketdata.vendors.tw import TpexEsbQuoteVendor
 from marketdata.vendors.yfinance import YFinanceQuoteVendor
 from marketdata.vendors.tw import (
@@ -68,6 +69,7 @@ VENDOR_CLASSES_BY_TYPE: dict[str, dict[str, type]] = {
         "eastmoney": EastmoneyQuoteVendor,
         "yfinance": YFinanceQuoteVendor,
         "twse": TwseMisQuoteVendor,
+        "taifex": TaifexMisQuoteVendor,
         "fugle": FugleQuoteVendor,
         "tpex_esb": TpexEsbQuoteVendor,
     },

@@ -496,6 +496,16 @@ DATA_SOURCE_SEEDS: list[dict] = [
             "test_symbols": list(DEFAULT_TEST_SYMBOLS_BY_MARKET["TW"]),
         },
         {
+            "name": "期交所 MIS 期貨行情",
+            "type": "quote",
+            "provider": "taifex",
+            "config": {"description": "期交所即時期貨行情，免 API key，支援日盤與夜盤。"},
+            "enabled": True,
+            "priority": 0,
+            "supports_batch": True,
+            "test_symbols": list(DEFAULT_TEST_SYMBOLS_BY_MARKET["TWF"]),
+        },
+        {
             "name": "Fugle 行情（興櫃）",
             "type": "quote",
             "provider": "fugle",

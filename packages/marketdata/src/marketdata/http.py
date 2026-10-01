@@ -100,6 +100,73 @@ def market_get(
 
     proxy: 显式代理,仅在给了值时传给 httpx.Client 覆盖 env 代理;不传则遵循 trust_env(env)。
     """
+    return _market_request(
+        "GET", url, host_key=host_key, params=params, headers=headers,
+        min_interval_s=min_interval_s, timeout=timeout, retries=retries,
+        backoff=backoff, jitter=jitter, parse=parse, encoding=encoding,
+        symbol=symbol, log_label=log_label, raise_for_status=raise_for_status,
+        trust_env=trust_env, follow_redirects=follow_redirects, verify=verify,
+        proxy=proxy,
+    )
+
+
+def market_post(
+    url: str,
+    *,
+    host_key: str,
+    json_body: Any,
+    params: dict | None = None,
+    headers: dict | None = None,
+    min_interval_s: float = 0.0,
+    timeout: float = 10.0,
+    retries: int = 2,
+    backoff: float = 0.4,
+    jitter: float = 0.25,
+    parse: str = "text",
+    encoding: str | None = None,
+    symbol: str = "",
+    log_label: str = "",
+    raise_for_status: bool = True,
+    trust_env: bool = True,
+    follow_redirects: bool = True,
+    verify: bool = True,
+    proxy: str | None = None,
+) -> Any | None:
+    """以 JSON body 发送 POST,沿用 market_get 的节流、重试与错误记录。"""
+    return _market_request(
+        "POST", url, host_key=host_key, params=params, json_body=json_body,
+        headers=headers, min_interval_s=min_interval_s, timeout=timeout,
+        retries=retries, backoff=backoff, jitter=jitter, parse=parse,
+        encoding=encoding, symbol=symbol, log_label=log_label,
+        raise_for_status=raise_for_status, trust_env=trust_env,
+        follow_redirects=follow_redirects, verify=verify, proxy=proxy,
+    )
+
+
+def _market_request(
+    method: str,
+    url: str,
+    *,
+    host_key: str,
+    params: dict | None = None,
+    json_body: Any = None,
+    headers: dict | None = None,
+    min_interval_s: float = 0.0,
+    timeout: float = 10.0,
+    retries: int = 2,
+    backoff: float = 0.4,
+    jitter: float = 0.25,
+    parse: str = "text",
+    encoding: str | None = None,
+    symbol: str = "",
+    log_label: str = "",
+    raise_for_status: bool = True,
+    trust_env: bool = True,
+    follow_redirects: bool = True,
+    verify: bool = True,
+    proxy: str | None = None,
+) -> Any | None:
+    """共用 HTTP 请求、解析及失败处理。"""
     effective_proxy = proxy
     last_err: Any = None
     for attempt in range(max(1, retries + 1)):
@@ -113,7 +180,10 @@ def market_get(
                 verify=verify,
                 **({"proxy": effective_proxy} if effective_proxy else {}),
             ) as client:
-                resp = client.get(url, params=params)
+                if method == "POST":
+                    resp = client.post(url, params=params, json=json_body)
+                else:
+                    resp = client.get(url, params=params)
                 if raise_for_status:
                     resp.raise_for_status()
                 if parse == "json":

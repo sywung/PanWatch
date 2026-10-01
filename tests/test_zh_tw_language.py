@@ -54,6 +54,16 @@ def test_localize_text_keeps_tai_not_formal_variant():
     assert out == "台積電 新台幣 台股"
 
 
+def test_localize_text_uses_taiwan_vocabulary():
+    out = language.localize_text("当前持仓，默认渠道，获取失败，分享到社交平台", "zh-TW")
+    assert out == "目前持倉，預設渠道，取得失敗，分享到社群平台"
+
+
+def test_localize_text_keeps_allocation_wording():
+    # AI 报告里的「资产配置」是台湾也用的投资用语,不能被当成「设定」改掉
+    assert language.localize_text("建议调整资产配置", "zh-TW") == "建議調整資產配置"
+
+
 def test_localize_text_noop_for_other_languages():
     s = "账户持仓"
     assert language.localize_text(s, "zh-CN") == s

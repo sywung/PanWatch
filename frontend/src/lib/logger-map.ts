@@ -1,3 +1,5 @@
+import { LOGGER_MAPPING_ZH_TW } from './logger-map.zh-TW'
+
 // Map stable Python logger names to concise display names.
 export const LOGGER_MAPPING_ZH: Record<string, string> = {
   // Agents
@@ -68,9 +70,15 @@ export const LOGGER_MAPPING_EN: Record<string, string> = {
   httpx: 'HTTP client', httpcore: 'HTTP core', urllib3: 'HTTP library', requests: 'HTTP client', 'uvicorn.access': 'Access log', 'uvicorn.error': 'Uvicorn errors', uvicorn: 'Uvicorn', fastapi: 'FastAPI', starlette: 'Starlette', 'sqlalchemy.engine': 'Database engine', sqlalchemy: 'SQLAlchemy', apscheduler: 'APScheduler', playwright: 'Browser', openai: 'AI SDK', tenacity: 'Retry library',
 }
 
+function mappingFor(language: string): Record<string, string> {
+  const lang = language.toLowerCase()
+  if (lang.startsWith('en')) return LOGGER_MAPPING_EN
+  return lang === 'zh-tw' ? LOGGER_MAPPING_ZH_TW : LOGGER_MAPPING_ZH
+}
+
 export function mapLoggerName(moduleName?: string, language = 'zh-TW'): string {
   if (!moduleName) return ''
-  const mapping = language.toLowerCase().startsWith('en') ? LOGGER_MAPPING_EN : LOGGER_MAPPING_ZH
+  const mapping = mappingFor(language)
   let bestKey = ''
   for (const key of Object.keys(mapping)) {
     if (moduleName === key || moduleName.startsWith(key)) {
@@ -81,6 +89,6 @@ export function mapLoggerName(moduleName?: string, language = 'zh-TW'): string {
 }
 
 export function loggerOptions(language = 'zh-TW'): { key: string, label: string }[] {
-  const mapping = language.toLowerCase().startsWith('en') ? LOGGER_MAPPING_EN : LOGGER_MAPPING_ZH
+  const mapping = mappingFor(language)
   return Object.entries(mapping).map(([key, label]) => ({ key, label }))
 }

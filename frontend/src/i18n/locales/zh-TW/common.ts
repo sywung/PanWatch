@@ -53,8 +53,8 @@ export const common = {
   },
   update: {
     title: '發現新版本',
-    description: '當前版本 v{{current}}，可升級到 v{{latest}}。',
-    recommendation: '建議升級以獲取最新功能和修復。',
+    description: '目前版本 v{{current}}，可升級到 v{{latest}}。',
+    recommendation: '建議升級以取得最新功能和修復。',
   },
   markets: {
     all: '全部市場',

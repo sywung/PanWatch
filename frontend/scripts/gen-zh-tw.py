@@ -17,6 +17,15 @@ POSTPROCESS = (
     ("臺", "台"), ("賬", "帳"), ("日志", "日誌"), ("質量", "品質"), ("智慧體", "智慧代理"), ("盯盤俠", "盯盤俠"),
     # 台湾惯用直角引号
     ("“", "「"), ("”", "」"), ("‘", "『"), ("’", "』"),
+    # 大陆用语 → 台湾用语(OpenCC s2twp 不处理)。整句短语放在单词规则之前。
+    ("當前程序", "目前的處理程序"), ("結果未落庫", "結果尚未寫入"), ("默認同模型標識", "預設與模型 ID 相同"),
+    ("通過所選", "透過所選"), ("通過通知", "透過通知"), ("在設定中配置", "在設定頁新增"),
+    ("當前", "目前"), ("默認", "預設"), ("獲取", "取得"), ("渠道", "管道"), ("推送", "推播"),
+    ("校驗", "驗證"), ("發送", "傳送"), ("社交平台", "社群平台"),
+)
+# 「配置」当「设定」用时改为设定；资金／资产配置是台湾也用的投资用语，保留。
+REGEX_POSTPROCESS = (
+    (re.compile(r"(?<![資金產])配置"), "設定"),
 )
 OVERRIDES: dict[str, str] = {
     "language.traditionalChinese": "繁體中文",
@@ -42,6 +51,8 @@ def convert(text: str) -> str:
     text = _cc.convert(text)
     for old, new in POSTPROCESS:
         text = text.replace(old, new)
+    for pattern, new in REGEX_POSTPROCESS:
+        text = pattern.sub(new, text)
     return text
 
 
@@ -85,9 +96,32 @@ def generate(path: Path) -> None:
     (TARGET_DIR / path.name).write_text(header + "".join(out), encoding="utf-8")
 
 
+LOGGER_MAP = ROOT / "src/lib/logger-map.ts"
+LOGGER_MAP_TW = ROOT / "src/lib/logger-map.zh-TW.ts"
+
+
+def generate_logger_map() -> None:
+    # 日志视窗的模块名称表不在 locales 里,单独从 LOGGER_MAPPING_ZH 转出一份。
+    source = LOGGER_MAP.read_text(encoding="utf-8")
+    block = re.search(r"export const LOGGER_MAPPING_ZH[^=]*=\s*\{(?P<body>.*?)\n\}", source, re.S)
+    if not block:
+        raise SystemExit("logger-map.ts: LOGGER_MAPPING_ZH not found")
+    body = re.sub(
+        r"(?P<key>'[^']*'):\s*'(?P<label>[^']*)'",
+        lambda m: f"{m.group('key')}: '{convert(m.group('label'))}'",
+        block.group("body"),
+    )
+    header = "// 由 gen-zh-tw.py 自 logger-map.ts 的 LOGGER_MAPPING_ZH 產生；不要直接改本檔。\n"
+    LOGGER_MAP_TW.write_text(
+        header + "export const LOGGER_MAPPING_ZH_TW: Record<string, string> = {" + body + "\n}\n",
+        encoding="utf-8",
+    )
+
+
 def main() -> None:
     for source in sorted(SOURCE_DIR.glob("*.ts")):
         generate(source)
+    generate_logger_map()
 
 
 if __name__ == "__main__":

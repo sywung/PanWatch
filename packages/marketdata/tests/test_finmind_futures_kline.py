@@ -138,3 +138,17 @@ def test_tw_stock_path_unchanged(monkeypatch):
     calls = _install(monkeypatch, {"status": 200, "data": []})
     fm.FinMindKlineVendor().fetch([Symbol(Market.TW, "2330")], {"days": 5})
     assert calls[0]["params"]["dataset"] == "TaiwanStockPrice"
+
+
+def test_spread_contract_never_used_when_near_month_row_missing(monkeypatch):
+    # 价差组合 202609/202610 的「价格」是两个月份的价差(约一两百点);某天单月近月列缺失时,
+    # 若没排除价差组合,字串最小值会挑到它,K 线会从四万多点掉到一百多点
+    payload = copy.deepcopy(_TX)
+    payload["data"] = [
+        r for r in payload["data"]
+        if not (r["date"] == "2026-09-15" and r["contract_date"] == "202609")
+    ]
+    assert any(r["date"] == "2026-09-15" and "/" in r["contract_date"] for r in payload["data"])
+    _install(monkeypatch, payload)
+    bar = {b.date: b for b in _fetch("TXF")}["2026-09-15"]
+    assert bar.close == 45740.0          # 当天剩下最近的单月合约(10 月)

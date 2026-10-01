@@ -14,6 +14,8 @@ TARGET_DIR = ROOT / "src/i18n/locales/zh-TW"
 
 # Keep manual vocabulary decisions in one place so regeneration is reproducible.
 POSTPROCESS = (
+    # 三批繁中詞彙修正；片語放在單詞規則之前，避免改變「執行未通過」。
+    ("通過 OpenAI", "透過 OpenAI"), ("程式碼", "代碼"), ("引數", "參數"), ("示例", "範例"),
     ("臺", "台"), ("賬", "帳"), ("日志", "日誌"), ("質量", "品質"), ("智慧體", "智慧代理"), ("盯盤俠", "盯盤俠"),
     # 台湾惯用直角引号
     ("“", "「"), ("”", "」"), ("‘", "『"), ("’", "』"),

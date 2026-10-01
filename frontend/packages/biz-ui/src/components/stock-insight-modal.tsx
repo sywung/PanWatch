@@ -2,14 +2,24 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { Copy, Download, ExternalLink, RefreshCw, Share2, Sparkles } from 'lucide-react'
 import {
+  futuresApi,
   insightApi,
   stocksApi,
   tradingAgentsApi,
   type DeepAnalysisResult,
+  type FuturesInfo,
   type HistoryComparisonResponse,
 } from '@panwatch/api'
-import { getMarketBadge } from '@panwatch/biz-ui'
-import { DEFAULT_MARKET, marketCurrency } from '../market'
+import {
+  canEvaluateAddPosition,
+  formatCompactAmount,
+  formatMarketCapLabel,
+  futuresBasisLabel,
+  futuresNewsTarget,
+  getMarketBadge,
+  isFuturesMarket,
+} from '@panwatch/biz-ui'
+import { DEFAULT_MARKET, futuresContractMonth } from '../market'
 import { useLocalStorage } from '@/lib/utils'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@panwatch/base-ui/components/ui/dialog'
 import { Button } from '@panwatch/base-ui/components/ui/button'
@@ -136,41 +146,6 @@ function formatNumber(value: number | null | undefined, digits = 2): string {
   return value.toFixed(digits)
 }
 
-function formatCompactNumber(value: number | null | undefined, english = false): string {
-  if (value == null) return '--'
-  const n = Number(value)
-  if (!isFinite(n)) return '--'
-  const abs = Math.abs(n)
-  if (english && abs >= 1e9) return `${(n / 1e9).toFixed(2)}B`
-  if (english && abs >= 1e6) return `${(n / 1e6).toFixed(2)}M`
-  if (english && abs >= 1e3) return `${(n / 1e3).toFixed(2)}K`
-  if (abs >= 1e8) return `${(n / 1e8).toFixed(2)}亿`
-  if (abs >= 1e4) return `${(n / 1e4).toFixed(2)}万`
-  return n.toFixed(0)
-}
-
-function formatMarketCap(value: number | null | undefined, market?: string, english = false): string {
-  if (value == null) return '--'
-  const n = Number(value)
-  if (!isFinite(n)) return '--'
-  const m = String(market || '').toUpperCase()
-  const abs = Math.abs(n)
-  const currency = marketCurrency(m)
-
-  // Quote providers normalize market capitalization in local-currency 100M units.
-  // Convert that unit before adding an English currency suffix for every market.
-  if (english) {
-    if (abs >= 10000) return `${(n / 10000).toFixed(2)}T ${currency}`
-    if (abs >= 10) return `${(n / 10).toFixed(2)}B ${currency}`
-    return `${(n * 100).toFixed(2)}M ${currency}`
-  }
-
-  if (m === 'US') return `${n.toFixed(2)}亿美元`
-  if (m === 'HK') return `${n.toFixed(2)}亿港元`
-  if (m === 'TW') return `${n.toFixed(2)}亿新台币`
-  return `${n.toFixed(2)}亿元（人民币）`
-}
-
 function formatTime(isoTime?: string, locale = 'zh-CN'): string {
   if (!isoTime) return ''
   const d = new Date(isoTime)
@@ -182,6 +157,13 @@ function formatTime(isoTime?: string, locale = 'zh-CN'): string {
     minute: '2-digit',
     hour12: false,
   })
+}
+
+function formatDateOnly(isoDate?: string, locale = 'zh-CN'): string {
+  if (!isoDate) return '--'
+  const d = new Date(`${isoDate.slice(0, 10)}T00:00:00`)
+  if (isNaN(d.getTime())) return '--'
+  return d.toLocaleDateString(locale)
 }
 
 function parseToMs(input?: string): number | null {
@@ -354,7 +336,8 @@ export default function StockInsightModal(props: {
     (t as unknown as (key: string, options?: Record<string, unknown>) => string)(`stockInsight.${key}`, options)
   const klineTr = (key: string, options?: Record<string, unknown>) =>
     (t as unknown as (key: string, options?: Record<string, unknown>) => string)(`kline.${key}`, options)
-  const locale = (i18n.resolvedLanguage || i18n.language).toLowerCase().startsWith('en') ? 'en-US' : 'zh-CN'
+  const language = (i18n.resolvedLanguage || i18n.language).toLowerCase()
+  const locale = language.startsWith('en') ? 'en-US' : language.startsWith('zh-tw') ? 'zh-TW' : 'zh-CN'
   const english = locale === 'en-US'
   const agentLabel = (name: string) => name === 'daily_report' ? tr('reports.afterMarketAgent') : name === 'premarket_outlook' ? tr('reports.premarketAgent') : name
   const actionLabel = (action?: string, label?: string) => {
@@ -383,6 +366,11 @@ export default function StockInsightModal(props: {
     20
   )
   const [quote, setQuote] = useState<QuoteResponse | null>(null)
+  const [futuresState, setFuturesState] = useState<{
+    symbol: string
+    info: FuturesInfo | null
+    loaded: boolean
+  } | null>(null)
   const [klineSummary, setKlineSummary] = useState<KlineSummary | null>(null)
   const [miniKlines, setMiniKlines] = useState<MiniKlineResponse['klines']>([])
   const [miniKlineLoading, setMiniKlineLoading] = useState(false)
@@ -416,7 +404,40 @@ export default function StockInsightModal(props: {
   const [holdingLoadError, setHoldingLoadError] = useState(false)
   const autoTriggeredRef = useRef<Record<string, number>>({})
   const stockCacheRef = useRef<Record<string, StockItem>>({})
+  const futuresStateRef = useRef<{ symbol: string; info: FuturesInfo | null; loaded: boolean } | null>(null)
+  const futuresRequestRef = useRef(0)
   const resolvedName = useMemo(() => props.stockName || quote?.name || symbol, [props.stockName, quote?.name, symbol])
+
+  const loadFuturesInfo = useCallback(async () => {
+    const request = ++futuresRequestRef.current
+    if (!isFuturesMarket(market)) {
+      futuresStateRef.current = null
+      setFuturesState(null)
+      return
+    }
+    const pending = { symbol, info: null, loaded: false }
+    futuresStateRef.current = pending
+    setFuturesState(pending)
+    try {
+      const info = await futuresApi.info(symbol)
+      if (request !== futuresRequestRef.current) return
+      const loaded = { symbol, info, loaded: true }
+      futuresStateRef.current = loaded
+      setFuturesState(loaded)
+    } catch {
+      if (request !== futuresRequestRef.current) return
+      const failed = { symbol, info: null, loaded: true }
+      futuresStateRef.current = failed
+      setFuturesState(failed)
+    }
+  }, [market, symbol])
+
+  const futuresInfo = futuresState?.symbol === symbol ? futuresState.info : null
+  const isFutures = isFuturesMarket(market)
+  const displayPrice = isFutures ? futuresInfo?.futures_price ?? quote?.current_price : quote?.current_price
+  const futuresMonth = futuresInfo
+    ? futuresContractMonth(futuresInfo.contract) || Number(futuresInfo.contract_month.slice(-2)) || null
+    : null
 
   const loadQuote = useCallback(async () => {
     if (!symbol) return
@@ -476,19 +497,31 @@ export default function StockInsightModal(props: {
 
   const loadNews = useCallback(async () => {
     if (!symbol) return
+    let target: { symbol: string; name: string } | null = { symbol, name: resolvedName }
+    if (isFuturesMarket(market)) {
+      const state = futuresStateRef.current
+      if (!state || state.symbol !== symbol || !state.loaded) return
+      target = futuresNewsTarget(state.info)
+      if (!target) {
+        setNews([])
+        return
+      }
+    }
+    const targetSymbol = target.symbol
+    const targetName = target.name
     const runQuery = async (opts: { useName: boolean; filterRelated: boolean }) => {
       const params = new URLSearchParams()
       params.set('hours', newsHours)
       params.set('limit', '50')
       if (!opts.filterRelated) params.set('filter_related', 'false')
-      if (opts.useName && resolvedName && resolvedName !== symbol) params.set('names', resolvedName)
-      else params.set('symbols', symbol)
+      if (opts.useName && targetName && targetName !== targetSymbol) params.set('names', targetName)
+      else params.set('symbols', targetSymbol)
       return insightApi.news<NewsItem[]>(Object.fromEntries(params.entries()))
     }
 
     try {
       let data: NewsItem[] = await runQuery({ useName: true, filterRelated: true })
-      if ((data || []).length === 0 && resolvedName && resolvedName !== symbol) {
+      if ((data || []).length === 0 && targetName && targetName !== targetSymbol) {
         data = await runQuery({ useName: false, filterRelated: true })
       }
       if ((data || []).length === 0) {
@@ -502,8 +535,8 @@ export default function StockInsightModal(props: {
           hours: newsHours,
           limit: 80,
         }).catch(() => [])
-        const upperSymbol = symbol.toUpperCase()
-        const name = (resolvedName || '').trim()
+        const upperSymbol = targetSymbol.toUpperCase()
+        const name = (targetName || '').trim()
         data = (global || []).filter((n) => {
           const text = `${n.title || ''} ${n.content || ''}`.toUpperCase()
           if (upperSymbol && text.includes(upperSymbol)) return true
@@ -515,10 +548,22 @@ export default function StockInsightModal(props: {
     } catch {
       setNews([])
     }
-  }, [symbol, newsHours, resolvedName])
+  }, [symbol, market, newsHours, resolvedName, futuresState])
 
   const loadAnnouncements = useCallback(async () => {
     if (!symbol) return
+    let target: { symbol: string; name: string } | null = { symbol, name: resolvedName }
+    if (isFuturesMarket(market)) {
+      const state = futuresStateRef.current
+      if (!state || state.symbol !== symbol || !state.loaded) return
+      target = futuresNewsTarget(state.info)
+      if (!target) {
+        setAnnouncements([])
+        return
+      }
+    }
+    const targetSymbol = target.symbol
+    const targetName = target.name
     try {
       const runQuery = async (opts: { useName: boolean; filterRelated: boolean }) => {
         const params = new URLSearchParams()
@@ -526,12 +571,12 @@ export default function StockInsightModal(props: {
         params.set('limit', '50')
         if (!opts.filterRelated) params.set('filter_related', 'false')
         params.set('source', 'eastmoney')
-        if (opts.useName && resolvedName && resolvedName !== symbol) params.set('names', resolvedName)
-        else params.set('symbols', symbol)
+        if (opts.useName && targetName && targetName !== targetSymbol) params.set('names', targetName)
+        else params.set('symbols', targetSymbol)
         return insightApi.news<NewsItem[]>(Object.fromEntries(params.entries()))
       }
       let data: NewsItem[] = await runQuery({ useName: true, filterRelated: true })
-      if ((data || []).length === 0 && resolvedName && resolvedName !== symbol) {
+      if ((data || []).length === 0 && targetName && targetName !== targetSymbol) {
         data = await runQuery({ useName: false, filterRelated: true })
       }
       if ((data || []).length === 0) {
@@ -546,8 +591,8 @@ export default function StockInsightModal(props: {
           limit: 80,
           source: 'eastmoney',
         }).catch(() => [])
-        const upperSymbol = symbol.toUpperCase()
-        const name = (resolvedName || '').trim()
+        const upperSymbol = targetSymbol.toUpperCase()
+        const name = (targetName || '').trim()
         data = (global || []).filter((n) => {
           const text = `${n.title || ''} ${n.content || ''}`.toUpperCase()
           if (upperSymbol && text.includes(upperSymbol)) return true
@@ -559,7 +604,7 @@ export default function StockInsightModal(props: {
     } catch {
       setAnnouncements([])
     }
-  }, [symbol, announcementHours, resolvedName])
+  }, [symbol, market, announcementHours, resolvedName, futuresState])
 
   const loadHoldingAgg = useCallback(async () => {
     if (!symbol) return
@@ -662,17 +707,17 @@ export default function StockInsightModal(props: {
     if (!symbol) return
     setLoading(true)
     try {
-      await Promise.allSettled([loadQuote(), loadKline(), loadMiniKline(), loadSuggestions(), loadNews(), loadAnnouncements(), loadHoldingAgg(), loadReports()])
+      await Promise.allSettled([loadQuote(), loadFuturesInfo(), loadKline(), loadMiniKline(), loadSuggestions(), loadNews(), loadAnnouncements(), loadHoldingAgg(), loadReports()])
     } catch (e) {
       toast(e instanceof Error ? e.message : tr('messages.loadFailed'), 'error')
     } finally {
       setLoading(false)
     }
-  }, [symbol, loadQuote, loadKline, loadMiniKline, loadSuggestions, loadNews, loadAnnouncements, loadHoldingAgg, loadReports, toast])
+  }, [symbol, loadQuote, loadFuturesInfo, loadKline, loadMiniKline, loadSuggestions, loadNews, loadAnnouncements, loadHoldingAgg, loadReports, toast])
 
   const refreshForAuto = useCallback(async () => {
     if (!symbol) return
-    const tasks: Promise<any>[] = [loadQuote(), loadHoldingAgg()]
+    const tasks: Promise<any>[] = [loadQuote(), loadFuturesInfo(), loadHoldingAgg()]
     if (tab === 'overview' || tab === 'kline') {
       tasks.push(loadKline(), loadMiniKline({ silent: true }))
     }
@@ -689,7 +734,7 @@ export default function StockInsightModal(props: {
       tasks.push(loadReports())
     }
     await Promise.allSettled(tasks)
-  }, [symbol, tab, loadQuote, loadHoldingAgg, loadKline, loadMiniKline, loadSuggestions, loadNews, loadAnnouncements, loadReports])
+  }, [symbol, tab, loadQuote, loadFuturesInfo, loadHoldingAgg, loadKline, loadMiniKline, loadSuggestions, loadNews, loadAnnouncements, loadReports])
 
   const loadDeepResult = useCallback(async () => {
     if (!symbol) return
@@ -724,8 +769,8 @@ export default function StockInsightModal(props: {
     setDeepResult(null)
     setDeepLoaded(false)
     setDeepHistory(null)
-    loadCore()
-  }, [props.open, symbol, market, loadCore])
+    void Promise.allSettled([loadCore(), loadFuturesInfo()])
+  }, [props.open, symbol, market, loadCore, loadFuturesInfo])
 
   // 切到「深度」tab 时按需拉取(仅首次)
   useEffect(() => {
@@ -1421,7 +1466,7 @@ export default function StockInsightModal(props: {
                   <div className="card p-4 h-full">
                     <div className="mt-1 flex items-end justify-between gap-3">
                       <div className={`text-[34px] leading-none font-bold font-mono ${priceColor}`}>
-                        {quote?.current_price != null ? formatNumber(quote.current_price) : '--'}
+                        {displayPrice != null ? formatNumber(displayPrice) : '--'}
                       </div>
                       <div className={`text-[16px] font-mono ${changeColor}`}>
                         {quote?.change_pct != null ? `${quote.change_pct >= 0 ? '+' : ''}${quote.change_pct.toFixed(2)}%` : '--'}
@@ -1431,14 +1476,16 @@ export default function StockInsightModal(props: {
                       <div className="rounded bg-accent/15 px-2 py-1.5"><div className="text-[10px] text-muted-foreground">{tr('metrics.open')}</div><div className={`font-mono ${levelColor(quote?.open_price)}`}>{formatNumber(quote?.open_price)}</div></div>
                       <div className="rounded bg-accent/15 px-2 py-1.5"><div className="text-[10px] text-muted-foreground">{tr('metrics.high')}</div><div className={`font-mono ${levelColor(quote?.high_price)}`}>{formatNumber(quote?.high_price)}</div></div>
                       <div className="rounded bg-accent/15 px-2 py-1.5"><div className="text-[10px] text-muted-foreground">{tr('metrics.low')}</div><div className={`font-mono ${levelColor(quote?.low_price)}`}>{formatNumber(quote?.low_price)}</div></div>
-                      <div className="rounded bg-accent/15 px-2 py-1.5"><div className="text-[10px] text-muted-foreground">{tr('metrics.volume')}</div><div className="font-mono">{formatCompactNumber(quote?.volume, english)}</div></div>
-                      <div className="rounded bg-accent/15 px-2 py-1.5"><div className="text-[10px] text-muted-foreground">{tr('metrics.turnover')}</div><div className="font-mono">{formatCompactNumber(quote?.turnover, english)}</div></div>
+                      <div className="rounded bg-accent/15 px-2 py-1.5"><div className="text-[10px] text-muted-foreground">{tr('metrics.volume')}</div><div className="font-mono">{formatCompactAmount(quote?.volume, locale)}</div></div>
+                      <div className="rounded bg-accent/15 px-2 py-1.5"><div className="text-[10px] text-muted-foreground">{tr('metrics.turnover')}</div><div className="font-mono">{formatCompactAmount(quote?.turnover, locale)}</div></div>
                       <div className="rounded bg-accent/15 px-2 py-1.5"><div className="text-[10px] text-muted-foreground">{tr('metrics.amplitude')}</div><div className="font-mono">{amplitudePct != null ? `${amplitudePct.toFixed(2)}%` : '--'}</div></div>
-                      <div className="rounded bg-accent/15 px-2 py-1.5"><div className="text-[10px] text-muted-foreground">{tr('metrics.turnoverRate')}</div><div className="font-mono">{quote?.turnover_rate != null ? `${Number(quote.turnover_rate).toFixed(2)}%` : '--'}</div></div>
-                      <div className="rounded bg-accent/15 px-2 py-1.5"><div className="text-[10px] text-muted-foreground">{tr('metrics.pe')}</div><div className="font-mono">{quote?.pe_ratio != null ? Number(quote.pe_ratio).toFixed(2) : '--'}</div></div>
-                      <div className="rounded bg-accent/15 px-2 py-1.5"><div className="text-[10px] text-muted-foreground">{tr('metrics.marketCap')}</div><div className="font-mono">{formatMarketCap(quote?.total_market_value, market, english)}</div></div>
+                      {!isFutures && <>
+                        <div className="rounded bg-accent/15 px-2 py-1.5"><div className="text-[10px] text-muted-foreground">{tr('metrics.turnoverRate')}</div><div className="font-mono">{quote?.turnover_rate != null ? `${Number(quote.turnover_rate).toFixed(2)}%` : '--'}</div></div>
+                        <div className="rounded bg-accent/15 px-2 py-1.5"><div className="text-[10px] text-muted-foreground">{tr('metrics.pe')}</div><div className="font-mono">{quote?.pe_ratio != null ? Number(quote.pe_ratio).toFixed(2) : '--'}</div></div>
+                        <div className="rounded bg-accent/15 px-2 py-1.5"><div className="text-[10px] text-muted-foreground">{tr('metrics.marketCap')}</div><div className="font-mono">{formatMarketCapLabel(quote?.total_market_value, market, locale)}</div></div>
+                      </>}
                     </div>
-                    <div className="mt-3 border-t border-border/50 pt-3">
+                    {!isFutures && <div className="mt-3 border-t border-border/50 pt-3">
                       <div className="text-[11px] text-muted-foreground mb-2">{tr('holding.title')}</div>
                       {holdingAgg ? (
                         <div className="grid grid-cols-2 gap-2 text-[12px]">
@@ -1464,27 +1511,62 @@ export default function StockInsightModal(props: {
                           </div>
                           <div className="rounded bg-accent/20 px-2 py-1.5">
                             <div className="text-[10px] text-muted-foreground">{tr('holding.marketValue')}</div>
-                            <div className="font-mono">{formatCompactNumber(holdingAgg.marketValue, english)}</div>
+                            <div className="font-mono">{formatCompactAmount(holdingAgg.marketValue, locale)}</div>
                           </div>
                           <div className="rounded bg-accent/20 px-2 py-1.5">
                             <div className="text-[10px] text-muted-foreground">{tr('holding.pnl')}</div>
                             <div className={`font-mono ${marketSignTextClass(holdingAgg.pnl)}`}>
-                              {holdingAgg.pnl >= 0 ? '+' : ''}{formatCompactNumber(holdingAgg.pnl, english)}
+                              {holdingAgg.pnl >= 0 ? '+' : ''}{formatCompactAmount(holdingAgg.pnl, locale)}
                             </div>
                           </div>
                         </div>
                       ) : (
                         <div className="text-[11px] text-muted-foreground">{tr('holding.empty')}</div>
                       )}
-                      <AddPositionCalculator
+                      {canEvaluateAddPosition(market) && <AddPositionCalculator
                         symbol={symbol}
                         market={market}
                         currentQuantity={holdingAgg?.quantity ?? 0}
                         currentCost={holdingAgg?.unitCost ?? 0}
                         currentPrice={quote?.current_price ?? null}
-                      />
-                    </div>
+                      />}
+                    </div>}
                   </div>
+
+                  {isFutures && <div className="card p-4 h-full">
+                    <div className="text-[12px] font-medium mb-3">{tr('futures.title')}</div>
+                    {!futuresInfo ? (
+                      <div className="text-[12px] text-muted-foreground py-8 text-center">{futuresState?.loaded ? '--' : tr('cards.updating')}</div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-2 text-[12px]">
+                        <div className="rounded bg-accent/15 px-2 py-1.5">
+                          <div className="text-[10px] text-muted-foreground">{tr('futures.contractMonth')}</div>
+                          <div className="font-mono">{futuresMonth != null
+                            ? tr('futures.contractMonthValue', { month: futuresMonth, contract: futuresInfo.contract })
+                            : futuresInfo.contract || '--'}</div>
+                        </div>
+                        <div className="rounded bg-accent/15 px-2 py-1.5">
+                          <div className="text-[10px] text-muted-foreground">{tr('futures.settlementDate')}</div>
+                          <div>{formatDateOnly(futuresInfo.settlement_date, locale)}</div>
+                          <div className="text-[10px] text-muted-foreground">{tr('futures.daysRemaining', { days: futuresInfo.days_to_settlement })}</div>
+                        </div>
+                        <div className="rounded bg-accent/15 px-2 py-1.5">
+                          <div className="text-[10px] text-muted-foreground">{tr('futures.spot')}</div>
+                          <div className="font-mono">{formatNumber(futuresInfo.spot)}</div>
+                          <div className="text-[10px] text-muted-foreground">{formatTime(futuresInfo.spot_time || undefined, locale)}</div>
+                          {futuresInfo.session === 'night' && <div className="text-[10px] text-muted-foreground">{tr('futures.spotDaySessionClose')}</div>}
+                        </div>
+                        <div className="rounded bg-accent/15 px-2 py-1.5">
+                          <div className="text-[10px] text-muted-foreground">{tr('futures.basis')}</div>
+                          <div className={`font-mono ${marketSignTextClass(futuresInfo.basis)}`}>
+                            {futuresInfo.basis == null ? '--' : `${futuresInfo.basis > 0 ? '+' : ''}${formatNumber(futuresInfo.basis)}`}
+                            {futuresInfo.basis_pct == null ? '' : ` (${futuresInfo.basis_pct > 0 ? '+' : ''}${formatNumber(futuresInfo.basis_pct)}%)`}
+                          </div>
+                          <div className="text-[10px] text-muted-foreground">{futuresBasisLabel(futuresInfo.basis, locale)}</div>
+                        </div>
+                      </div>
+                    )}
+                  </div>}
 
                   <div className="card p-4 h-full">
                     <div className="text-[12px] text-muted-foreground mb-2">{tr('miniKline.title')}</div>

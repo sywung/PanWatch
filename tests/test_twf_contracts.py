@@ -244,3 +244,47 @@ def test_resolve_unknown_returns_none(online):
 def test_spot_mis_id():
     assert fu.spot_mis_id("TXF") == "TXF-S"
     assert fu.spot_mis_id("CDF") == "CDF-S"
+
+
+# ---------------------------------------------------------------- 失败退避
+
+
+def test_failed_refresh_backs_off(monkeypatch):
+    # 抓不到时不能每次查询都重打网络(每次可能卡 30 秒);退避期内沿用上次结果
+    calls = {"n": 0}
+
+    def boom():
+        calls["n"] += 1
+        raise OSError("network down")
+
+    monkeypatch.setattr(fu, "_fetch_ssf_lists_raw", boom)
+    monkeypatch.setattr(fu, "_fetch_ssf_margin_raw", boom)
+    clock = {"t": 1_000_000.0}
+    monkeypatch.setattr(fu.time, "time", lambda: clock["t"])
+
+    for _ in range(3):
+        assert fu.get_futures_product("TXF") is not None
+        assert fu.get_futures_product("CDF") is None
+    assert calls["n"] == 1
+
+    clock["t"] += fu.FAILURE_RETRY_SEC + 1
+    fu.get_futures_products()
+    assert calls["n"] == 2
+
+
+def test_backoff_keeps_stale_disk_cache(online, monkeypatch):
+    fu.get_futures_products()
+    fu.reset_cache()
+    data = json.loads(fu.CACHE_FILE.read_text(encoding="utf-8"))
+    data["timestamp"] -= fu.CACHE_TTL + 60
+    fu.CACHE_FILE.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    calls = {"n": 0}
+
+    def boom():
+        calls["n"] += 1
+        raise OSError("network down")
+
+    monkeypatch.setattr(fu, "_fetch_ssf_lists_raw", boom)
+    for _ in range(3):
+        assert fu.get_futures_product("CDF") is not None
+    assert calls["n"] == 1

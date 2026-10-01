@@ -9,6 +9,7 @@ export const settings = {
   },
   language: {
     title: '界面语言',
+    traditionalChinese: '繁體中文',
     simplifiedChinese: '简体中文',
     english: 'English',
     switchAria: '切换界面语言',

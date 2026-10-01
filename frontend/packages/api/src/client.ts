@@ -97,7 +97,7 @@ const API_ERROR_TEXT_EN: Record<string, string> = {
   template_version_unsupported: 'This configuration package version is not supported.',
   trace_id_invalid: 'The analysis trace ID is invalid.',
   tradingagents_not_registered: 'The TradingAgents workflow is not registered.',
-  ui_language_invalid: 'The interface language must be zh-CN or en-US.',
+  ui_language_invalid: 'The interface language must be zh-TW, zh-CN, or en-US.',
   username_too_short: 'The username must contain at least 2 characters.',
   http_400: 'The request is invalid. Check the submitted values and try again.',
   http_401: 'Your session has expired. Sign in again.',

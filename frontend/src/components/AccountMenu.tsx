@@ -20,7 +20,8 @@ const THEME_OPTIONS: { value: ThemeMode; icon: LucideIcon; labelKey: 'light' | '
   { value: 'system', icon: Monitor, labelKey: 'system' },
 ]
 
-const LANGUAGE_OPTIONS: { value: SupportedLocale; labelKey: 'simplifiedChinese' | 'english' }[] = [
+const LANGUAGE_OPTIONS: { value: SupportedLocale; labelKey: 'traditionalChinese' | 'simplifiedChinese' | 'english' }[] = [
+  { value: 'zh-TW', labelKey: 'traditionalChinese' },
   { value: 'zh-CN', labelKey: 'simplifiedChinese' },
   { value: 'en-US', labelKey: 'english' },
 ]
@@ -78,6 +79,13 @@ export default function AccountMenu({
 
   const avatarSize = size === 'sm' ? 'w-6 h-6' : 'w-7 h-7'
   const iconSize = size === 'sm' ? 'w-3.5 h-3.5' : 'w-4 h-4'
+  const authenticated = (() => {
+    try {
+      return isAuthenticated()
+    } catch {
+      return false
+    }
+  })()
 
   return (
     <div
@@ -182,7 +190,7 @@ export default function AccountMenu({
             {t('account.selfCheck')}
           </button>
 
-          {isAuthenticated() && (
+          {authenticated && (
             <>
               <div className="my-1 h-px bg-border/50" />
               <button

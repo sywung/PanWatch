@@ -1,6 +1,7 @@
 import { Gauge } from 'lucide-react'
 import type { ContextUsage } from '@panwatch/api'
 import { useTranslation } from 'react-i18next'
+import { getCurrentLocale } from '@/i18n'
 
 interface ContextUsageIndicatorProps {
   usage: ContextUsage | null
@@ -8,10 +9,10 @@ interface ContextUsageIndicatorProps {
 }
 
 export function ContextUsageIndicator({ usage, onClick }: ContextUsageIndicatorProps) {
-  const { t, i18n } = useTranslation('configuration')
+  const { t } = useTranslation('configuration')
   if (!usage) return null
   const assistantT = t as unknown as (key: string, options?: Record<string, unknown>) => string
-  const formatNumber = (value: number) => value.toLocaleString(i18n.resolvedLanguage === 'en-US' ? 'en-US' : 'zh-CN')
+  const formatNumber = (value: number) => value.toLocaleString(getCurrentLocale())
   const state = assistantT(`p4.components.contextUsage.states.${usage.state}`)
   const stateClass = usage.state === 'needs_compression'
     ? 'text-rose-600 dark:text-rose-400'

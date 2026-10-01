@@ -75,8 +75,8 @@ describe('zh-TW resources', () => {
   })
 
   it('contains no Simplified-only characters', () => {
-    // 常见简体专用字(繁体中不会出现)
-    const simplified = /[们这个时为数据设认账户资产仓盘价涨买卖风险报告关闭开启删编辑应该选择输搜载错误络务号码页览导航显图让对还过从发现实际]/
+    // 常见简体专用字(繁体中不会出现)。注意:告/搜/航 等繁简共用字不能列入,否则会逼出错误的替换
+    const simplified = /[们这个时为数据设认账户资产仓盘价涨买卖风险报关闭开启删编辑应该选择输载错误络务号码页览导显图让对还过从发现实际]/
     const offenders = Object.entries(zhTW)
       .filter(([, v]) => simplified.test(v))
       .map(([k, v]) => `${k}: ${v}`)

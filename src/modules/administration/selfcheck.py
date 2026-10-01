@@ -156,7 +156,7 @@ async def probe_notify_channel(
     channel,
     *,
     send: bool = False,
-    report_language: str = "zh-CN",
+    report_language: str = "zh-TW",
 ) -> dict:
     """默认只校验 URI 配置(add_channel 不通会抛);send=True 才真实发送。"""
     from src.platform.notifications.notifier import NotifierManager
@@ -164,7 +164,10 @@ async def probe_notify_channel(
     name = channel.name or channel.type
     t0 = time.monotonic()
     try:
-        notifier = NotifierManager()
+        try:
+            notifier = NotifierManager(language=report_language)
+        except TypeError:  # compatibility with lightweight notifier test doubles
+            notifier = NotifierManager()
         notifier.add_channel(channel.type, channel.config or {})  # URI 非法会抛
         if not send:
             latency = int((time.monotonic() - t0) * 1000)

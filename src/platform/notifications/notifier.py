@@ -200,13 +200,19 @@ def build_apprise_url(channel_type: str, config: dict) -> str | None:
 class NotifierManager:
     """通知管理器: Apprise 渠道 + 自定义渠道"""
 
-    def __init__(self, policy=None):
+    def __init__(self, policy=None, language: str | None = None):
         self._ap = apprise.Apprise()
         self._custom_channels: list[tuple[str, dict]] = []
         self._channel_count = 0
         # 钉钉关键字（可选）：若群机器人启用“关键字”安全校验，则自动附加
         self._dingtalk_keywords: set[str] = set()
         self.policy = policy
+        self.language = language
+
+    def localize(self, text: str) -> str:
+        from src.platform.language import localize_text
+
+        return localize_text(text, self.language) or text
 
     def add_channel(self, channel_type: str, config: dict):
         """添加通知渠道"""
@@ -247,6 +253,8 @@ class NotifierManager:
         bypass_quiet_hours: bool = False,
     ) -> dict:
         """向所有已注册渠道发送通知，返回结果"""
+        title = self.localize(title)
+        content = self.localize(content)
         if self._channel_count == 0:
             logger.warning("没有可用的通知渠道")
             return {"success": False, "error": "没有可用的通知渠道"}

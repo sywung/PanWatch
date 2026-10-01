@@ -12,9 +12,9 @@ class _SampleAgent(BaseAgent):
         return "Analyze the session.", ""
 
 
-def test_agent_context_defaults_to_simplified_chinese():
+def test_agent_context_defaults_to_traditional_chinese():
     context = AgentContext(ai_client=None, notifier=None, config=None)
-    assert context.report_language == "zh-CN"
+    assert context.report_language == "zh-TW"
 
 
 def test_english_report_language_adds_output_instruction_and_localizes_title():
@@ -38,8 +38,8 @@ def test_english_report_language_adds_output_instruction_and_localizes_title():
     assert result.title == "[Daily report] 贵州茅台, 平安银行 and 2 stocks"
 
 
-def test_chinese_report_language_preserves_prompt_and_title():
-    context = AgentContext(ai_client=None, notifier=None, config=None)
+def test_simplified_chinese_report_language_preserves_prompt_and_title():
+    context = AgentContext(ai_client=None, notifier=None, config=None, report_language="zh-CN")
     agent = _SampleAgent()
     result = AnalysisResult(agent_name="daily_report", title="【盘后日报】贵州茅台", content="")
 

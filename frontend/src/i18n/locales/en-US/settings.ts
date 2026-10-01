@@ -12,9 +12,10 @@ export const settings = {
   },
   language: {
     title: 'Interface language',
+    traditionalChinese: '繁體中文',
     simplifiedChinese: '简体中文',
     english: 'English',
     switchAria: 'Switch interface language',
-    quickSwitch: '简体中文',
+    quickSwitch: '繁體中文',
   },
 } as const satisfies TranslationShape<typeof zhSettings>

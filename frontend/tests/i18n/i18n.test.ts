@@ -71,7 +71,7 @@ describe('internationalization runtime', () => {
   })
 
   it('uses Chinese as the configured fallback language', () => {
-    expect(i18n.options.fallbackLng).toEqual(['zh-CN'])
+    expect(i18n.options.fallbackLng).toEqual(['zh-TW'])
   })
 
   it('resolves scoped Agent and price-alert interface copy', async () => {

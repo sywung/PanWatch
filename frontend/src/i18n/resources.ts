@@ -10,6 +10,12 @@ import { configuration as zhConfiguration } from './locales/zh-CN/configuration'
 import { navigation as zhNavigation } from './locales/zh-CN/navigation'
 import { settings as zhSettings } from './locales/zh-CN/settings'
 import { bizUi as zhBizUi } from './locales/zh-CN/biz-ui'
+import { auth as zhTWAuth } from './locales/zh-TW/auth'
+import { common as zhTWCommon } from './locales/zh-TW/common'
+import { configuration as zhTWConfiguration } from './locales/zh-TW/configuration'
+import { navigation as zhTWNavigation } from './locales/zh-TW/navigation'
+import { settings as zhTWSettings } from './locales/zh-TW/settings'
+import { bizUi as zhTWBizUi } from './locales/zh-TW/biz-ui'
 import type { TranslationShape } from './resource-types'
 
 export const zhCN = {
@@ -30,7 +36,17 @@ export const enUS = {
   bizUi: enBizUi,
 } as const satisfies TranslationShape<typeof zhCN>
 
+export const zhTW = {
+  common: zhTWCommon,
+  configuration: zhTWConfiguration,
+  auth: zhTWAuth,
+  navigation: zhTWNavigation,
+  settings: zhTWSettings,
+  bizUi: zhTWBizUi,
+} as const satisfies TranslationShape<typeof zhCN>
+
 export const resources = {
+  'zh-TW': zhTW,
   'zh-CN': zhCN,
   'en-US': enUS,
 } as const

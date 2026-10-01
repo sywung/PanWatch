@@ -6,6 +6,7 @@ const STATIC_ASSETS = [
   '/',
   '/manifest.json',
   '/manifest.zh-CN.json',
+  '/manifest.zh-TW.json',
   '/icon-192.png',
   '/icon-512.png',
 ];

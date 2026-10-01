@@ -366,15 +366,24 @@ class AssistantService:
         from src.platform.language import resolve_report_language
 
         report_language = resolve_report_language(self._repository.session)
-        instruction = (
+        if report_language == "en-US":
+            instruction = (
                 "用户当前界面语言为 English。请用英文撰写自然语言回复和报告；"
                 "保留股票代码、专有名词、来源原文及用户指定的引用文字。工具调用参数和结构化字段按原有约定，"
                 "do not infer or change the market, currency, or time zone from this preference."
-                if report_language == "en-US"
-                else "用户当前界面语言为简体中文。请用简体中文撰写自然语言回复和报告；"
+            )
+        elif report_language == "zh-TW":
+            instruction = (
+                "用户当前界面语言为繁体中文（台湾用语）。请用繁体中文撰写自然语言回复和报告；"
                 "保留股票代码、专有名词、来源原文及用户指定的引用文字。工具调用参数和结构化字段按原有约定，"
                 "不要因此推断或更改市场、币种或时区。"
-        )
+            )
+        else:
+            instruction = (
+                "用户当前界面语言为简体中文。请用简体中文撰写自然语言回复和报告；"
+                "保留股票代码、专有名词、来源原文及用户指定的引用文字。工具调用参数和结构化字段按原有约定，"
+                "不要因此推断或更改市场、币种或时区。"
+            )
         messages.append(ModelMessage(role="system", content=instruction))
         return messages
 
@@ -407,10 +416,18 @@ class AssistantService:
             result.pending_approvals,
             expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
             presentations={
-                pending.call_id: self._approval_presentation(pending)
+                pending.call_id: self._localize_approval(self._approval_presentation(pending))
                 for pending in result.pending_approvals
             },
         )
+
+    def _localize_approval(self, presentation: dict[str, str]) -> dict[str, str]:
+        from src.platform.language import localize_text
+
+        language = self._report_language()
+        if language != "zh-TW":
+            return presentation
+        return {key: localize_text(value, language) or value for key, value in presentation.items()}
 
     def resolve_approval_decision(
         self,

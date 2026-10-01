@@ -7,7 +7,7 @@ import { Input } from '@panwatch/base-ui/components/ui/input'
 import { Label } from '@panwatch/base-ui/components/ui/label'
 import { useToast } from '@panwatch/base-ui/components/ui/toast'
 import { useTranslation } from 'react-i18next'
-import { changeLocale, normalizeLocale } from '@/i18n'
+import { changeLocale, normalizeLocale, type SupportedLocale } from '@/i18n'
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -82,7 +82,10 @@ export default function LoginPage() {
         size="sm"
         className="fixed right-4 top-4 gap-1.5 text-xs text-muted-foreground"
         aria-label={t('settings:language.switchAria')}
-        onClick={() => void changeLocale(currentLocale === 'zh-CN' ? 'en-US' : 'zh-CN')}
+        onClick={() => {
+          const cycle: SupportedLocale[] = ['zh-TW', 'zh-CN', 'en-US']
+          void changeLocale(cycle[(cycle.indexOf(currentLocale) + 1) % cycle.length])
+        }}
       >
         <Languages className="h-3.5 w-3.5" />
         {t('settings:language.quickSwitch')}

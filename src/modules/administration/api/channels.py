@@ -95,15 +95,16 @@ async def test_channel(channel_id: int, db: Session = Depends(get_db)):
     if not channel:
         raise api_error(404, "channel_not_found", "通知渠道不存在")
 
-    notifier = NotifierManager()
+    from src.platform.language import resolve_report_language
+
+    report_language = resolve_report_language(db)
+    notifier = NotifierManager(language=report_language)
     try:
         notifier.add_channel(channel.type, channel.config or {})
     except Exception as exc:
         raise api_error(400, "channel_config_invalid", "通知渠道配置无效") from exc
 
-    from src.platform.language import resolve_report_language
-
-    english = resolve_report_language(db) == "en-US"
+    english = report_language == "en-US"
     result = await notifier.notify_with_result(
         title="Test notification" if english else "测试通知",
         content=(

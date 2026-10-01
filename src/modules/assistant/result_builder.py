@@ -12,6 +12,7 @@ from typing import Any
 from urllib.parse import urlencode
 
 from pydantic import BaseModel, Field
+from src.platform.language import localize_text
 
 from .result_schemas import (
     AssistantEvidence,
@@ -359,7 +360,7 @@ def _display_number(value: float | None) -> str:
 
 
 def _localized(language: str, zh: str, en: str) -> str:
-    return en if language == "en-US" else zh
+    return en if language == "en-US" else (localize_text(zh, language) or zh)
 
 
 def _next_actions(task_id: int, invocations: list[Any], language: str) -> list[AssistantNextAction]:

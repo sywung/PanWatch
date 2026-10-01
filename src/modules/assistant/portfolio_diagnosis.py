@@ -312,7 +312,7 @@ class PortfolioDiagnosisExtension:
             "portfolio_diagnosis",
             "全面诊断持仓",
             "执行一次全面持仓诊断，按计划分析组合风险和持仓股票，返回有依据的风险与调仓建议。",
-            resolve_report_language(self._db) if self._db is not None else "zh-CN",
+            resolve_report_language(self._db) if self._db is not None else "zh-TW",
         )
         return ToolSpec(
             name="portfolio_diagnosis",

@@ -92,7 +92,8 @@ def _build_notifier() -> NotifierManager | None:
             logger.debug("[模拟盘通知] 无可用通知渠道")
             return None
 
-        mgr = NotifierManager()
+        from src.platform.language import resolve_report_language
+        mgr = NotifierManager(language=resolve_report_language(db))
         for ch in channels:
             mgr.add_channel(ch.type, ch.config or {})
         return mgr

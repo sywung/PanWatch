@@ -182,8 +182,8 @@ def set_avatar(update: SettingUpdate, db: Session = Depends(get_db)):
 
 @router.put("/{key}", response_model=SettingResponse)
 def update_setting(key: str, update: SettingUpdate, db: Session = Depends(get_db)):
-    if key == "ui_language" and update.value not in {"zh-CN", "en-US"}:
-        raise api_error(400, "ui_language_invalid", "界面语言仅支持 zh-CN 或 en-US")
+    if key == "ui_language" and update.value not in {"zh-TW", "zh-CN", "en-US"}:
+        raise api_error(400, "ui_language_invalid", "界面语言仅支持 zh-TW、zh-CN 或 en-US")
     setting = db.query(AppSettings).filter(AppSettings.key == key).first()
     if not setting:
         desc = SETTING_DESCRIPTIONS.get(key, "")

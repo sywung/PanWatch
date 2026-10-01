@@ -117,7 +117,7 @@ _ANALYST_SECTIONS = [
 ]
 
 
-def assemble_report_markdown(raw_data: dict, language: str = "zh-CN") -> str:
+def assemble_report_markdown(raw_data: dict, language: str = "zh-TW") -> str:
     """从 raw_data 拼出与详情页(buildAnalysisSections)同款分节的完整报告 markdown。
 
     顺序对齐详情页:决策摘要 → PM 决策书(+交易员)→ 4 分析师全文 → 看多看空辩论全文(+研究主管裁决)
@@ -181,7 +181,7 @@ def assemble_report_markdown(raw_data: dict, language: str = "zh-CN") -> str:
     return "\n".join(parts).strip()
 
 
-def render_analysis_pdf(title: str, markdown_text: str, language: str = "zh-CN") -> bytes:
+def render_analysis_pdf(title: str, markdown_text: str, language: str = "zh-TW") -> bytes:
     """分析报告 markdown → PDF 字节(中文矢量、可复制)。WeasyPrint 优先,失败回退 xhtml2pdf。"""
     body_html = _md_to_html(markdown_text)
     english = language == "en-US"

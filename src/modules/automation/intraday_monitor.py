@@ -31,7 +31,7 @@ def is_market_trading(market: MarketCode) -> bool:
     return market_def.is_trading_time()
 
 
-def market_label(market: MarketCode, language: str = "zh-CN") -> str:
+def market_label(market: MarketCode, language: str = "zh-TW") -> str:
     if language == "en-US":
         return {
             MarketCode.CN: "A-shares",

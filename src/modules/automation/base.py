@@ -10,6 +10,7 @@ from src.platform.marketdata.models import MarketCode
 from src.platform.notifications.notify_dedupe import build_notify_dedupe_key, check_and_mark_notify
 from src.platform.notifications.notify_policy import NotifyPolicy
 from src.platform.observability.log_context import log_context
+from src.platform.language import DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES, localize_text
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +126,7 @@ class AgentContext:
         model_label: str = "",
         notify_policy: NotifyPolicy | None = None,
         suppress_notify: bool = False,
-        report_language: str = "zh-CN",
+        report_language: str = DEFAULT_LANGUAGE,
     ):
         self.ai_client = ai_client
         self.notifier = notifier
@@ -135,7 +136,7 @@ class AgentContext:
         self._primary_model_label = model_label
         self.notify_policy = notify_policy
         self.suppress_notify = suppress_notify
-        self.report_language = report_language if report_language in {"zh-CN", "en-US"} else "zh-CN"
+        self.report_language = report_language if report_language in SUPPORTED_LANGUAGES else DEFAULT_LANGUAGE
 
     @property
     def model_label(self) -> str:
@@ -177,6 +178,12 @@ class BaseAgent(ABC):
 
     def apply_report_language(self, context: AgentContext, system_prompt: str) -> str:
         """Keep generated prose aligned with the user's report language preference."""
+        if context.report_language == "zh-TW":
+            instruction = (
+                "\n\n輸出語言為繁體中文（台灣用語）。保留股票名稱、代碼、數字、JSON key 原樣，"
+                "輸出結構不變。"
+            )
+            return f"{system_prompt.rstrip()}{instruction}"
         if context.report_language != "en-US":
             return system_prompt
         instruction = (
@@ -187,6 +194,9 @@ class BaseAgent(ABC):
         return f"{system_prompt.rstrip()}{instruction}"
 
     def localize_result_title(self, result: AnalysisResult, context: AgentContext) -> None:
+        if context.report_language == "zh-TW":
+            result.title = localize_text(result.title, context.report_language) or result.title
+            return
         if context.report_language != "en-US":
             return
         labels = {

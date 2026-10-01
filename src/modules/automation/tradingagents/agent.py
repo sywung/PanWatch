@@ -504,7 +504,7 @@ class TradingAgentsAgent(BaseAgent):
     def _make_trace_id(self, symbol: str) -> str:
         return f"ta-{symbol}-{int(datetime.now().timestamp())}"
 
-    def _try_cache_hit(self, stock, report_language: str = "zh-CN") -> AnalysisResult | None:
+    def _try_cache_hit(self, stock, report_language: str = "zh-TW") -> AnalysisResult | None:
         """同标的同日是否已分析过 → 返回缓存的 AnalysisResult。"""
         if self.cache_ttl_hours <= 0:
             return None

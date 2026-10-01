@@ -17,14 +17,15 @@ import { useToast } from '@panwatch/base-ui/components/ui/toast'
 import { useTranslation } from 'react-i18next'
 import { useMarketColors } from '@/hooks/use-market-colors'
 import { marketColorWithAlpha, marketDirection, marketSignTextClass } from '@/lib/market-colors'
+import { getCurrentLocale } from '@/i18n'
 
-function formatCurrency(v: number, locale = 'zh-CN') {
+function formatCurrency(v: number, locale = getCurrentLocale()) {
   return v.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 function PnlText({ value, suffix = '' }: { value: number; suffix?: string }) {
-  const { i18n } = useTranslation()
-  const locale = i18n.resolvedLanguage === 'en-US' ? 'en-US' : 'zh-CN'
+  useTranslation()
+  const locale = getCurrentLocale()
   const color = marketSignTextClass(value)
   const prefix = value > 0 ? '+' : ''
   return <span className={color}>{prefix}{formatCurrency(value, locale)}{suffix}</span>
@@ -106,9 +107,9 @@ function EquityChart({ data }: { data: EquityCurvePoint[] }) {
 
 export default function PaperTradingPage() {
   const { toast } = useToast()
-  const { t, i18n } = useTranslation('configuration')
+  const { t } = useTranslation('configuration')
   const paperT = t as unknown as (key: string, options?: Record<string, unknown>) => string
-  const locale = i18n.resolvedLanguage === 'en-US' ? 'en-US' : 'zh-CN'
+  const locale = getCurrentLocale()
   const tr = (key: string, options?: Record<string, unknown>) => paperT(`p4.paperTrading.${key}`, options)
   const message = (key: string, options?: Record<string, unknown>) => paperT(`p4.paperTrading.messages.${key}`, options)
   const formatAmount = (value: number) => formatCurrency(value, locale)

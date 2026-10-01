@@ -68,7 +68,7 @@ export const LOGGER_MAPPING_EN: Record<string, string> = {
   httpx: 'HTTP client', httpcore: 'HTTP core', urllib3: 'HTTP library', requests: 'HTTP client', 'uvicorn.access': 'Access log', 'uvicorn.error': 'Uvicorn errors', uvicorn: 'Uvicorn', fastapi: 'FastAPI', starlette: 'Starlette', 'sqlalchemy.engine': 'Database engine', sqlalchemy: 'SQLAlchemy', apscheduler: 'APScheduler', playwright: 'Browser', openai: 'AI SDK', tenacity: 'Retry library',
 }
 
-export function mapLoggerName(moduleName?: string, language = 'zh-CN'): string {
+export function mapLoggerName(moduleName?: string, language = 'zh-TW'): string {
   if (!moduleName) return ''
   const mapping = language.toLowerCase().startsWith('en') ? LOGGER_MAPPING_EN : LOGGER_MAPPING_ZH
   let bestKey = ''
@@ -80,7 +80,7 @@ export function mapLoggerName(moduleName?: string, language = 'zh-CN'): string {
   return mapping[bestKey] || moduleName
 }
 
-export function loggerOptions(language = 'zh-CN'): { key: string, label: string }[] {
+export function loggerOptions(language = 'zh-TW'): { key: string, label: string }[] {
   const mapping = language.toLowerCase().startsWith('en') ? LOGGER_MAPPING_EN : LOGGER_MAPPING_ZH
   return Object.entries(mapping).map(([key, label]) => ({ key, label }))
 }

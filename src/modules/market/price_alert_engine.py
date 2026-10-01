@@ -278,7 +278,10 @@ class PriceAlertEngine:
 
     async def _send_notify(self, db: Session, rule: PriceAlertRule, snapshot: dict) -> tuple[bool, str]:
         channels = self._resolve_channels(db, rule)
-        notifier = NotifierManager()
+        try:
+            notifier = NotifierManager(language=resolve_report_language(db))
+        except TypeError:  # compatibility with lightweight notifier test doubles
+            notifier = NotifierManager()
         for ch in channels:
             notifier.add_channel(ch.type, ch.config or {})
 

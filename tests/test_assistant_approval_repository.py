@@ -377,9 +377,10 @@ def test_service_presents_price_alert_approval_in_plain_language():
         ),
     )
 
+    # 预设介面语言为繁体中文(zh-TW)
     assert approvals[0].presentation == {
-        "tool_title": "创建价格提醒",
-        "summary": "为 CN:600519 创建价格 ≥ 1800 的盘中提醒，冷却 30 分钟。",
+        "tool_title": "建立價格提醒",
+        "summary": "為 CN:600519 建立價格 ≥ 1800 的盤中提醒，冷卻 30 分鐘。",
     }
     session.close()
     engine.dispose()

@@ -183,7 +183,14 @@ class MarketData:
             ysym = f"{symbol}{suffix}" if market == "TW" else (suffix or symbol)
             payload = market_get(
                 _YAHOO_CHART_URL.format(sym=ysym),
+                host_key="query2.finance.yahoo.com",
                 params={"interval": interval, "range": "60d"},
+                headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"},
+                timeout=10,
+                retries=1,
+                parse="json",
+                log_label="Yahoo 分钟K线",
+                symbol=ysym,
             )
             try:
                 item = payload["chart"]["result"][0]

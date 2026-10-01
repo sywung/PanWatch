@@ -6,6 +6,7 @@ fixture 为 2330 真实 K 线(2025-10-01 ~ 2026-10-01 日线、近 60 天 30 分
 
 from __future__ import annotations
 
+import inspect
 import json
 import sys
 from pathlib import Path
@@ -210,7 +211,12 @@ def test_intraday_klines_from_yahoo(monkeypatch):
     kv._TW_SUFFIX_HINT.clear()
     seen = []
 
-    def fake_get(url, *, params=None, **k):
+    real_sig = inspect.signature(kv.market_get)
+
+    def fake_get(url, **kwargs):
+        # 呼叫必须符合真实 market_get 的签名(曾漏传必填的 host_key 而测试照过)
+        real_sig.bind(url, **kwargs)
+        params = kwargs.get("params")
         seen.append((url.rsplit("/", 1)[1], params))
         if url.endswith("/6488.TW"):
             return None

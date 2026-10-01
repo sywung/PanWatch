@@ -49,6 +49,17 @@ def _set_sqlite_pragma(dbapi_conn, connection_record):
 SessionLocal = sessionmaker(bind=engine)
 
 
+def default_account_name() -> str:
+    """返回新建默认账户的本地化名称。"""
+    from src.platform.language import DEFAULT_LANGUAGE
+
+    return {
+        "zh-TW": "預設帳戶",
+        "zh-CN": "默" "认账户",
+        "en-US": "Default account",
+    }.get(DEFAULT_LANGUAGE, "預設帳戶")
+
+
 class Base(DeclarativeBase):
     pass
 
@@ -490,8 +501,8 @@ def _migrate_positions_to_accounts(engine):
             # 没有持仓数据，创建一个空的默认账户
             conn.execute(
                 text(
-                    "INSERT INTO accounts (name, available_funds, enabled) VALUES ('默认账户', 0, 1)"
-                )
+                    "INSERT INTO accounts (name, available_funds, enabled) VALUES (:name, 0, 1)"
+                ), {"name": default_account_name()}
             )
             conn.commit()
             logger.info("已创建默认账户")
@@ -508,7 +519,7 @@ def _migrate_positions_to_accounts(engine):
             text(
                 "INSERT INTO accounts (name, available_funds, enabled) VALUES (:name, :funds, 1)"
             ),
-            {"name": "默认账户", "funds": available_funds},
+            {"name": default_account_name(), "funds": available_funds},
         )
         account_id = conn.execute(text("SELECT last_insert_rowid()")).scalar()
 

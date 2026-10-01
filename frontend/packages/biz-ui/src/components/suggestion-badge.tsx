@@ -232,7 +232,7 @@ export function SuggestionBadge({
               />
               {isAI && showTechnicalCompanion && (
                 <TechnicalBadge
-                  label={tech ? localizedAction(tech.action, tech.action_label) : tr('watch')}
+                  label={`${tr('technical')}：${tech ? localizedAction(tech.action, tech.action_label) : tr('watch')}`}
                   tone={technicalToneFromSuggestionAction(tech?.action, tech?.action_label)}
                   size="lg"
                   onClick={(e) => { e.stopPropagation(); setKlineDialogOpen(true) }}
@@ -457,7 +457,7 @@ export function SuggestionBadge({
               const tech = kline ? buildKlineSuggestion(kline as any, hasPosition, klineTr) : null
               return (
                 <TechnicalBadge
-                  label={tech ? localizedAction(tech.action, tech.action_label) : tr('watch')}
+                  label={`${tr('technical')}：${tech ? localizedAction(tech.action, tech.action_label) : tr('watch')}`}
                   tone={technicalToneFromSuggestionAction(tech?.action, tech?.action_label)}
                   size="md"
                   onClick={(e) => { e.stopPropagation(); setKlineDialogOpen(true) }}

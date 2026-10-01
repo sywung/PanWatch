@@ -44,7 +44,9 @@ def test_spark_injected_for_each_index(monkeypatch):
 
     assert len(out) == len(mkt.MARKET_INDICES)
     for item in out:
-        assert item["spark"] == [100 + i for i in range(20)]
+        # 柜买指数(TPEX)没有日K来源,spark 恒为空
+        expected = [] if item["symbol"] == "TPEX" else [100 + i for i in range(20)]
+        assert item["spark"] == expected
     # 近20日收盘:days=20 原样透传
     assert all(d == 20 for d in captured_days.values())
 
@@ -115,4 +117,5 @@ def test_indices_response_cached_60s(monkeypatch):
 
     assert out1 == out2
     assert call_count["quotes"] == 1
-    assert call_count["klines"] == len(mkt.MARKET_INDICES)  # 只在第一次调用时逐指数拉取一次
+    # 只在第一次调用时逐指数拉取一次(TPEX 无日K来源,不拉)
+    assert call_count["klines"] == len([i for i in mkt.MARKET_INDICES if i["symbol"] != "TPEX"])

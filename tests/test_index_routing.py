@@ -51,7 +51,10 @@ def test_get_market_indices_uses_marketdata(monkeypatch):
 
     out = asyncio.run(mkt.get_market_indices())
 
-    assert captured["symbols"] == [idx["tencent_symbol"] for idx in mkt.MARKET_INDICES]
+    # 台股指数走 TWSE MIS,不送腾讯
+    assert captured["symbols"] == [
+        idx["tencent_symbol"] for idx in mkt.MARKET_INDICES if idx["market"] != "TW"
+    ]
     sh = next(i for i in out if i["symbol"] == "000001")
     assert sh["current_price"] == 3200.0 and sh["change_pct"] == 0.63
     # 未命中行情的指数仍返回基本信息占位(current_price=None),匹配逻辑不变

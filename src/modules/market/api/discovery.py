@@ -12,6 +12,7 @@ from src.platform.marketdata.models import ALL_MARKETS, DEFAULT_MARKET
 from src.platform.persistence.database import get_db
 from src.platform.persistence.models import MarketScanSnapshot, Stock
 from src.web.errors import api_error
+from src.modules.market.tw_discovery import tw_hot_stocks
 
 
 router = APIRouter()
@@ -243,6 +244,17 @@ async def get_hot_stocks(
     if mode not in ("turnover", "gainers"):
         raise api_error(400, "discovery_mode_invalid", f"不支持的 mode: {mode}")
 
+    if market == "TW":
+        key = f"stocks:{market}:{mode}:{int(limit)}"
+        cached = _cache_get(key, ttl_s=45)
+        if cached is not None:
+            return cached
+        data = tw_hot_stocks(mode=mode, limit=max(1, min(int(limit), 100)))
+        if not data:
+            raise api_error(503, "hot_stocks_unavailable", "台股盤後熱門股票資料不可用")
+        _cache_set(key, data)
+        return data
+
     key = f"stocks:{market}:{mode}:{int(limit)}"
     cached = _cache_get(key, ttl_s=45)
     if cached is not None:
@@ -283,6 +295,9 @@ async def get_hot_boards(
     mode = (mode or "gainers").lower()
     if mode not in ("gainers", "turnover", "hot"):
         raise api_error(400, "discovery_mode_invalid", f"不支持的 mode: {mode}")
+
+    if market == "TW":
+        return []
 
     key = f"boards:{market}:{mode}:{int(limit)}"
     cached = _cache_get(key, ttl_s=60)
@@ -350,6 +365,9 @@ async def get_board_stocks(
     mode = (mode or "gainers").lower()
     if mode not in ("gainers", "turnover", "hot"):
         raise api_error(400, "discovery_mode_invalid", f"不支持的 mode: {mode}")
+
+    if mkt == "TW":
+        return []
 
     key = f"board_stocks:{mkt}:{code}:{mode}:{int(limit)}"
     cached = _cache_get(key, ttl_s=60)

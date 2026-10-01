@@ -278,7 +278,7 @@ export default function DiscoveryPanel({ monitorStocks, onOpenStock }: Props) {
           ) : discoverTab === 'boards' ? (
             hotBoards.length === 0 ? (
               <div className="py-6 text-center text-[12px] text-muted-foreground">
-                {discoverError || (discoverMarket === 'CN' ? tr('noData') : tr('noBoardsMarket', { market: marketLabel(discoverMarket) }))}
+                {discoverError || (discoverMarket === 'TW' ? tr('noBoardsTW') : discoverMarket === 'CN' ? tr('noData') : tr('noBoardsMarket', { market: marketLabel(discoverMarket) }))}
                 {discoverMarket !== 'CN' && discoverMarket !== 'TW' && (
                   <div className="mt-2">
                     <Button variant="ghost" size="sm" className="h-7 text-[11px]" onClick={() => setDiscoverTab('stocks')}>
@@ -314,6 +314,7 @@ export default function DiscoveryPanel({ monitorStocks, onOpenStock }: Props) {
           ) : (
             <div className="space-y-2">
               {stocksMode === 'for_you' && <div className="px-1 text-[11px] text-muted-foreground">{tr('personalizedHint')}</div>}
+              {discoverMarket === 'TW' && <div className="px-1 text-[11px] text-muted-foreground">{tr('postMarketHint')}</div>}
               <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                 {visibleHotStocks.slice(0, 6).map((s) => {
                   const pct = s.change_pct ?? 0

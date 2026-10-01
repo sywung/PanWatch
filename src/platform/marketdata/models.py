@@ -63,6 +63,11 @@ class MarketDef:
 
 # 预定义市场
 MARKETS: dict[MarketCode, MarketDef] = {
+    MarketCode.TW: MarketDef(
+        code=MarketCode.TW, name="台股", timezone="Asia/Taipei",
+        sessions=[TradingSession(time(9, 0), time(13, 30))],
+        symbol_pattern=r"^\d{4,6}[A-Z]?$",
+    ),
     MarketCode.CN: MarketDef(
         code=MarketCode.CN,
         name="A股",
@@ -91,11 +96,6 @@ MARKETS: dict[MarketCode, MarketDef] = {
             TradingSession(time(9, 30), time(16, 0)),
         ],
         symbol_pattern=r"^[A-Z]{1,5}$",
-    ),
-    MarketCode.TW: MarketDef(
-        code=MarketCode.TW, name="台股", timezone="Asia/Taipei",
-        sessions=[TradingSession(time(9, 0), time(13, 30))],
-        symbol_pattern=r"^\d{4,6}[A-Z]?$",
     ),
 }
 

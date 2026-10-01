@@ -20,6 +20,9 @@ def get_market_data():
 # 主要市场指数配置
 # response_symbol: 腾讯 API 返回的 symbol（用于匹配）
 MARKET_INDICES = [
+    # 台股指数(TWSE MIS);柜买指数没有日K来源。
+    {"symbol": "TWII", "name": "加權指數", "market": "TW", "tencent_symbol": None, "response_symbol": "TWII"},
+    {"symbol": "TPEX", "name": "櫃買指數", "market": "TW", "tencent_symbol": None, "response_symbol": "TPEX"},
     # A股指数
     {"symbol": "000001", "name": "上证指数", "market": "CN", "tencent_symbol": "sh000001", "response_symbol": "000001"},
     {"symbol": "399001", "name": "深证成指", "market": "CN", "tencent_symbol": "sz399001", "response_symbol": "399001"},
@@ -58,6 +61,8 @@ def _spark_for(idx: dict) -> list[float]:
     if hit and now - hit[0] < _SPARK_TTL_S:
         return hit[1]
     try:
+        if idx["symbol"] == "TPEX":
+            return []
         market_code = MarketCode(idx["market"])
         klines = get_index_klines(idx["symbol"], market_code, days=20)
         spark = [k.close for k in klines] if klines else []
@@ -76,17 +81,21 @@ async def get_market_indices():
     if cached and now - cached[0] < _INDICES_CACHE_TTL_S:
         return cached[1]
 
-    tencent_symbols = [idx["tencent_symbol"] for idx in MARKET_INDICES]
-
     try:
-        quotes = get_market_data().index_quotes(tencent_symbols)
+        md = get_market_data()
+        # 台股指数走 TWSE MIS(腾讯无台股指数);其余市场照旧走腾讯
+        tw_fetch = getattr(md, "tw_index_quotes", None)
+        tw_quotes = tw_fetch() if tw_fetch else []
+        quotes = md.index_quotes(
+            [idx["tencent_symbol"] for idx in MARKET_INDICES if idx["market"] != "TW"]
+        )
     except Exception as e:
         logger.error(f"获取市场指数失败: {e}")
         return []
 
     # 构建 response_symbol -> quote 映射
     quote_map = {}
-    for q in quotes:
+    for q in [*tw_quotes, *quotes]:
         quote_map[q["symbol"]] = q
 
     # spark 并行取(缓存未过期时零成本;冷启动=最慢单个≈1s,而非 6 个串行累加)
@@ -113,7 +122,7 @@ async def get_market_indices():
                 "current_price": quote["current_price"],
                 "change_pct": quote["change_pct"],
                 "change_amount": quote["change_amount"],
-                "prev_close": quote["prev_close"],
+                "prev_close": quote.get("prev_close"),
                 "spark": spark,
             })
         else:

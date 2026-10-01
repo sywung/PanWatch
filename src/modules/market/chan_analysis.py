@@ -57,9 +57,9 @@ def _date(klu):
 def _line(item):
     return {
         "begin_time": _date(item.get_begin_klu()),
-        "begin_val": float(item.get_begin_val()),
+        "begin_val": round(float(item.get_begin_val()), 2),
         "end_time": _date(item.get_end_klu()),
-        "end_val": float(item.get_end_val()),
+        "end_val": round(float(item.get_end_val()), 2),
         "dir": item.dir.name.lower(),
         "sure": bool(item.is_sure),
     }
@@ -80,12 +80,12 @@ def analyze_level(bars, level):
         bi = [_line(item) for item in data.bi_list]
         seg = [_line(item) for item in data.seg_list]
         zs = [{"begin_time": _date(item.begin), "end_time": _date(item.end),
-               "zd": float(item.low), "zg": float(item.high), "sure": bool(item.is_sure)}
+               "zd": round(float(item.low), 2), "zg": round(float(item.high), 2), "sure": bool(item.is_sure)}
               for item in data.zs_list]
-        bsp = [{"time": _date(item.klu), "price": float(item.klu.close),
+        bsp = [{"time": _date(item.klu), "price": round(float(item.klu.close), 2),
                 "is_buy": bool(item.is_buy), "type": item.type2str(),
                 "sure": bool(item.bi.is_sure)} for item in data.bs_point_lst.getSortedBspList()]
-        last_close = float(_value(bars[-1], "close"))
+        last_close = round(float(_value(bars[-1], "close")), 2)
         return {"level": level, "bi": bi, "seg": seg, "zs": zs, "bsp": bsp,
                 "last_close": last_close, "position": position_vs_zs(last_close, zs)}
     except Exception as exc:

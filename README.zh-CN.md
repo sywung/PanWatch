@@ -1,6 +1,6 @@
 # 盯盘侠 PanWatch — 自托管 AI 盯盘助手
 
-[English](README.md) | [简体中文](README.zh-CN.md)
+[English](README.md) | [简体中文](README.zh-CN.md) | [繁體中文（台股版）](README.zh-TW.md)
 
 **把自选与持仓变成全天候 AI 投研工作台。** PanWatch 将 A 股 / 港股 / 美股实时监控、持仓管理、智能分析和全渠道推送整合在你自己的基础设施中。
 

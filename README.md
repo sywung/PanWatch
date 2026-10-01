@@ -1,6 +1,6 @@
 # PanWatch — Self-hosted AI stock monitoring
 
-[English](README.md) | [简体中文](README.zh-CN.md)
+[English](README.md) | [简体中文](README.zh-CN.md) | [繁體中文（台股版）](README.zh-TW.md)
 
 **Turn your watchlist and portfolio into an always-on AI research desk.** PanWatch combines real-time monitoring, portfolio management, automated analysis, and multi-channel alerts for China A-shares, Hong Kong, and U.S. markets—all on infrastructure you control.
 

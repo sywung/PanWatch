@@ -12,6 +12,7 @@ class Market(str, Enum):
     HK = "HK"
     US = "US"
     TW = "TW"
+    TWF = "TWF"
 
 
 _CN_RE = re.compile(r"^[036]\d{5}$")   # 6 位,0/3/6 开头

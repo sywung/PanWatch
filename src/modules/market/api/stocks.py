@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import threading
+from datetime import datetime
 from types import SimpleNamespace
 
 from fastapi import APIRouter, Depends, Query
@@ -19,7 +20,8 @@ from src.platform.persistence.models import (
 )
 from src.platform.marketdata.stock_list import search_stocks, refresh_stock_list
 from src.platform.marketdata.marketdata_client import md_quote_rows
-from src.platform.marketdata.models import DEFAULT_MARKET, MarketCode, MARKETS
+from src.platform.marketdata.models import ALL_MARKETS, DEFAULT_MARKET, MarketCode, MarketDef, MARKETS
+from src.platform.scheduling.trading_calendar import is_trading_day
 from src.modules.automation.agent_catalog import AGENT_KIND_WORKFLOW, infer_agent_kind
 from src.web.errors import api_error
 
@@ -120,53 +122,13 @@ def _stock_to_response(stock: Stock, agent_display_names: dict[str, str] | None 
 @router.get("/markets/status")
 def get_market_status():
     """获取各市场的交易状态"""
-    from datetime import datetime
-
     result = []
     for market_code, market_def in MARKETS.items():
+        if market_code.value not in ALL_MARKETS:
+            continue
         try:
             now = datetime.now(market_def.get_tz())
-            is_trading = market_def.is_trading_time()
-
-            # 获取交易时段描述
-            sessions_desc = []
-            for session in market_def.sessions:
-                sessions_desc.append(f"{session.start.strftime('%H:%M')}-{session.end.strftime('%H:%M')}")
-
-            # 判断状态
-            weekday = now.weekday()
-            current_time = now.time()
-
-            if weekday >= 5:
-                status = "closed"
-                status_text = "休市（周末）"
-            elif is_trading:
-                status = "trading"
-                status_text = "交易中"
-            else:
-                # 判断是盘前还是盘后
-                first_session = market_def.sessions[0]
-                last_session = market_def.sessions[-1]
-                if current_time < first_session.start:
-                    status = "pre_market"
-                    status_text = "盘前"
-                elif current_time > last_session.end:
-                    status = "after_hours"
-                    status_text = "已收盘"
-                else:
-                    status = "break"
-                    status_text = "午间休市"
-
-            result.append({
-                "code": market_code.value,
-                "name": market_def.name,
-                "status": status,
-                "status_text": status_text,
-                "is_trading": is_trading,
-                "sessions": sessions_desc,
-                "local_time": now.strftime("%H:%M"),
-                "timezone": market_def.timezone,
-            })
+            result.append(build_market_status(market_def, now))
         except Exception as e:
             # 单个市场获取失败不影响其他市场
             logger.error(f"获取 {market_code.value} 市场状态失败: {e}")
@@ -183,6 +145,73 @@ def get_market_status():
             })
 
     return result
+
+
+def build_market_status(market_def: MarketDef, now: datetime) -> dict:
+    """根据市场定义和当地时间生成单个市场状态。"""
+    if now.tzinfo is not None:
+        now = now.astimezone(market_def.get_tz())
+
+    is_trading = market_def.is_trading_time(now)
+    sessions_desc = [
+        f"{session.start.strftime('%H:%M')}-{session.end.strftime('%H:%M')}"
+        for session in market_def.sessions
+    ]
+    current_time = now.time()
+
+    if is_trading:
+        status = "trading"
+        status_text = "交易中"
+    elif not is_trading_day(market_def.code, now.date()):
+        status = "closed"
+        status_text = "休市（周末）" if now.weekday() >= 5 else "休市"
+    else:
+        first_day_session = min(
+            (session for session in market_def.sessions if not session.crosses_midnight),
+            key=lambda session: session.start,
+            default=min(market_def.sessions, key=lambda session: session.start),
+        )
+        non_overnight_sessions = [
+            session for session in market_def.sessions if not session.crosses_midnight
+        ]
+        overnight_sessions = [
+            session for session in market_def.sessions if session.crosses_midnight
+        ]
+
+        if current_time < first_day_session.start:
+            status = "pre_market"
+            status_text = "盘前"
+        elif any(
+            left.end < current_time < right.start
+            for left, right in zip(
+                sorted(non_overnight_sessions, key=lambda session: session.start),
+                sorted(non_overnight_sessions, key=lambda session: session.start)[1:],
+            )
+        ):
+            status = "break"
+            status_text = "午间休市"
+        elif (
+            overnight_sessions
+            and non_overnight_sessions
+            and max(session.end for session in non_overnight_sessions) < current_time
+            and current_time < min(session.start for session in overnight_sessions)
+        ):
+            status = "break"
+            status_text = "休息"
+        else:
+            status = "after_hours"
+            status_text = "已收盘"
+
+    return {
+        "code": market_def.code.value,
+        "name": market_def.name,
+        "status": status,
+        "status_text": status_text,
+        "is_trading": is_trading,
+        "sessions": sessions_desc,
+        "local_time": now.strftime("%H:%M"),
+        "timezone": market_def.timezone,
+    }
 
 
 @router.get("/search")

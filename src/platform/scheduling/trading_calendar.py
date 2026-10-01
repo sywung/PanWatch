@@ -211,7 +211,7 @@ def is_trading_day(market, d: date | datetime | None = None) -> bool:
             return target in _CN_TRADING_DATES
         logger.debug("[交易日历] %s 超出A股日历覆盖范围,降级为只判周末", target)
 
-    if code == MarketCode.TW and _TW_CLOSED_DATES and target.year in _TW_YEARS:
+    if code in (MarketCode.TW, MarketCode.TWF) and _TW_CLOSED_DATES and target.year in _TW_YEARS:
         return target not in _TW_CLOSED_DATES
 
     # 港美股、日历缺失、超出覆盖范围:只判周末。
@@ -225,3 +225,15 @@ def any_market_trading_day(d: date | datetime | None = None) -> bool:
     return any(
         is_trading_day(m, d) for m in (MarketCode.CN, MarketCode.HK, MarketCode.US, MarketCode.TW)
     )
+
+
+def futures_settlement_date(year: int, month: int) -> date:
+    """返回台湾期货当月结算日:第三个星期三,休市时顺延至下一个交易日。"""
+    from src.platform.marketdata.models import MarketCode
+
+    first_day = date(year, month, 1)
+    days_until_wednesday = (2 - first_day.weekday()) % 7
+    settlement = date(year, month, 1 + days_until_wednesday + 14)
+    while not is_trading_day(MarketCode.TWF, settlement):
+        settlement = date.fromordinal(settlement.toordinal() + 1)
+    return settlement

@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from enum import Enum
 from zoneinfo import ZoneInfo
 
@@ -9,6 +9,7 @@ class MarketCode(str, Enum):
     HK = "HK"  # 港股
     US = "US"  # 美股
     TW = "TW"  # 台股
+    TWF = "TWF"  # 台湾期货
 
 
 ALL_MARKETS: tuple[str, ...] = (
@@ -19,6 +20,7 @@ ALL_MARKETS: tuple[str, ...] = (
 )
 
 CAPITAL_FLOW_MARKETS = frozenset({"CN", "TW"})
+FUTURES_MARKETS = frozenset({"TWF"})
 
 
 @dataclass
@@ -26,6 +28,10 @@ class TradingSession:
     """一个交易时段"""
     start: time
     end: time
+
+    @property
+    def crosses_midnight(self) -> bool:
+        return self.end < self.start
 
 
 @dataclass
@@ -47,18 +53,22 @@ class MarketDef:
         else:
             dt = dt.astimezone(self.get_tz())
 
-        # 非交易日(周末 / A股法定节假日)一律不交易。
         # 延迟导入:trading_calendar 依赖本模块的 MarketCode/MARKETS。
         from src.platform.scheduling.trading_calendar import is_trading_day
 
-        if not is_trading_day(self.code, dt.date()):
-            return False
-
         current_time = dt.time()
-        return any(
-            session.start <= current_time <= session.end
-            for session in self.sessions
-        )
+        for session in self.sessions:
+            if session.crosses_midnight:
+                if current_time >= session.start:
+                    if is_trading_day(self.code, dt.date()):
+                        return True
+                elif current_time <= session.end:
+                    if is_trading_day(self.code, dt.date() - timedelta(days=1)):
+                        return True
+            elif session.start <= current_time <= session.end:
+                if is_trading_day(self.code, dt.date()):
+                    return True
+        return False
 
 
 # 预定义市场
@@ -67,6 +77,14 @@ MARKETS: dict[MarketCode, MarketDef] = {
         code=MarketCode.TW, name="台股", timezone="Asia/Taipei",
         sessions=[TradingSession(time(9, 0), time(13, 30))],
         symbol_pattern=r"^\d{4,6}[A-Z]?$",
+    ),
+    MarketCode.TWF: MarketDef(
+        code=MarketCode.TWF, name="期貨", timezone="Asia/Taipei",
+        sessions=[
+            TradingSession(time(8, 45), time(13, 45)),
+            TradingSession(time(15, 0), time(5, 0)),
+        ],
+        symbol_pattern=r"^[A-Z][A-Z0-9]{2}$",
     ),
     MarketCode.CN: MarketDef(
         code=MarketCode.CN,

@@ -437,9 +437,18 @@ def get_stock_list() -> list[dict]:
     return refresh_stock_list()
 
 
+# 东方财富从台湾连线常逾时(5 秒);失败后这段时间内直接跳过,改走 Yahoo 搜索
+EASTMONEY_BACKOFF_SEC = 600
+_eastmoney_skip_until = 0.0
+
+
 def _realtime_search(query: str, market: str = "", limit: int = 20) -> list[dict]:
     """东方财富实时搜索 API"""
+    global _eastmoney_skip_until
     import urllib.parse
+
+    if time.time() < _eastmoney_skip_until:
+        return []
     # 提高 count 以覆盖更多候选项（包含北交所）
     url = f"https://searchapi.eastmoney.com/api/suggest/get?input={urllib.parse.quote(query)}&type=14&count={limit * 5}"
 
@@ -448,7 +457,8 @@ def _realtime_search(query: str, market: str = "", limit: int = 20) -> list[dict
             resp = client.get(url, headers=HEADERS)
             data = resp.json()
     except Exception as e:
-        logger.warning(f"实时搜索失败: {e}")
+        logger.warning(f"实时搜索失败,{EASTMONEY_BACKOFF_SEC}s 内改用 Yahoo 搜索: {e}")
+        _eastmoney_skip_until = time.time() + EASTMONEY_BACKOFF_SEC
         return []
 
     items = data.get("QuotationCodeTable", {}).get("Data", [])
@@ -544,6 +554,54 @@ def _lookup_tw_code(query: str) -> list[dict]:
     return []
 
 
+YAHOO_SEARCH_URL = "https://query1.finance.yahoo.com/v1/finance/search"
+# Yahoo 交易所代码 → 美股
+_YAHOO_US_EXCHANGES = {"NMS", "NGM", "NCM", "NYQ", "NAS", "NYS", "ASE", "PCX", "BTS"}
+
+
+def _yahoo_quote_to_item(quote: dict) -> dict | None:
+    """Yahoo 搜索结果 → {symbol, name, market};不支持的品种(期货、加拿大 CDR 等)返回 None。"""
+    if quote.get("quoteType") not in ("EQUITY", "ETF"):
+        return None
+    raw = str(quote.get("symbol") or "").upper()
+    name = str(quote.get("shortname") or quote.get("longname") or "").strip()
+    if not raw or not name or "=" in raw or raw.startswith("^"):
+        return None
+    if raw.endswith(".HK"):
+        code = raw[:-3]
+        return {"symbol": code.zfill(5), "name": name, "market": "HK"} if code.isdigit() else None
+    if raw.endswith((".SS", ".SZ")):
+        return {"symbol": raw[:-3], "name": name, "market": "CN"}
+    if raw.endswith((".TW", ".TWO")):
+        return {"symbol": raw.split(".")[0], "name": name, "market": "TW"}
+    if "." not in raw and quote.get("exchange") in _YAHOO_US_EXCHANGES:
+        return {"symbol": raw, "name": name, "market": "US"}
+    return None
+
+
+def _yahoo_search(query: str, market: str = "", limit: int = 20) -> list[dict]:
+    """Yahoo 搜索:东方财富不可达时的港美股/A 股后备。"""
+    try:
+        resp = httpx.get(
+            YAHOO_SEARCH_URL,
+            params={"q": query, "quotesCount": max(limit, 10), "newsCount": 0},
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=8,
+        )
+        quotes = (resp.json() or {}).get("quotes") or []
+    except Exception as e:
+        logger.warning(f"Yahoo 搜索失败: {e}")
+        return []
+    out = []
+    for quote in quotes:
+        item = _yahoo_quote_to_item(quote)
+        if item and (not market or item["market"] == market):
+            out.append(item)
+        if len(out) >= limit:
+            break
+    return out
+
+
 def search_stocks(query: str, market: str = "", limit: int = 20) -> list[dict]:
     """搜索股票；台股使用缓存，全市场搜索时台股结果优先"""
     q = query.strip()
@@ -555,7 +613,7 @@ def search_stocks(query: str, market: str = "", limit: int = 20) -> list[dict]:
 
     if market == "":
         tw_results = _cached_search(q, "TW", limit) or _lookup_tw_code(q)
-        realtime_results = _realtime_search(q, market, limit)
+        realtime_results = _realtime_search(q, market, limit) or _yahoo_search(q, market, limit)
         cached_results = _cached_search(q, market, limit)
         results = []
         seen = set()
@@ -580,8 +638,8 @@ def search_stocks(query: str, market: str = "", limit: int = 20) -> list[dict]:
                     break
         return results
 
-    # 尝试实时搜索
-    results = _realtime_search(q, market, limit)
+    # 尝试实时搜索(东方财富;不可达或无结果时用 Yahoo)
+    results = _realtime_search(q, market, limit) or _yahoo_search(q, market, limit)
     if len(results) >= limit:
         return results[:limit]
 

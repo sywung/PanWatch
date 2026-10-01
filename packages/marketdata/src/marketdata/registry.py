@@ -43,9 +43,17 @@ from marketdata.vendors.tencent import TencentQuoteVendor
 from marketdata.vendors.twse import TwseMisQuoteVendor
 from marketdata.vendors.yfinance import YFinanceQuoteVendor
 from marketdata.vendors.tw import (
-    TwseFundamentalsVendor, TwseCapitalFlowVendor, TwseMarginVendor,
-    TwseDividendVendor, TdccShareholdersVendor, TwseEventsVendor,
-    TwseDragonTigerVendor, YahooTwNewsVendor, CnyesFlashNewsVendor,
+    TwseFundamentalsVendor,
+    TwseCapitalFlowVendor,
+    TwseMarginVendor,
+    TwseDividendVendor,
+    TdccShareholdersVendor,
+    TwseEventsVendor,
+)
+from marketdata.vendors.tw_news import (
+    TwseDragonTigerVendor,
+    YahooTwNewsVendor,
+    CnyesFlashNewsVendor,
 )
 
 # 各数据类型 → {vendor name: vendor 类}。注意:vendor 的 import 本身是廉价的

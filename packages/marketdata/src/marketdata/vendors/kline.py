@@ -213,6 +213,10 @@ def _yahoo_range(days: int) -> str:
     return "max"
 
 
+# 台股代码 → 命中的 Yahoo 后缀(.TW / .TWO),进程内记忆
+_TW_SUFFIX_HINT: dict[str, str] = {}
+
+
 class YahooKlineVendor(KlineVendor):
     """Yahoo chart v8 日K,零 crumb / 零 cookie(crumb 只有 quoteSummary 基本面才需要)。"""
 
@@ -227,8 +231,13 @@ class YahooKlineVendor(KlineVendor):
             return []
         days = _days(config)
         proxy = config.get("proxy")
-        suffixes = (".TW", ".TWO") if sym.market == Market.TW else ("")
-        for suffix in suffixes if isinstance(suffixes, tuple) else (suffixes,):
+        if sym.market == Market.TW:
+            # 上市 .TW / 上柜 .TWO;记住命中的后缀,避免上柜股每次先吃一次 404(含重试)
+            hint = _TW_SUFFIX_HINT.get(sym.code)
+            suffixes = (hint, *(x for x in (".TW", ".TWO") if x != hint)) if hint else (".TW", ".TWO")
+        else:
+            suffixes = ("",)
+        for suffix in suffixes:
             ysym = f"{sym.code}{suffix}" if suffix else sym.to_yfinance()
             payload = market_get(
                 _YAHOO_CHART_URL.format(sym=ysym), host_key="query2.finance.yahoo.com",
@@ -274,6 +283,8 @@ class YahooKlineVendor(KlineVendor):
                     continue
             if days > 0 and len(out) > days:
                 out = out[-days:]
+            if out and sym.market == Market.TW:
+                _TW_SUFFIX_HINT[sym.code] = suffix
             if out or sym.market != Market.TW:
                 return out
         return []

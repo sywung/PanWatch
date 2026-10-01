@@ -1,10 +1,19 @@
 """Yahoo 日K 支持台股:先试上市 .TW,无数据再试上柜 .TWO。"""
 
+import pytest
+
 import marketdata.vendors.kline as kv
 from marketdata.symbol import Symbol
 
 _TS1 = 1782864000  # 2026-07-01 UTC
 _TS2 = 1782950400
+
+
+@pytest.fixture(autouse=True)
+def _clear_suffix_hint():
+    kv._TW_SUFFIX_HINT.clear()
+    yield
+    kv._TW_SUFFIX_HINT.clear()
 
 
 def _payload():
@@ -54,3 +63,12 @@ def test_neither_suffix_returns_empty(monkeypatch):
     urls = _install(monkeypatch, lambda u: None)
     assert kv.YahooKlineVendor().fetch([Symbol.parse("9999", "TW")], {"days": 60}) == []
     assert len(urls) == 2
+
+
+def test_remembers_otc_suffix(monkeypatch):
+    urls = _install(monkeypatch, lambda u: _payload() if u.endswith("/6488.TWO") else None)
+    kv.YahooKlineVendor().fetch([Symbol.parse("6488", "TW")], {"days": 60})
+    urls.clear()
+    out = kv.YahooKlineVendor().fetch([Symbol.parse("6488", "TW")], {"days": 60})
+    assert len(out) == 2
+    assert [u.rsplit("/", 1)[1] for u in urls] == ["6488.TWO"]

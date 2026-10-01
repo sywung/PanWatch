@@ -14,6 +14,7 @@ from __future__ import annotations
 from marketdata.vendors.capital_flow import EastmoneyCapitalFlowVendor, SinaCapitalFlowVendor
 from marketdata.vendors.eastmoney import EastmoneyQuoteVendor
 from marketdata.vendors.fugle import FugleQuoteVendor
+from marketdata.vendors.finmind import FinMindKlineVendor
 from marketdata.vendors.events import EventsVendor
 from marketdata.vendors.fundamentals import EastmoneyFundamentalsVendor, TencentFundamentalsVendor
 from marketdata.vendors.flash_news import (
@@ -75,6 +76,7 @@ VENDOR_CLASSES_BY_TYPE: dict[str, dict[str, type]] = {
         "stooq": StooqKlineVendor,
         "eastmoney": EastmoneyKlineVendor,
         "yahoo": YahooKlineVendor,
+        "finmind": FinMindKlineVendor,
     },
     "capital_flow": {
         "eastmoney": EastmoneyCapitalFlowVendor,

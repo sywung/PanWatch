@@ -119,6 +119,9 @@ export const configuration = {
       fugleLabel: 'Fugle API key',
       fuglePlaceholder: '貼上 Fugle API key',
       fugleHelp: '請到 Fugle 開發者頁面申請 API key',
+      finmindLabel: 'FinMind Token（選填）',
+      finmindPlaceholder: '貼上 FinMind API Token',
+      finmindHelp: '公開 API 可免 Token 使用；註冊免費帳號可提高請求額度。',
     },
     messages: {
       loadFailed: '載入資料來源失敗',

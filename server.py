@@ -437,6 +437,19 @@ DATA_SOURCE_SEEDS: list[dict] = [
             "supports_batch": False,
             "test_symbols": list(DEFAULT_TEST_SYMBOLS),
         },
+        {
+            "name": "FinMind 台股日 K（備援）",
+            "type": "kline",
+            "provider": "finmind",
+            "config": {
+                "token": "",
+                "description": "FinMind TaiwanStockPrice 歷史日 K；公開 API 可免 token，填入免費 Token 可提高額度。作 Yahoo 台股日 K 備援。",
+            },
+            "enabled": True,
+            "priority": 25,  # Yahoo(20) 失效时使用
+            "supports_batch": False,
+            "test_symbols": list(DEFAULT_TEST_SYMBOLS_BY_MARKET["TW"]),
+        },
         # 资金流向数据源
         {
             "name": "东方财富资金流",

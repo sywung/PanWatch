@@ -117,6 +117,9 @@ const PROVIDER_CREDENTIAL_FIELDS: Record<string, CredentialFieldDef[]> = {
   fugle: [
     { key: 'api_key', labelKey: 'dataSources.credentials.fugleLabel', placeholderKey: 'dataSources.credentials.fuglePlaceholder', secret: true, helpKey: 'dataSources.credentials.fugleHelp' },
   ],
+  finmind: [
+    { key: 'token', labelKey: 'dataSources.credentials.finmindLabel', placeholderKey: 'dataSources.credentials.finmindPlaceholder', secret: true, helpKey: 'dataSources.credentials.finmindHelp' },
+  ],
 }
 
 const emptyForm: DataSourceForm = {

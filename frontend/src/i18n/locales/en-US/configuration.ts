@@ -121,6 +121,9 @@ export const configuration = {
       fugleLabel: 'Fugle API key',
       fuglePlaceholder: 'Paste your Fugle API key',
       fugleHelp: 'Apply for an API key on the Fugle developer page',
+      finmindLabel: 'FinMind Token (optional)',
+      finmindPlaceholder: 'Paste your FinMind API token',
+      finmindHelp: 'The public API works without a token; create a free account for a higher request quota.',
     },
     messages: {
       loadFailed: 'Failed to load data sources',

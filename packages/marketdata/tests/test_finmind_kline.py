@@ -27,8 +27,9 @@ def _install(monkeypatch, payload):
     return calls
 
 
-def test_finmind_only_supports_tw():
-    assert fm.FinMindKlineVendor.supports_markets == {"TW"}
+def test_finmind_supports_tw_and_futures():
+    # F4 起同一个 vendor 也提供期货(TWF)日 K,见 test_finmind_futures_kline.py
+    assert fm.FinMindKlineVendor.supports_markets == {"TW", "TWF"}
 
 
 def test_parses_rows_into_sorted_bars(monkeypatch):

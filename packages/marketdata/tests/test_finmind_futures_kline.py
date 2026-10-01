@@ -69,11 +69,11 @@ def test_after_market_and_spread_rows_are_excluded(monkeypatch):
         "2026-09-10", "2026-09-11", "2026-09-14", "2026-09-15", "2026-09-16",
         "2026-09-17", "2026-09-18", "2026-09-21", "2026-09-22",
     ]
-    position_near = {
-        r["date"]: r["close"] for r in _TX["data"]
+    position_closes = {
+        r["close"] for r in _TX["data"]
         if r["trading_session"] == "position" and r["contract_date"] in ("202609", "202610")
     }
-    assert all(b.close in position_near.values() for b in bars)
+    assert all(b.close in position_closes for b in bars)
 
 
 @pytest.mark.parametrize("code, data_id", [("TXF", "TX"), ("MXF", "MTX"), ("TMF", "TMF"),

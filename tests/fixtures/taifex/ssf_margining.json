@@ -1,0 +1,46 @@
+[
+ {
+  "Contract": "CAF",
+  "UnderlyingSecurityCode": "1303",
+  "ContractName": "南亞期貨",
+  "UnderlyingOfSingleStockFutures": "南亞塑膠工業股份有限公司",
+  "GroupLevel": "級距3",
+  "ClearingMarginRate": "15.00%",
+  "MaintenanceMarginRate": "15.53%",
+  "InitialMarginRate": "20.25%",
+  "Date": "20260930"
+ },
+ {
+  "Contract": "CDF",
+  "UnderlyingSecurityCode": "2330",
+  "ContractName": "台積電期貨",
+  "UnderlyingOfSingleStockFutures": "台灣積體電路製造股份有限公司",
+  "GroupLevel": "級距1",
+  "ClearingMarginRate": "10.00%",
+  "MaintenanceMarginRate": "10.35%",
+  "InitialMarginRate": "13.50%",
+  "Date": "20260930"
+ },
+ {
+  "Contract": "QFF",
+  "UnderlyingSecurityCode": "2330",
+  "ContractName": "小型台積電期貨",
+  "UnderlyingOfSingleStockFutures": "台灣積體電路製造股份有限公司",
+  "GroupLevel": "級距1",
+  "ClearingMarginRate": "10.00%",
+  "MaintenanceMarginRate": "10.35%",
+  "InitialMarginRate": "13.50%",
+  "Date": "20260930"
+ },
+ {
+  "Contract": "MYF",
+  "UnderlyingSecurityCode": "1565",
+  "ContractName": "精華期貨",
+  "UnderlyingOfSingleStockFutures": "精華光學股份有限公司",
+  "GroupLevel": "級距1",
+  "ClearingMarginRate": "10.00%",
+  "MaintenanceMarginRate": "10.35%",
+  "InitialMarginRate": "13.50%",
+  "Date": "20260930"
+ }
+]

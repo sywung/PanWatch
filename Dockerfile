@@ -23,16 +23,20 @@ RUN pnpm build
 # ===== Stage 2: Python 运行环境 =====
 FROM python:3.11-slim
 
-# 版本号（构建时传入）
-ARG VERSION=dev
-
 WORKDIR /app
+
+# 可选 Debian 镜像（例：--build-arg DEBIAN_MIRROR=http://free.nchc.org.tw/debian）。
+# 只替换主仓库；debian-security 仍走官方源。
+ARG DEBIAN_MIRROR=
 
 # 安装系统依赖
 # - tzdata: 时区数据（zoneinfo 模块需要）
 # - 中文字体（K线截图需要）
 # - Playwright Chromium 依赖的系统库
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN if [ -n "$DEBIAN_MIRROR" ]; then \
+        sed -i "s|^URIs: http://deb.debian.org/debian$|URIs: ${DEBIAN_MIRROR}|" /etc/apt/sources.list.d/debian.sources; \
+    fi \
+    && apt-get update && apt-get install -y --no-install-recommends \
     tzdata \
     # git: requirements.txt 中含 git+https 直链(tradingagents)
     git \
@@ -79,11 +83,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 复制依赖文件
 COPY requirements.txt ./
 
+# 先装第三方依赖：这一层只随 requirements.txt 变化，改 packages/ 源码不会让它重装
+RUN --mount=type=cache,target=/root/.cache/pip \
+    grep -v '^-e ' requirements.txt > /tmp/requirements-external.txt \
+    && pip install -r /tmp/requirements-external.txt
+
 # 复制本仓内本地包(requirements.txt 里 -e ./packages/marketdata 需要它先在)
 COPY packages/ ./packages/
 
-# 安装 Python 依赖
-RUN pip install --no-cache-dir -r requirements.txt
+# 安装本仓包(第三方依赖已满足，这步很快)
+RUN --mount=type=cache,target=/root/.cache/pip pip install -r requirements.txt
 
 # 注意: Playwright 浏览器将在首次启动时自动安装到 data 目录
 # 这样可以减小镜像体积，并支持跨版本持久化
@@ -93,7 +102,8 @@ COPY src/ ./src/
 COPY server.py ./
 COPY prompts/ ./prompts/
 
-# 写入版本号
+# 写入版本号（构建时传入；放在最后面，换版号只影响这一层之后）
+ARG VERSION=dev
 RUN echo "${VERSION}" > VERSION
 
 # 从前端构建阶段复制静态文件

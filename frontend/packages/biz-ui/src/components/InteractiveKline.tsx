@@ -5,6 +5,7 @@ import { Button } from '@panwatch/base-ui/components/ui/button'
 import { useTranslation } from 'react-i18next'
 import { useMarketColors } from '@/hooks/use-market-colors'
 import { marketColorWithAlpha, marketSignTextClass } from '@/lib/market-colors'
+import { applySeriesMarkers, buildChanOverlay, chanPointLabel, type ChanLevel } from '@panwatch/biz-ui/chan-overlay'
 
 type BusinessDay = { year: number; month: number; day: number }
 
@@ -24,6 +25,8 @@ type KlinesResponse = {
   interval?: string
   klines: KlineItem[]
 }
+
+type ChanResponse = ChanLevel & { level?: string }
 
 type HoverTipRow = {
   date: string
@@ -173,6 +176,8 @@ export default function InteractiveKline(props: {
   const [error, setError] = useState<string>('')
   const [data, setData] = useState<KlineItem[]>([])
   const [showRsi, setShowRsi] = useState(true)
+  const [showChan, setShowChan] = useState(false)
+  const [chanByKey, setChanByKey] = useState<Record<string, ChanResponse>>({})
   const [hoverTip, setHoverTip] = useState<HoverTip>({ visible: false, x: 0, y: 0, row: null })
 
   const fixedDays = useMemo(() => {
@@ -187,6 +192,24 @@ export default function InteractiveKline(props: {
 
   const containerRef = useRef<HTMLDivElement | null>(null)
   const macdRef = useRef<HTMLDivElement | null>(null)
+  const chanCacheRef = useRef<Record<string, ChanResponse>>({})
+
+  const chanKey = `${props.market}:${props.symbol}`
+  const chanLevel = showChan && interval === '1d' ? chanByKey[chanKey] || null : null
+
+  useEffect(() => {
+    if (!showChan || interval !== '1d' || !props.symbol) return
+    if (chanCacheRef.current[chanKey]) return
+    let cancelled = false
+    fetchAPI<ChanResponse>(`/klines/${encodeURIComponent(props.symbol)}/chan?market=${encodeURIComponent(props.market)}&level=day`)
+      .then((value) => {
+        if (cancelled) return
+        chanCacheRef.current[chanKey] = value
+        setChanByKey(previous => ({ ...previous, [chanKey]: value }))
+      })
+      .catch(() => undefined)
+    return () => { cancelled = true }
+  }, [showChan, interval, props.symbol, props.market, chanKey])
 
   const load = async () => {
     if (!props.symbol) return
@@ -377,6 +400,27 @@ export default function InteractiveKline(props: {
     volMa5Series.setData(mapLine(series.volMa5) as any)
     volMa10Series.setData(mapLine(series.volMa10) as any)
 
+    if (chanLevel) {
+      const overlay = buildChanOverlay(chanLevel, {
+        colors: { buy: palette.up.bright, sell: palette.down.bright, bi: palette.flat, seg: palette.flat, zs: marketColorWithAlpha(palette.flat, 0.55) },
+        label: chanPointLabel,
+      })
+      const chanLine = (points: unknown[], color: string, lineWidth: number, lineStyle?: number) => {
+        const line = addLine(chart, LW, { color, lineWidth, ...(lineStyle == null ? {} : { lineStyle }) })
+        line.setData(points as any)
+        return line
+      }
+      chanLine(overlay.biLine, palette.flat, 1)
+      chanLine(overlay.biPending, palette.flat, 1, 2)
+      chanLine(overlay.segLine, palette.flat, 3)
+      chanLine(overlay.segPending, palette.flat, 3, 2)
+      for (const box of overlay.zsBoxes) {
+        chanLine(box.top, marketColorWithAlpha(palette.flat, 0.55), 1)
+        chanLine(box.bottom, marketColorWithAlpha(palette.flat, 0.55), 1)
+      }
+      applySeriesMarkers(candleSeries, LW, overlay.markers)
+    }
+
     // MACD chart
     let macdChart: any = null
     let rsiChart: any = null
@@ -553,7 +597,7 @@ export default function InteractiveKline(props: {
         // ignore
       }
     }
-  }, [series, lwReady, showRsi, indexByDate, interval, palette])
+  }, [series, lwReady, showRsi, indexByDate, interval, palette, chanLevel])
 
   return (
     <div className="card p-4 md:p-5">
@@ -562,6 +606,16 @@ export default function InteractiveKline(props: {
         <div className="flex items-center gap-2 flex-wrap">
           <Button variant={showRsi ? 'default' : 'secondary'} size="sm" className="h-8 px-2.5" onClick={() => setShowRsi(v => !v)}>
             {tr('rsi')}
+          </Button>
+          <Button
+            variant={showChan ? 'default' : 'secondary'}
+            size="sm"
+            className="h-8 px-2.5"
+            onClick={() => setShowChan(v => !v)}
+            disabled={interval !== '1d'}
+            title={interval !== '1d' ? tr('chanDisabled') : undefined}
+          >
+            {tr('chan')}
           </Button>
           <div className="inline-flex rounded-lg border border-border/60 bg-accent/20 p-0.5">
             {([

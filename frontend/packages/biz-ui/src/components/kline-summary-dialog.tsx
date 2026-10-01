@@ -8,6 +8,7 @@ import { buildKlineSuggestion } from '@/lib/kline-scorer'
 import { TechnicalBadge, technicalToneFromSuggestionAction } from '@panwatch/biz-ui/components/technical-badge'
 import { KlineIndicators, localizeTechnicalStatus } from '@panwatch/biz-ui/components/kline-indicators'
 import { DEFAULT_MARKET } from '../market'
+import { getCurrentLocale, type SupportedLocale } from '@/i18n'
 
 export interface KlineSummaryData {
   timeframe?: string
@@ -51,7 +52,14 @@ export interface KlineSummaryData {
   change_20d?: number | null
   amplitude?: number | null
   amplitude_avg5?: number | null
+  chan?: ChanSummary | null
 }
+
+interface ChanStrokeSummary { begin_time: string; begin_val: number; end_time: string; end_val: number; dir?: string; sure?: boolean }
+interface ChanPivotSummary { begin_time: string; end_time: string; zd: number; zg: number; sure?: boolean }
+interface ChanPointSummary { time: string; is_buy: boolean; type: string; sure?: boolean; price?: number }
+interface ChanLevelSummary { level?: string; bi?: ChanStrokeSummary[]; zs?: ChanPivotSummary[]; bsp?: ChanPointSummary[]; last_close?: number | null; position?: 'above' | 'inside' | 'below' | 'none' }
+interface ChanSummary { day?: ChanLevelSummary | null; m30?: ChanLevelSummary | null; nesting?: { confirmed?: boolean; direction?: 'buy' | 'sell' | null } | null }
 
 interface KlineSummaryResponse {
   symbol: string
@@ -80,6 +88,29 @@ function formatLocalDateTime(iso: string | undefined, locale: string): string {
   } catch {
     return ''
   }
+}
+
+function ChanLevelRow({ level, name, tr, locale }: { level: ChanLevelSummary; name: string; tr: Translate; locale: SupportedLocale }) {
+  const lastStroke = level.bi?.[level.bi.length - 1]
+  const pivot = level.zs?.[level.zs.length - 1]
+  const points = (level.bsp || []).slice(-2)
+  const number = (value: number) => value.toLocaleString(locale, { maximumFractionDigits: 2 })
+  const stroke = lastStroke
+    ? `${tr(`direction.${lastStroke.dir || (lastStroke.end_val >= lastStroke.begin_val ? 'up' : 'down')}`)} · ${lastStroke.sure ? tr('confirmed') : tr('pending')}`
+    : tr('pending')
+  const position = level.position ? tr(`position.${level.position}`) : tr('position.none')
+  return (
+    <div className="rounded-md bg-accent/15 px-2.5 py-2 text-[11px]">
+      <div className="font-medium text-foreground">{name}</div>
+      <div className="mt-1 text-muted-foreground">{tr('lastPoint', { value: stroke })}</div>
+      {pivot ? <div className="text-muted-foreground">{tr('pivotRange', { zd: number(pivot.zd), zg: number(pivot.zg), position })}</div> : null}
+      {points.length ? (
+        <div className="text-muted-foreground">
+          {tr('latestPoints')}: {points.map(point => `${tr(point.is_buy ? 'labels.buy' : 'labels.sell', { type: point.type })}${point.sure ? '' : '?'}`).join(' · ')}
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 function buildLocalizedSuggestion(s: KlineSummaryData, holding: boolean | undefined, tr: Translate) {
@@ -128,7 +159,9 @@ export function KlineSummaryDialog({
   const { t, i18n } = useTranslation('bizUi')
   const tr: Translate = (key, options) =>
     (t as unknown as Translate)(`kline.${key}`, options)
-  const locale = (i18n.resolvedLanguage || i18n.language).toLowerCase().startsWith('en') ? 'en-US' : 'zh-CN'
+  const chanTr: Translate = (key, options) =>
+    (t as unknown as Translate)(`chan.${key}`, options)
+  const locale: SupportedLocale = getCurrentLocale()
   const english = locale === 'en-US'
   const [loading, setLoading] = useState(false)
   const [summary, setSummary] = useState<KlineSummaryData | null>(null)
@@ -240,6 +273,21 @@ export function KlineSummaryDialog({
 
             <div className="text-[10px] text-muted-foreground/60">{tr('hoverHint')}</div>
             <KlineIndicators summary={effectiveSummary} />
+
+            {effectiveSummary.chan && (effectiveSummary.chan.day || effectiveSummary.chan.m30) ? (
+              <section className="space-y-2 rounded-lg border border-border/40 p-2.5">
+                <div className="text-[12px] font-medium text-foreground">{chanTr('title')}</div>
+                {effectiveSummary.chan.day ? <ChanLevelRow level={effectiveSummary.chan.day} name={chanTr('day')} tr={chanTr} locale={locale} /> : null}
+                {effectiveSummary.chan.m30 ? <ChanLevelRow level={effectiveSummary.chan.m30} name={chanTr('thirtyMinutes')} tr={chanTr} locale={locale} /> : null}
+                {effectiveSummary.chan.nesting ? (
+                  <div className="text-[11px] text-muted-foreground">
+                    {chanTr('nesting')}: {effectiveSummary.chan.nesting.confirmed
+                      ? effectiveSummary.chan.nesting.direction === 'buy' ? chanTr('nestingBuy') : chanTr('nestingSell')
+                      : chanTr('nestingPending')}
+                  </div>
+                ) : null}
+              </section>
+            ) : null}
 
             {(effectiveSummary.change_5d != null || effectiveSummary.change_20d != null || effectiveSummary.amplitude != null) && (
               <div className="flex flex-wrap gap-4 text-[11px] text-muted-foreground">

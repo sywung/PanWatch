@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react'
 import { useTranslation } from 'react-i18next'
-import { normalizeLocale } from '@/i18n'
+import { getCurrentLocale, normalizeLocale } from '@/i18n'
 import {
   applyMarketColorScheme,
   getMarketColorPalette,
@@ -69,6 +69,10 @@ export function MarketColorProvider({ children }: { children: ReactNode }) {
 
 export function useMarketColors(): MarketColorContextValue {
   const value = useContext(MarketColorContext)
-  if (!value) throw new Error('useMarketColors must be used inside MarketColorProvider')
+  if (!value) {
+    const locale = getCurrentLocale()
+    const effectiveScheme = resolveMarketColorScheme('auto', locale)
+    return { preference: 'auto', effectiveScheme, palette: getMarketColorPalette(effectiveScheme), setPreference: () => undefined }
+  }
   return value
 }

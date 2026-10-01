@@ -223,7 +223,7 @@ const looksLikePresentationLiteral = (node, text) => (
   || (ts.isJsxText(node) && singleWordEnglishPattern.test(text))
 )
 const isTechnicalLiteral = (text) => (
-  text === 'panwatch-locale'
+  text === 'panwatch-locale' || text === 'panwatch-locale-v2'
   || text.startsWith('text-market-')
   || text.startsWith('/')
   || text.includes('://')

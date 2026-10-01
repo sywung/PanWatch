@@ -34,13 +34,17 @@ def _units(bars, level):
     kl_type = KL_TYPE.K_DAY if level == "day" else KL_TYPE.K_30M
     result = []
     for bar in bars:
+        o, c = float(_value(bar, "open")), float(_value(bar, "close"))
+        h, low = float(_value(bar, "high")), float(_value(bar, "low"))
+        # chan.py 要求 low <= open/close <= high;来源资料偶有不一致(如还原权息只调了收盘),收敛到合法区间
+        h, low = max(h, o, c, low), min(low, o, c, h)
         result.append(CKLine_Unit({
             DATA_FIELD.FIELD_TIME: _time(_value(bar, "date")),
-            DATA_FIELD.FIELD_OPEN: float(_value(bar, "open")),
-            DATA_FIELD.FIELD_HIGH: float(_value(bar, "high")),
-            DATA_FIELD.FIELD_LOW: float(_value(bar, "low")),
-            DATA_FIELD.FIELD_CLOSE: float(_value(bar, "close")),
-            DATA_FIELD.FIELD_VOLUME: float(_value(bar, "volume")),
+            DATA_FIELD.FIELD_OPEN: o,
+            DATA_FIELD.FIELD_HIGH: h,
+            DATA_FIELD.FIELD_LOW: low,
+            DATA_FIELD.FIELD_CLOSE: c,
+            DATA_FIELD.FIELD_VOLUME: float(_value(bar, "volume") or 0),
         }))
         result[-1].kl_type = kl_type
     return kl_type, result
@@ -87,6 +91,11 @@ def analyze_level(bars, level):
     except Exception as exc:
         logger.warning("缠论分析失败: level=%s error=%s", level, exc)
         return None
+
+
+_POSITION_ZH = {"above": "在中枢上方", "inside": "在中枢内", "below": "在中枢下方", "none": "无中枢"}
+_POSITION_EN = {"above": "price above pivot", "inside": "price inside pivot",
+                "below": "price below pivot", "none": "no pivot"}
 
 
 def position_vs_zs(price, zs_list):
@@ -139,7 +148,7 @@ def format_chan_summary(result, language):
                 pivot = item["zs"][-1] if item["zs"] else None
                 parts.append(f"{label} last stroke: {last['dir'] if last else 'none'} "
                              f"({'sure' if last and last['sure'] else 'uncertain'}); "
-                             f"pivot {pivot['zd']}-{pivot['zg']} ({item['position']})" if pivot else
+                             f"pivot {pivot['zd']}-{pivot['zg']} ({_POSITION_EN.get(item['position'], item['position'])})" if pivot else
                              f"{label} last stroke: {last['dir'] if last else 'none'}")
                 points = item["bsp"][-2:]
                 if points:
@@ -162,7 +171,7 @@ def format_chan_summary(result, language):
             certainty = "确定" if last and last["sure"] else "未确定"
             text = f"{label}最后一笔：{direction}（{certainty}）"
             if pivot:
-                text += f"；最后中枢 {pivot['zd']}-{pivot['zg']}，现价{item['position']}"
+                text += f"；最后中枢 {pivot['zd']}-{pivot['zg']}，现价{_POSITION_ZH.get(item['position'], item['position'])}"
             parts.append(text)
             points = item["bsp"][-2:]
             if points:

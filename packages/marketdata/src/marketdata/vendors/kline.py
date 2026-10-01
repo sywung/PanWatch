@@ -303,8 +303,10 @@ class YahooKlineVendor(KlineVendor):
                     c = closes[i] if i < len(closes) else None
                     if o is None or h is None or low is None or c is None:
                         continue
-                    if adjcloses is not None and i < len(adjcloses) and adjcloses[i] is not None:
-                        c = adjcloses[i]
+                    if adjcloses is not None and i < len(adjcloses) and adjcloses[i] is not None and c:
+                        # 还原权息:开高低按同一比例调整,否则会出现 收盘 < 最低 的不一致 K 线
+                        factor = float(adjcloses[i]) / float(c)
+                        o, h, low, c = o * factor, h * factor, low * factor, adjcloses[i]
                     v = volumes[i] if i < len(volumes) and volumes[i] is not None else 0
                     bar_date = datetime.fromtimestamp(int(ts), tz=timezone.utc).strftime("%Y-%m-%d")
                     out.append(Bar(date=bar_date, open=float(o), close=float(c),

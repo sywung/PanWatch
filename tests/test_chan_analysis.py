@@ -293,3 +293,41 @@ def test_agents_put_chan_into_prompt_context():
         assert "format_chan_summary" in (ROOT / rel).read_text(encoding="utf-8"), rel
     for rel in ("prompts/daily_report.txt", "prompts/premarket_outlook.txt", "prompts/intraday_monitor.txt"):
         assert "缠论" in (ROOT / rel).read_text(encoding="utf-8"), rel
+
+
+# ---------------------------------------------------------------- 真实资料踩到的坑
+
+
+def test_yahoo_adjclose_scales_ohlc_consistently(monkeypatch):
+    """Yahoo 还原权息只给 adjclose;只换收盘会出现 收盘 < 最低(2330 实际 1308.9 < 1325)。"""
+    import marketdata.vendors.kline as kv
+    from marketdata.symbol import Symbol
+
+    kv._TW_SUFFIX_HINT.clear()
+    q = {"open": [1325.0], "high": [1350.0], "low": [1325.0], "close": [1335.0], "volume": [1]}
+    payload = {"chart": {"result": [{"timestamp": [1790730000], "indicators": {
+        "quote": [q], "adjclose": [{"adjclose": [1308.9478759765625]}]}}]}}
+    monkeypatch.setattr(kv, "market_get", lambda url, **k: payload)
+    bar = kv.YahooKlineVendor().fetch([Symbol.parse("2330", "TW")], {"days": 10})[0]
+    assert abs(bar.close - 1308.9478759765625) < 1e-9
+    assert bar.low <= min(bar.open, bar.close) <= max(bar.open, bar.close) <= bar.high
+    assert abs(bar.low / bar.close - 1325.0 / 1335.0) < 1e-9
+    kv._TW_SUFFIX_HINT.clear()
+
+
+def test_analyze_level_tolerates_inconsistent_bars():
+    from src.modules.market.chan_analysis import analyze_level
+
+    bad = [dict(r) for r in DAY]
+    bad[0]["close"] = bad[0]["low"] - 15  # 收盘低于最低
+    assert analyze_level(bad, "day") is not None
+
+
+def test_summary_position_is_localized():
+    from src.modules.market.chan_analysis import analyze_chan, format_chan_summary
+
+    r = analyze_chan(DAY, M30)
+    zh = format_chan_summary(r, "zh-TW")
+    assert "中樞上方" in zh and "above" not in zh and "日線" in zh
+    en = format_chan_summary(r, "en-US")
+    assert "price above pivot" in en

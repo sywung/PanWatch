@@ -21,6 +21,18 @@ def _yf_ticker(sym: Symbol) -> str:
     return sym.code
 
 
+def _attr(info, name: str) -> float | None:
+    """读 fast_info 属性;缺失/异常/非数值 → None。"""
+    try:
+        value = getattr(info, name)
+    except Exception:
+        return None
+    try:
+        return float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 class YFinanceQuoteVendor(QuoteVendor):
     name = "yfinance"
     supports_markets = {"HK", "US", "TW"}
@@ -40,28 +52,29 @@ class YFinanceQuoteVendor(QuoteVendor):
                 if s.market == Market.TW:
                     tickers.append(f"{s.code}.TWO")
                 info = None
+                last = None
                 for ticker in tickers:
                     candidate = yf.Ticker(ticker).fast_info
-                    if candidate.get("last_price"):
+                    # yfinance>=1.x 的 fast_info 键名是 camelCase,.get("last_price") 恒为 None;
+                    # 用属性访问(last_price/previous_close/...)才拿得到值
+                    last = _attr(candidate, "last_price")
+                    if last:
                         info = candidate
                         break
                 if info is None:
-                    continue
-                last = float(info["last_price"]) if info.get("last_price") else None
-                if last is None:
                     record_error(f"yfinance {_yf_ticker(s)}: 返回空(last_price 缺失,可能 Yahoo 不可达/被限流/需要代理)")
                     continue
-                prev = float(info["previous_close"]) if info.get("previous_close") else None
+                prev = _attr(info, "previous_close")
                 chg = last - prev if prev else 0.0
                 pct = (chg / prev * 100) if prev else 0.0
                 out.append(Quote(
                     symbol=s.code, market=s.market.value, name="",
                     current_price=last, prev_close=prev,
-                    open_price=float(info.get("open") or 0),
-                    high_price=float(info.get("day_high") or 0),
-                    low_price=float(info.get("day_low") or 0),
+                    open_price=_attr(info, "open") or 0.0,
+                    high_price=_attr(info, "day_high") or 0.0,
+                    low_price=_attr(info, "day_low") or 0.0,
                     change_amount=chg, change_pct=pct,
-                    volume=float(info.get("last_volume") or 0),
+                    volume=_attr(info, "last_volume") or 0.0,
                 ))
             except Exception as e:
                 logger.debug(f"yfinance 拉取 {s.code} 失败: {e}")

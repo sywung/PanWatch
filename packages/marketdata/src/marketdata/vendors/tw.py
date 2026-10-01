@@ -174,7 +174,7 @@ class YahooTwNewsVendor(NewsVendor):
 class CnyesFlashNewsVendor(FlashNewsVendor):
     name="cnyes"; supports_markets={"TW"}
     def fetch(self,symbols,config):
-        data=tw_bulk.get_json("https://api.cnyes.com/media/api/v1/newslist/category/tw_stock",{"limit":30}); out=[]
+        limit=max(1,min(int((config or {}).get("days") or 30),100)); data=tw_bulk.get_json("https://api.cnyes.com/media/api/v1/newslist/category/tw_stock",{"limit":limit}); out=[]
         for r in ((data.get("items") or {}).get("data") or []):
             out.append(FlashNews(source="cnyes",external_id=str(r.get("newsId")),title=str(r.get("title") or ""),content=re.sub(r"<[^>]+>","",html.unescape(str(r.get("content") or r.get("summary") or ""))),publish_time=datetime.fromtimestamp(int(r.get("publishAt") or 0),tz=timezone.utc),url=f"https://news.cnyes.com/news/id/{r.get('newsId')}"))
         return out

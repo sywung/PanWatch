@@ -1,7 +1,5 @@
 """账户和持仓管理 API"""
 import logging
-import time
-import httpx
 from fastapi import APIRouter, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -14,84 +12,12 @@ from src.platform.persistence.models import Account, PriceAlertRule, Position, S
 from src.platform.marketdata.marketdata_client import md_quote_rows
 from src.platform.marketdata.collectors.market_http import TTLCache
 from src.platform.marketdata.models import MarketCode
+from src.platform.marketdata.models import BASE_CURRENCY
+from src.platform.marketdata import fx
 from src.web.errors import ai_api_error, api_error
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-# 汇率缓存
-_hkd_rate_cache: dict = {"rate": 0.92, "ts": 0}  # 港币默认汇率 0.92
-_usd_rate_cache: dict = {"rate": 7.25, "ts": 0}  # 美元默认汇率 7.25
-EXCHANGE_RATE_TTL = 3600  # 1 小时缓存
-
-
-def get_hkd_cny_rate() -> float:
-    """获取港币兑人民币汇率"""
-    global _hkd_rate_cache
-
-    # 检查缓存
-    if time.time() - _hkd_rate_cache["ts"] < EXCHANGE_RATE_TTL:
-        return _hkd_rate_cache["rate"]
-
-    # 从新浪财经获取汇率
-    try:
-        resp = httpx.get(
-            "https://hq.sinajs.cn/list=fx_shkdcny",
-            timeout=5,
-            headers={
-                "User-Agent": "Mozilla/5.0",
-                "Referer": "https://finance.sina.com.cn/"
-            }
-        )
-        # 格式: var hq_str_fx_shkdcny="时间,汇率,..."
-        text = resp.text
-        if "=" in text and "," in text:
-            data = text.split('"')[1]
-            parts = data.split(",")
-            if len(parts) > 1:
-                rate = float(parts[1])
-                _hkd_rate_cache = {"rate": rate, "ts": time.time()}
-                logger.info(f"更新港币汇率: {rate}")
-                return rate
-    except Exception as e:
-        logger.warning(f"获取港币汇率失败，使用缓存: {e}")
-
-    return _hkd_rate_cache["rate"]
-
-
-def get_usd_cny_rate() -> float:
-    """获取美元兑人民币汇率"""
-    global _usd_rate_cache
-
-    # 检查缓存
-    if time.time() - _usd_rate_cache["ts"] < EXCHANGE_RATE_TTL:
-        return _usd_rate_cache["rate"]
-
-    # 从新浪财经获取汇率
-    try:
-        resp = httpx.get(
-            "https://hq.sinajs.cn/list=fx_susdcny",
-            timeout=5,
-            headers={
-                "User-Agent": "Mozilla/5.0",
-                "Referer": "https://finance.sina.com.cn/"
-            }
-        )
-        # 格式: var hq_str_fx_susdcny="时间,汇率,..."
-        text = resp.text
-        if "=" in text and "," in text:
-            data = text.split('"')[1]
-            parts = data.split(",")
-            if len(parts) > 1:
-                rate = float(parts[1])
-                _usd_rate_cache = {"rate": rate, "ts": time.time()}
-                logger.info(f"更新美元汇率: {rate}")
-                return rate
-    except Exception as e:
-        logger.warning(f"获取美元汇率失败，使用缓存: {e}")
-
-    return _usd_rate_cache["rate"]
-
 
 # ========== Pydantic Models ==========
 
@@ -410,6 +336,7 @@ def get_portfolio_summary(
 
     if not accounts:
         return {
+            "base_currency": BASE_CURRENCY,
             "accounts": [],
             "total": {
                 "total_market_value": 0,
@@ -432,10 +359,6 @@ def get_portfolio_summary(
 
     # 获取实时行情（可选）
     quotes = _fetch_quotes_for_stocks(stocks) if include_quotes else {}
-
-    # 获取汇率
-    hkd_rate = get_hkd_cny_rate()
-    usd_rate = get_usd_cny_rate()
 
     # 计算各账户持仓
     account_summaries = []
@@ -464,17 +387,12 @@ def get_portfolio_summary(
             change_pct = quote["change_pct"] if quote else None
             prev_close = quote.get("prev_close") if quote else None
 
-            # 根据市场确定汇率
-            is_foreign = stock.market in ("HK", "US")
-            if stock.market == "HK":
-                rate = hkd_rate
-            elif stock.market == "US":
-                rate = usd_rate
-            else:
-                rate = 1.0
+            # 根据市场确定汇率；换算后的值为基准币别 BASE_CURRENCY。
+            rate = fx.rate_for_market(stock.market)
+            is_foreign = fx.market_currency(stock.market) != BASE_CURRENCY
 
             market_value = None
-            market_value_cny = None
+            market_value_cny = None  # 字段名沿用上游，值为基准币别 BASE_CURRENCY
             pnl = None
             pnl_pct = None
             daily_pnl = None
@@ -486,14 +404,14 @@ def get_portfolio_summary(
                 acc_daily_pnl += daily_pnl
 
             cost = pos.cost_price * pos.quantity
-            cost_cny = cost * rate  # 假设成本价也是原币种
-            acc_cost += cost_cny
+            cost_base = cost * rate  # 假设成本价也是原币种，换算为基准币别
+            acc_cost += cost_base
 
             if current_price is not None:
                 market_value = current_price * pos.quantity  # 原币种市值
-                market_value_cny = market_value * rate  # 人民币市值
-                pnl = market_value_cny - cost_cny
-                pnl_pct = (pnl / cost_cny * 100) if cost_cny > 0 else 0
+                market_value_cny = market_value * rate  # 基准币别 BASE_CURRENCY 市值
+                pnl = market_value_cny - cost_base
+                pnl_pct = (pnl / cost_base * 100) if cost_base > 0 else 0
 
                 acc_market_value += market_value_cny
 
@@ -566,6 +484,7 @@ def get_portfolio_summary(
             }
 
     return {
+        "base_currency": BASE_CURRENCY,
         "accounts": account_summaries,
         "total": {
             "total_market_value": round(grand_total_market_value, 2),
@@ -576,10 +495,7 @@ def get_portfolio_summary(
             "available_funds": round(grand_available_funds, 2),
             "total_assets": round(grand_total_assets, 2),
         },
-        "exchange_rates": {
-            "HKD_CNY": hkd_rate,
-            "USD_CNY": usd_rate,
-        },
+        "exchange_rates": fx.exchange_rates_snapshot(),
         "quotes": quotes_dict,  # 可选：返回行情数据
     }
 
@@ -632,14 +548,12 @@ def _holdings_signature(db: Session) -> str:
 
 
 def _gather_holdings(db: Session) -> list[dict]:
-    """汇总所有启用账户的真实持仓为统一列表(CNY 市值/浮盈 + fx),多账户同股合并。"""
+    """汇总所有启用账户的真实持仓为统一列表(基准币别市值/浮盈 + fx),多账户同股合并。"""
     accounts = db.query(Account).filter(Account.enabled == True).all()  # noqa: E712
     stock_ids = {p.stock_id for acc in accounts for p in acc.positions}
     stocks = db.query(Stock).filter(Stock.id.in_(stock_ids)).all() if stock_ids else []
     stock_map = {s.id: s for s in stocks}
     quotes = _fetch_quotes_for_stocks(stocks) if stocks else {}
-    hkd, usd = get_hkd_cny_rate(), get_usd_cny_rate()
-
     out: list[dict] = []
     seen: dict[tuple[str, str], dict] = {}
     for acc in accounts:
@@ -647,18 +561,18 @@ def _gather_holdings(db: Session) -> list[dict]:
             stock = stock_map.get(pos.stock_id)
             if not stock:
                 continue
-            rate = hkd if stock.market == "HK" else usd if stock.market == "US" else 1.0
+            rate = fx.rate_for_market(stock.market)
             quote = quotes.get(stock.symbol)
             price = quote.get("current_price") if quote else None
-            cost_cny = pos.cost_price * pos.quantity * rate
-            mv_cny = (price * pos.quantity * rate) if price else cost_cny
-            pnl_cny = (mv_cny - cost_cny) if price else 0.0
+            cost_base = pos.cost_price * pos.quantity * rate
+            mv_base = (price * pos.quantity * rate) if price else cost_base
+            pnl_base = (mv_base - cost_base) if price else 0.0
             key = (stock.market, stock.symbol)
             if key in seen:  # 多账户同一标的合并
                 h = seen[key]
                 h["quantity"] += pos.quantity
-                h["market_value"] += mv_cny
-                h["unrealized_pnl"] += pnl_cny
+                h["market_value"] += mv_base
+                h["unrealized_pnl"] += pnl_base
             else:
                 h = {
                     "symbol": stock.symbol,
@@ -666,8 +580,8 @@ def _gather_holdings(db: Session) -> list[dict]:
                     "name": stock.name,
                     "quantity": pos.quantity,
                     "fx": rate,
-                    "market_value": mv_cny,
-                    "unrealized_pnl": pnl_cny,
+                    "market_value": mv_base,
+                    "unrealized_pnl": pnl_base,
                     "strategy_code": pos.trading_style or "",
                 }
                 seen[key] = h
@@ -793,7 +707,7 @@ def portfolio_attribution(days: int = 60, benchmark: str = "000300", db: Session
 
 
 def _gather_account_totals(db: Session, *, market_value: float) -> dict:
-    """Use the same enabled-account scope as holdings; cash is stored in CNY.
+    """Use the same enabled-account scope as holdings; cash is stored in BASE_CURRENCY.
 
     Reuse the already-valued holdings instead of fetching quotes a second time.
     Non-positive equity has no meaningful exposure ratio (not zero exposure).
@@ -831,9 +745,9 @@ async def portfolio_ai_review(model_id: int | None = None, db: Session = Depends
     english = resolve_report_language(db) == "en-US"
     lines = (
         [
-            f"{diag['position_count']} holdings; market value {diag['total_market_value']:.0f} CNY; unrealized P&L {diag['total_unrealized_pnl']:.0f} CNY",
+            f"{diag['position_count']} holdings; market value {diag['total_market_value']:.0f} {BASE_CURRENCY}; unrealized P&L {diag['total_unrealized_pnl']:.0f} {BASE_CURRENCY}",
             f"Concentration within invested capital: HHI {diag['hhi']}; largest position {diag['max_weight'] * 100:.0f}%",
-            f"Total assets across enabled accounts: {totals['total_assets']:.0f} CNY (cash/available funds {totals['available_funds']:.0f} CNY)",
+            f"Total assets across enabled accounts: {totals['total_assets']:.0f} {BASE_CURRENCY} (cash/available funds {totals['available_funds']:.0f} {BASE_CURRENCY})",
             (f"Total-asset exposure: equities are {totals['equity_ratio'] * 100:.1f}% of total assets"
              if totals['equity_ratio'] is not None else "Total-asset exposure: unavailable because total assets are not positive"),
         ]
@@ -841,7 +755,7 @@ async def portfolio_ai_review(model_id: int | None = None, db: Session = Depends
         else [
             f"持仓 {diag['position_count']} 只,总市值 {diag['total_market_value']:.0f},浮盈 {diag['total_unrealized_pnl']:.0f}",
             f"持仓内部集中度 HHI {diag['hhi']},最大单仓占已投资金额 {diag['max_weight'] * 100:.0f}%",
-            f"启用账户总资产 {totals['total_assets']:.0f} CNY（现金/可用资金 {totals['available_funds']:.0f} CNY）",
+            f"启用账户总资产 {totals['total_assets']:.0f} {BASE_CURRENCY}（现金/可用资金 {totals['available_funds']:.0f} {BASE_CURRENCY}）",
             (f"总资产敞口：权益类仓位占总资产 {totals['equity_ratio'] * 100:.1f}%"
              if totals['equity_ratio'] is not None else "总资产敞口：总资产非正，比例不可计算"),
         ]
@@ -858,7 +772,7 @@ async def portfolio_ai_review(model_id: int | None = None, db: Session = Depends
                  f"相对回撤 {bench.get('relative_drawdown')}%"
         )
     if diag.get("by_market"):
-        prefix = "Market distribution within holdings (CNY): " if english else "持仓内部市场分布（市值 CNY）:"
+        prefix = f"Market distribution within holdings ({BASE_CURRENCY}): " if english else f"持仓内部市场分布（市值 {BASE_CURRENCY}）:"
         lines.append(prefix + ", ".join(f"{k} {v:.0f}" for k, v in diag["by_market"].items()))
     if diag.get("alerts"):
         if english:

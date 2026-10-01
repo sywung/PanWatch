@@ -160,3 +160,29 @@ describe('KlineSummaryDialog Chan section', () => {
     expect(screen.queryByText('纏論')).toBeNull()
   })
 })
+
+describe('buildChanOverlay range clipping (2855 regression)', () => {
+  // 后端用 250 根日 K 算缠论,图只画 120 天;超出范围的点会把主图时间轴往前拉,
+  // 同步到 MACD/RSI 副图时 lightweight-charts 抛 "Value is null",整组图坏掉。
+  const range = { from: '2026-01-10', to: '2026-01-25' }
+
+  it('clips line points to the chart range and interpolates the boundary', () => {
+    const o = buildChanOverlay(LEVEL, { colors, label: (t, b) => `${b ? 'B' : 'S'}${t}`, range })
+    const all = [...o.biLine, ...o.biPending, ...o.segLine, ...o.segPending, ...o.zsBoxes.flatMap(b => [...b.top, ...b.bottom])]
+    const key = (t: { year: number; month: number; day: number }) => `${t.year}-${String(t.month).padStart(2, '0')}-${String(t.day).padStart(2, '0')}`
+    expect(all.every(p => key(p.time) >= range.from && key(p.time) <= range.to)).toBe(true)
+    expect(o.biLine[0]).toEqual({ time: day('2026-01-10'), value: 20 })
+    // 未确定笔 01-20(15) → 01-28(25),在 01-25 截断:15 + (25-15) * 5/8
+    expect(o.biPending[o.biPending.length - 1].time).toEqual(day('2026-01-25'))
+    expect(o.biPending[o.biPending.length - 1].value).toBeCloseTo(15 + 10 * 5 / 8, 6)
+  })
+
+  it('drops markers and pivots entirely outside the range', () => {
+    const o = buildChanOverlay(
+      { ...LEVEL, zs: [{ begin_time: '2025-12-01', end_time: '2025-12-20', zd: 1, zg: 2, sure: true }] },
+      { colors, label: (t, b) => `${b ? 'B' : 'S'}${t}`, range: { from: '2026-01-15', to: '2026-01-31' } },
+    )
+    expect(o.zsBoxes).toEqual([])
+    expect(o.markers.map(m => m.text)).toEqual(['B2'])
+  })
+})

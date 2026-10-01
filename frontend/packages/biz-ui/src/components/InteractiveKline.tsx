@@ -404,6 +404,9 @@ export default function InteractiveKline(props: {
       const overlay = buildChanOverlay(chanLevel, {
         colors: { buy: palette.up.bright, sell: palette.down.bright, bi: palette.flat, seg: palette.flat, zs: marketColorWithAlpha(palette.flat, 0.55) },
         label: chanPointLabel,
+        range: series.klines.length
+          ? { from: series.klines[0].date, to: series.klines[series.klines.length - 1].date }
+          : undefined,
       })
       const chanLine = (points: unknown[], color: string, lineWidth: number, lineStyle?: number) => {
         const line = addLine(chart, LW, { color, lineWidth, ...(lineStyle == null ? {} : { lineStyle }) })

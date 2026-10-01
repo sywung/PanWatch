@@ -6,6 +6,7 @@ HTTP 层。缓存仍固定保存在项目根目录的 ``data/``，避免移动�
 """
 import json
 import os
+import re
 import time
 import logging
 import concurrent.futures
@@ -19,6 +20,14 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DATA_DIR = PROJECT_ROOT / "data"
 CACHE_FILE = DATA_DIR / "stock_list_cache.json"
 CACHE_TTL = 86400 * 7  # 7 days
+
+TWSE_STOCK_LIST_URL = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"
+TPEX_STOCK_LIST_URL = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes"
+TW_SYMBOL_RE = re.compile(r"^(\d{4}|00\d{2,4}[A-Z]?)$")
+
+# OpenCC 体积较大且只在台股名称搜索时需要，因此惰性初始化。
+_OPENCC_CONVERTER = None
+_OPENCC_INITIALIZED = False
 
 # 东方财富 A 股（使用 push2delay 域名，避免重定向）
 EASTMONEY_URL = "http://80.push2delay.eastmoney.com/api/qt/clist/get"
@@ -73,8 +82,11 @@ def _load_cache() -> list[dict] | None:
     try:
         with open(CACHE_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
+        stocks = data["stocks"]
         if time.time() - data.get("ts", 0) < CACHE_TTL:
-            return data["stocks"]
+            # 没有台股的旧版本缓存需要立即升级，不能继续沿用原 TTL。
+            if any(item.get("market") == "TW" for item in stocks if isinstance(item, dict)):
+                return stocks
     except (json.JSONDecodeError, KeyError):
         pass
     return None
@@ -260,9 +272,59 @@ def _fetch_from_akshare() -> list[dict]:
     return stocks
 
 
-def refresh_stock_list() -> list[dict]:
-    """拉取 A 股和港股列表并缓存"""
+def _fetch_twse_raw() -> list[dict]:
+    """获取 TWSE 上市股票和 ETF 原始列表"""
+    resp = httpx.get(TWSE_STOCK_LIST_URL, headers=HEADERS, timeout=30)
+    resp.raise_for_status()
+    data = resp.json()
+    return data if isinstance(data, list) else []
+
+
+def _fetch_tpex_raw() -> list[dict]:
+    """获取 TPEx 上柜股票和 ETF 原始列表"""
+    resp = httpx.get(TPEX_STOCK_LIST_URL, headers=HEADERS, timeout=30)
+    resp.raise_for_status()
+    data = resp.json()
+    return data if isinstance(data, list) else []
+
+
+def _fetch_tw_stock_list() -> list[dict]:
+    """合并 TWSE 和 TPEx 列表，并过滤非股票类代码"""
+    rows = []
+    try:
+        rows.extend((row, "Code", "Name") for row in _fetch_twse_raw())
+    except Exception as e:
+        logger.warning(f"TWSE 获取台股列表失败: {e}")
+    try:
+        rows.extend((row, "SecuritiesCompanyCode", "CompanyName") for row in _fetch_tpex_raw())
+    except Exception as e:
+        logger.warning(f"TPEx 获取台股列表失败: {e}")
+
     stocks = []
+    seen = set()
+    for row, code_key, name_key in rows:
+        if not isinstance(row, dict):
+            continue
+        symbol = str(row.get(code_key) or "").strip().upper()
+        name = str(row.get(name_key) or "").strip()
+        if not symbol or not name or not TW_SYMBOL_RE.fullmatch(symbol) or symbol in seen:
+            continue
+        seen.add(symbol)
+        stocks.append({"symbol": symbol, "name": name, "market": "TW"})
+    return stocks
+
+
+def refresh_stock_list() -> list[dict]:
+    """拉取台股、A 股和港股等列表并缓存"""
+    stocks = []
+
+    # 台股: TWSE 上市 + TPEx 上柜，放在清单最前面
+    try:
+        tw_stocks = _fetch_tw_stock_list()
+        stocks.extend(tw_stocks)
+        logger.info(f"获取台股列表成功: {len(tw_stocks)} 只")
+    except Exception as e:
+        logger.warning(f"获取台股列表失败: {e}")
 
     # A 股: 东方财富优先，akshare 备用
     try:
@@ -398,10 +460,40 @@ def _realtime_search(query: str, market: str = "", limit: int = 20) -> list[dict
 
 
 def search_stocks(query: str, market: str = "", limit: int = 20) -> list[dict]:
-    """搜索股票 - 优先使用实时搜索，失败则使用缓存"""
+    """搜索股票；台股使用缓存，全市场搜索时台股结果优先"""
     q = query.strip()
     if not q:
         return []
+
+    if market == "TW":
+        return _cached_search(q, market, limit)
+
+    if market == "":
+        tw_results = _cached_search(q, "TW", limit)
+        realtime_results = _realtime_search(q, market, limit)
+        cached_results = _cached_search(q, market, limit)
+        results = []
+        seen = set()
+        for item in (*tw_results, *realtime_results):
+            key = (item.get("market"), item.get("symbol"))
+            if key in seen:
+                continue
+            seen.add(key)
+            results.append(item)
+            if len(results) >= limit:
+                break
+        if len(results) < limit:
+            for item in cached_results:
+                if item.get("market") == "TW":
+                    continue
+                key = (item.get("market"), item.get("symbol"))
+                if key in seen:
+                    continue
+                seen.add(key)
+                results.append(item)
+                if len(results) >= limit:
+                    break
+        return results
 
     # 尝试实时搜索
     results = _realtime_search(q, market, limit)
@@ -437,16 +529,33 @@ def _cached_search(query: str, market: str = "", limit: int = 20) -> list[dict]:
     if not q:
         return []
 
+    query_variants = {q}
+    if market == "TW":
+        converter = _get_opencc_converter()
+        if converter is not None:
+            try:
+                query_variants.add(converter.convert(query.strip()).upper())
+            except Exception as e:
+                logger.warning(f"OpenCC 转换失败: {e}")
+
     results = []
     for s in stocks:
         if market and s["market"] != market:
             continue
         code = s["symbol"].upper()
         name = s["name"].upper()
+        names = {name}
+        if market == "TW" and len(query_variants) > 1:
+            converter = _get_opencc_converter()
+            if converter is not None:
+                try:
+                    names.add(converter.convert(s["name"]).upper())
+                except Exception as e:
+                    logger.warning(f"OpenCC 转换失败: {e}")
         # 代码前缀匹配优先
         if code.startswith(q):
             results.append((0, s))
-        elif q in name:
+        elif any(variant in candidate for variant in query_variants for candidate in names):
             results.append((1, s))
         elif q in code:
             results.append((2, s))
@@ -456,3 +565,18 @@ def _cached_search(query: str, market: str = "", limit: int = 20) -> list[dict]:
 
     results.sort(key=lambda x: x[0])
     return [r[1] for r in results[:limit]]
+
+
+def _get_opencc_converter():
+    """惰性创建 OpenCC 转换器，未安装时跳过繁简转换"""
+    global _OPENCC_CONVERTER, _OPENCC_INITIALIZED
+    if _OPENCC_INITIALIZED:
+        return _OPENCC_CONVERTER
+    _OPENCC_INITIALIZED = True
+    try:
+        from opencc import OpenCC
+
+        _OPENCC_CONVERTER = OpenCC("s2t")
+    except ImportError:
+        logger.debug("未安装 OpenCC，跳过台股繁简转换")
+    return _OPENCC_CONVERTER

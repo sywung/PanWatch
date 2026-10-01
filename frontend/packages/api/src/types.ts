@@ -4,6 +4,7 @@ export interface AIModel {
   service_id: number
   model: string
   is_default: boolean
+  extra_params: Record<string, unknown>
 }
 
 export interface AIService {

@@ -229,7 +229,7 @@ export const configuration = {
     },
     ai: {
       title: 'AI 服务商 & 模型', description: '连接你的 AI 服务并设置默认模型', addProvider: '添加服务商', empty: '暂无 AI 服务商，点击“添加服务商”创建',
-      addModel: '模型', discover: '嗅探模型（自动发现可用模型）', test: '测试模型', setDefault: '设为默认',
+      addModel: '模型', discover: '嗅探模型（自动发现可用模型）', test: '测试模型', setDefault: '设为默认', extraParams: '额外参数',
     },
     notifications: { title: '通知渠道', description: '推送到 Telegram/Bark 等渠道', add: '添加', empty: '暂无通知渠道，点击“添加”创建', sendTest: '发送测试', setDefault: '设为默认' },
     appearance: {
@@ -250,7 +250,7 @@ export const configuration = {
     feedback: { title: '建议反馈', description: '用于评估推送质量与策略迭代', refresh: '刷新', days: '近 {{days}} 天', total: '反馈', useful: '有用', useless: '没用', usefulRate: '有用率', byAgent: '按 Agent', empty: '暂无反馈数据' },
     dialogs: {
       providerEdit: '编辑 AI 服务商', providerAdd: '添加 AI 服务商', providerDescription: '配置 AI 服务商的 API 连接信息', name: '名称', baseUrl: '服务地址', apiKey: 'API Key', providerPlaceholder: '如 OpenAI、智谱、DeepSeek', cancel: '取消', save: '保存', create: '创建',
-      modelEdit: '编辑模型', modelAdd: '添加模型', modelDescription: '配置 AI 模型', provider: '所属服务商', providerSelect: '选择服务商', displayName: '显示名称', optionalDefault: '（选填，默认同模型标识）', modelNamePlaceholder: '不填则使用模型标识', modelIdentifier: '模型标识', discoverHint: '（可用服务商上的“嗅探”批量发现）', modelPlaceholder: '请先选择服务商',
+      modelEdit: '编辑模型', modelAdd: '添加模型', modelDescription: '配置 AI 模型', provider: '所属服务商', providerSelect: '选择服务商', displayName: '显示名称', optionalDefault: '（选填，默认同模型标识）', modelNamePlaceholder: '不填则使用模型标识', modelIdentifier: '模型标识', discoverHint: '（可用服务商上的“嗅探”批量发现）', modelPlaceholder: '请先选择服务商', extraParamsLabel: '额外请求参数（JSON，选填）', extraParamsDescription: '通过 OpenAI SDK 的 extra_body 字段发送给此模型。留空则不附加参数。示例：', extraParamsInvalid: '请输入有效的 JSON 对象，且不要包含请求保留字段。',
       discovered: '发现 {{count}} 个模型', discoveredDescription: '勾选要添加的模型，并可指定一个默认模型', selected: '已选', selectAll: '全选', deselectAll: '取消全选', default: '默认', setDefault: '设默认', skip: '跳过', adding: '添加中…', addCount: '添加 {{count}} 个',
       channelEdit: '编辑通知渠道', channelAdd: '添加通知渠道', channelDescription: '配置通知推送方式', channelName: '名称', channelType: '类型', optional: '选填',
     },

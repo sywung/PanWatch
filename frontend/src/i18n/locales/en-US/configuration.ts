@@ -232,7 +232,7 @@ export const configuration = {
     },
     ai: {
       title: 'AI services & models', description: 'Connect AI services and set a default model', addProvider: 'Add service', empty: 'No AI services yet. Click “Add service” to create one.',
-      addModel: 'Model', discover: 'Discover models', test: 'Test model', setDefault: 'Set as default',
+      addModel: 'Model', discover: 'Discover models', test: 'Test model', setDefault: 'Set as default', extraParams: 'Extra params',
     },
     notifications: { title: 'Notification channels', description: 'Send to Telegram, Bark, and other channels', add: 'Add', empty: 'No notification channels yet. Click “Add” to create one.', sendTest: 'Send test', setDefault: 'Set as default' },
     appearance: {
@@ -253,7 +253,7 @@ export const configuration = {
     feedback: { title: 'Feedback', description: 'Evaluate notification quality and guide strategy iteration', refresh: 'Refresh', days: 'Last {{days}} days', total: 'Feedback', useful: 'Useful', useless: 'Not useful', usefulRate: 'Useful rate', byAgent: 'By Agent', empty: 'No feedback yet' },
     dialogs: {
       providerEdit: 'Edit AI service', providerAdd: 'Add AI service', providerDescription: 'Configure the AI service API connection', name: 'Name', baseUrl: 'Base URL', apiKey: 'API key', providerPlaceholder: 'For example OpenAI, Zhipu, DeepSeek', cancel: 'Cancel', save: 'Save', create: 'Create',
-      modelEdit: 'Edit model', modelAdd: 'Add model', modelDescription: 'Configure the AI model', provider: 'Service', providerSelect: 'Select a service', displayName: 'Display name', optionalDefault: '(optional; defaults to model ID)', modelNamePlaceholder: 'Leave empty to use the model ID', modelIdentifier: 'Model ID', discoverHint: '(can be batch-discovered from the service)', modelPlaceholder: 'Select a service first',
+      modelEdit: 'Edit model', modelAdd: 'Add model', modelDescription: 'Configure the AI model', provider: 'Service', providerSelect: 'Select a service', displayName: 'Display name', optionalDefault: '(optional; defaults to model ID)', modelNamePlaceholder: 'Leave empty to use the model ID', modelIdentifier: 'Model ID', discoverHint: '(can be batch-discovered from the service)', modelPlaceholder: 'Select a service first', extraParamsLabel: 'Extra request parameters (JSON, optional)', extraParamsDescription: 'Sent to this model through the OpenAI SDK extra_body field. Leave blank to use no extra parameters. Example:', extraParamsInvalid: 'Enter a valid JSON object without reserved request fields.',
       discovered: 'Found {{count}} models', discoveredDescription: 'Select models to add and optionally choose a default', selected: 'Selected', selectAll: 'Select all', deselectAll: 'Clear all', default: 'Default', setDefault: 'Set default', skip: 'Skip', adding: 'Adding…', addCount: 'Add {{count}}',
       channelEdit: 'Edit notification channel', channelAdd: 'Add notification channel', channelDescription: 'Configure notification delivery', channelName: 'Name', channelType: 'Type', optional: 'optional',
     },

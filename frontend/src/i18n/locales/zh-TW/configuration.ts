@@ -230,7 +230,7 @@ export const configuration = {
     },
     ai: {
       title: 'AI 服務商 & 模型', description: '連線你的 AI 服務並設定預設模型', addProvider: '新增服務商', empty: '暫無 AI 服務商，點選「新增服務商」建立',
-      addModel: '模型', discover: '嗅探模型（自動發現可用模型）', test: '測試模型', setDefault: '設為預設',
+      addModel: '模型', discover: '嗅探模型（自動發現可用模型）', test: '測試模型', setDefault: '設為預設', extraParams: '額外引數',
     },
     notifications: { title: '通知管道', description: '推播到 Telegram/Bark 等管道', add: '新增', empty: '暫無通知管道，點選「新增」建立', sendTest: '傳送測試', setDefault: '設為預設' },
     appearance: {
@@ -251,7 +251,7 @@ export const configuration = {
     feedback: { title: '建議反饋', description: '用於評估推播品質與策略迭代', refresh: '重新整理', days: '近 {{days}} 天', total: '反饋', useful: '有用', useless: '沒用', usefulRate: '有用率', byAgent: '按 Agent', empty: '暫無反饋資料' },
     dialogs: {
       providerEdit: '編輯 AI 服務商', providerAdd: '新增 AI 服務商', providerDescription: '設定 AI 服務商的 API 連線資訊', name: '名稱', baseUrl: '服務地址', apiKey: 'API Key', providerPlaceholder: '如 OpenAI、智譜、DeepSeek', cancel: '取消', save: '儲存', create: '建立',
-      modelEdit: '編輯模型', modelAdd: '新增模型', modelDescription: '設定 AI 模型', provider: '所屬服務商', providerSelect: '選擇服務商', displayName: '顯示名稱', optionalDefault: '（選填，預設與模型 ID 相同）', modelNamePlaceholder: '不填則使用模型標識', modelIdentifier: '模型標識', discoverHint: '（可用服務商上的「嗅探」批次發現）', modelPlaceholder: '請先選擇服務商',
+      modelEdit: '編輯模型', modelAdd: '新增模型', modelDescription: '設定 AI 模型', provider: '所屬服務商', providerSelect: '選擇服務商', displayName: '顯示名稱', optionalDefault: '（選填，預設與模型 ID 相同）', modelNamePlaceholder: '不填則使用模型標識', modelIdentifier: '模型標識', discoverHint: '（可用服務商上的「嗅探」批次發現）', modelPlaceholder: '請先選擇服務商', extraParamsLabel: '額外請求引數（JSON，選填）', extraParamsDescription: '通過 OpenAI SDK 的 extra_body 欄位傳送給此模型。留空則不附加引數。示例：', extraParamsInvalid: '請輸入有效的 JSON 物件，且不要包含請求保留欄位。',
       discovered: '發現 {{count}} 個模型', discoveredDescription: '勾選要新增的模型，並可指定一個預設模型', selected: '已選', selectAll: '全選', deselectAll: '取消全選', default: '預設', setDefault: '設預設', skip: '跳過', adding: '新增中…', addCount: '新增 {{count}} 個',
       channelEdit: '編輯通知管道', channelAdd: '新增通知管道', channelDescription: '設定通知推播方式', channelName: '名稱', channelType: '型別', optional: '選填',
     },

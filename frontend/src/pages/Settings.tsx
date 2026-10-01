@@ -14,6 +14,7 @@ import { useToast } from '@panwatch/base-ui/components/ui/toast'
 import { useTranslation } from 'react-i18next'
 import { useMarketColors } from '@/hooks/use-market-colors'
 import type { MarketColorPreference } from '@/lib/market-colors'
+import { formatModelExtraParams, parseModelExtraParams } from '@/lib/model-extra-params'
 
 interface Setting {
   key: string
@@ -98,6 +99,7 @@ interface ModelForm {
   name: string
   service_id: number | null
   model: string
+  extra_params: string
 }
 
 interface ChannelForm {
@@ -183,7 +185,7 @@ const CHANNEL_TYPE_FIELDS: Record<string, ChannelTypeDef> = {
 }
 
 const emptyServiceForm: ServiceForm = { name: '', base_url: '', api_key: '' }
-const emptyModelForm: ModelForm = { name: '', service_id: null, model: '' }
+const emptyModelForm: ModelForm = { name: '', service_id: null, model: '', extra_params: '' }
 const emptyChannelForm: ChannelForm = { name: '', type: 'telegram', config: {} }
 
 export default function SettingsPage() {
@@ -212,6 +214,7 @@ export default function SettingsPage() {
   const [modelDialogOpen, setModelDialogOpen] = useState(false)
   const [modelForm, setModelForm] = useState<ModelForm>(emptyModelForm)
   const [editModelId, setEditModelId] = useState<number | null>(null)
+  const [modelExtraParamsError, setModelExtraParamsError] = useState<string | null>(null)
 
   // 批量选择嗅探到的模型
   const [batchOpen, setBatchOpen] = useState(false)
@@ -528,21 +531,39 @@ export default function SettingsPage() {
   // Model CRUD
   const openModelDialog = (serviceId?: number, model?: AIModel) => {
     if (model) {
-      setModelForm({ name: model.name, service_id: model.service_id, model: model.model })
+      setModelForm({
+        name: model.name,
+        service_id: model.service_id,
+        model: model.model,
+        extra_params: formatModelExtraParams(model.extra_params),
+      })
       setEditModelId(model.id)
     } else {
       setModelForm({ ...emptyModelForm, service_id: serviceId ?? null })
       setEditModelId(null)
     }
+    setModelExtraParamsError(null)
     setModelDialogOpen(true)
   }
 
   const saveModel = async () => {
+    const parsedExtraParams = parseModelExtraParams(modelForm.extra_params)
+    if (!parsedExtraParams.ok) {
+      setModelExtraParamsError(configT(`configuration:settingsPage.dialogs.${parsedExtraParams.error}`))
+      return
+    }
+    setModelExtraParamsError(null)
+    const payload = {
+      name: modelForm.name,
+      service_id: modelForm.service_id,
+      model: modelForm.model,
+      extra_params: parsedExtraParams.value,
+    }
     try {
       if (editModelId) {
-        await fetchAPI(`/providers/models/${editModelId}`, { method: 'PUT', body: JSON.stringify(modelForm) })
+        await fetchAPI(`/providers/models/${editModelId}`, { method: 'PUT', body: JSON.stringify(payload) })
       } else {
-        await fetchAPI('/providers/models', { method: 'POST', body: JSON.stringify(modelForm) })
+        await fetchAPI('/providers/models', { method: 'POST', body: JSON.stringify(payload) })
       }
       setModelDialogOpen(false)
       load()
@@ -864,6 +885,14 @@ export default function SettingsPage() {
                             <Cpu className="w-3 h-3 text-muted-foreground" />
                             <span className="text-[12px] font-medium text-foreground">{m.name}</span>
                             <span className="text-[11px] text-muted-foreground font-mono">{m.model}</span>
+                            {Object.keys(m.extra_params || {}).length > 0 && (
+                              <span
+                                className="rounded-full border border-primary/20 bg-primary/5 px-1.5 py-0.5 text-[9px] text-primary"
+                                title={JSON.stringify(m.extra_params, null, 2)}
+                              >
+                                {configT('configuration:settingsPage.ai.extraParams')}
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center gap-0.5">
                             <Button
@@ -1340,6 +1369,28 @@ export default function SettingsPage() {
                 placeholder={modelForm.service_id ? 'gpt-4o / glm-4-flash' : configT('configuration:settingsPage.dialogs.modelPlaceholder')}
                 className="font-mono"
               />
+            </div>
+            <div>
+              <Label htmlFor="model-extra-params">{configT('configuration:settingsPage.dialogs.extraParamsLabel')}</Label>
+              <textarea
+                id="model-extra-params"
+                value={modelForm.extra_params}
+                onChange={e => {
+                  setModelForm({ ...modelForm, extra_params: e.target.value })
+                  setModelExtraParamsError(null)
+                }}
+                rows={5}
+                placeholder={'{"chat_template_kwargs": {"enable_thinking": false}}'}
+                className="mt-1 w-full resize-y rounded-md border border-input bg-background px-3 py-2 font-mono text-xs text-foreground shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              />
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                {configT('configuration:settingsPage.dialogs.extraParamsDescription')}
+                {' '}
+                <code>{'{"chat_template_kwargs": {"enable_thinking": false}}'}</code>
+              </p>
+              {modelExtraParamsError && (
+                <p role="alert" className="mt-1 text-[11px] text-destructive">{modelExtraParamsError}</p>
+              )}
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="ghost" onClick={() => setModelDialogOpen(false)}>{configT('configuration:settingsPage.dialogs.cancel')}</Button>

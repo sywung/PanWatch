@@ -10,6 +10,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -46,6 +47,7 @@ class AIModel(Base):
     )
     model = Column(String, nullable=False)  # 实际模型标识，如 "glm-4-flash"
     is_default = Column(Boolean, default=False)
+    extra_params = Column(JSON, default=dict, server_default=text("'{}'"), nullable=False)
     created_at = Column(DateTime, server_default=func.now())
 
     service = relationship("AIService", back_populates="models")

@@ -308,8 +308,20 @@ class FailoverAIClient:
         raise last_exc or RuntimeError("所有候选模型均失败(流式)")
 
 
-def _make_client(base_url: str, api_key: str, model: str, proxy: str) -> AIClient:
-    return AIClient(base_url=base_url, api_key=api_key, model=model, proxy=proxy)
+def _make_client(
+    base_url: str,
+    api_key: str,
+    model: str,
+    proxy: str,
+    extra_body: dict | None = None,
+) -> AIClient:
+    return AIClient(
+        base_url=base_url,
+        api_key=api_key,
+        model=model,
+        proxy=proxy,
+        extra_body=extra_body,
+    )
 
 
 def build_failover_client(
@@ -347,6 +359,7 @@ def build_failover_client(
                     primary_service.api_key,
                     primary_model.model,
                     proxy,
+                    extra_body=getattr(primary_model, "extra_params", None),
                 ),
                 f"{primary_service.name}/{primary_model.model}",
             )
@@ -386,7 +399,13 @@ def build_failover_client(
                 continue
             candidates.append(
                 (
-                    _make_client(svc.base_url, svc.api_key, m.model, proxy),
+                    _make_client(
+                        svc.base_url,
+                        svc.api_key,
+                        m.model,
+                        proxy,
+                        extra_body=getattr(m, "extra_params", None),
+                    ),
                     f"{svc.name}/{m.model}",
                 )
             )

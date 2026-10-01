@@ -2044,6 +2044,15 @@ def _m128_assistant_trusted_results(conn: Connection) -> None:
     )
 
 
+def _m9001_ai_model_extra_params(conn: Connection) -> None:
+    _add_column_if_missing(
+        conn,
+        "ai_models",
+        "extra_params",
+        "ALTER TABLE ai_models ADD COLUMN extra_params TEXT DEFAULT '{}'",
+    )
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(101, "agent_config_kind_and_visibility", _m101_agent_config_kind),
     Migration(102, "backfill_agent_kind_data", _m102_backfill_agent_kind),
@@ -2073,6 +2082,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(126, "assistant_task_events", _m126_assistant_task_events),
     Migration(127, "assistant_trace_metrics", _m127_assistant_trace_metrics),
     Migration(128, "assistant_trusted_results", _m128_assistant_trusted_results),
+    Migration(9001, "ai_model_extra_params", _m9001_ai_model_extra_params),
 )
 
 

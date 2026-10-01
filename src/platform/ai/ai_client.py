@@ -1,4 +1,5 @@
 import base64
+from copy import deepcopy
 import logging
 from pathlib import Path
 
@@ -13,7 +14,14 @@ logger = logging.getLogger(__name__)
 class AIClient:
     """OpenAI 协议兼容的 AI 客户端"""
 
-    def __init__(self, base_url: str, api_key: str, model: str = "", proxy: str = ""):
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str,
+        model: str = "",
+        proxy: str = "",
+        extra_body: dict | None = None,
+    ):
         kwargs = {
             "base_url": base_url,
             "api_key": api_key,
@@ -26,6 +34,7 @@ class AIClient:
         self.base_url = base_url
         self.api_key = api_key
         self.model = model
+        self.extra_body = deepcopy(extra_body) if extra_body else None
         self.total_tokens_used = 0
         self.last_usage = None
 
@@ -65,6 +74,8 @@ class AIClient:
 
         try:
             create_kwargs = {"model": self.model, "messages": messages}
+            if self.extra_body:
+                create_kwargs["extra_body"] = self.extra_body
             if temperature is not None:
                 create_kwargs["temperature"] = temperature
             # OTel gen_ai span(默认关闭时为 no-op);token 用量在拿到 usage 后回填。
@@ -106,6 +117,8 @@ class AIClient:
         """
         try:
             create_kwargs: dict = {"model": self.model, "messages": messages}
+            if self.extra_body:
+                create_kwargs["extra_body"] = self.extra_body
             if temperature is not None:
                 create_kwargs["temperature"] = temperature
             if max_tokens is not None:
@@ -145,6 +158,8 @@ class AIClient:
                 "messages": messages,
                 "tools": tools,
             }
+            if self.extra_body:
+                create_kwargs["extra_body"] = self.extra_body
             if temperature is not None:
                 create_kwargs["temperature"] = temperature
             with otel.llm_span(self.model, operation="chat") as _span:
@@ -184,6 +199,8 @@ class AIClient:
             "messages": messages,
             "stream": True,
         }
+        if self.extra_body:
+            create_kwargs["extra_body"] = self.extra_body
         if temperature is not None:
             create_kwargs["temperature"] = temperature
         if tools:

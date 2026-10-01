@@ -1,7 +1,7 @@
 import time
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
@@ -11,6 +11,25 @@ from src.platform.persistence.models import AIModel, AIService
 from src.web.errors import ai_api_error, api_error
 
 router = APIRouter()
+
+_RESERVED_EXTRA_PARAM_KEYS = {
+    "model",
+    "messages",
+    "stream",
+    "tools",
+    "tool_choice",
+    "max_tokens",
+    "temperature",
+}
+
+
+def _validate_extra_params(value):
+    if not isinstance(value, dict):
+        raise ValueError("額外參數必須是 JSON 物件")
+    reserved = sorted(_RESERVED_EXTRA_PARAM_KEYS.intersection(value))
+    if reserved:
+        raise ValueError(f"額外參數不可包含保留鍵：{', '.join(reserved)}")
+    return value
 
 
 # --- Service ---
@@ -34,6 +53,7 @@ class ModelResponse(BaseModel):
     service_id: int
     model: str
     is_default: bool
+    extra_params: dict = Field(default_factory=dict)
 
     class Config:
         from_attributes = True
@@ -69,6 +89,7 @@ def _service_to_response(service: AIService) -> dict:
                 "service_id": m.service_id,
                 "model": m.model,
                 "is_default": m.is_default,
+                "extra_params": m.extra_params or {},
             }
             for m in service.models
         ],
@@ -116,6 +137,12 @@ class ModelCreate(BaseModel):
     service_id: int
     model: str
     is_default: bool = False
+    extra_params: dict = Field(default_factory=dict)
+
+    @field_validator("extra_params", mode="before")
+    @classmethod
+    def validate_extra_params(cls, value):
+        return _validate_extra_params(value)
 
 
 class ModelUpdate(BaseModel):
@@ -123,6 +150,12 @@ class ModelUpdate(BaseModel):
     service_id: int | None = None
     model: str | None = None
     is_default: bool | None = None
+    extra_params: dict | None = None
+
+    @field_validator("extra_params", mode="before")
+    @classmethod
+    def validate_extra_params(cls, value):
+        return None if value is None else _validate_extra_params(value)
 
 
 class BatchModelItem(BaseModel):
@@ -170,6 +203,8 @@ def update_model(model_id: int, body: ModelUpdate, db: Session = Depends(get_db)
         db.query(AIModel).update({"is_default": False})
 
     for key, value in data.items():
+        if key == "extra_params" and value is None:
+            continue
         setattr(model, key, value)
 
     db.commit()
@@ -202,6 +237,7 @@ async def test_model(model_id: int, db: Session = Depends(get_db)):
             base_url=service.base_url,
             api_key=service.api_key,
             model=model.model,
+            extra_body=model.extra_params,
         )
         # 测试连通性时不下发 temperature:部分模型(如 o1/claude-opus 等)不接受该参数,
         # 省略后对所有模型都安全,避免因 temperature 报错而误判模型不可用。

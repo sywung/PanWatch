@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Bell, ChevronDown, ExternalLink, FileSearch, ShieldAlert, Sparkles } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AssistantNextAction, AssistantResult } from '@panwatch/api'
+import { DEFAULT_MARKET } from '@panwatch/biz-ui'
 
 interface AssistantResultCardProps {
   result: AssistantResult
@@ -88,7 +89,7 @@ export function AssistantResultCard({
     const price = Number(targetPrice)
     if (!Number.isFinite(price) || price <= 0) return
     const args = alertAction.payload.arguments || {}
-    const market = String(args.market || 'CN').toUpperCase()
+    const market = String(args.market || DEFAULT_MARKET).toUpperCase()
     const symbol = String(args.symbol || '').toUpperCase()
     if (!symbol) return
     const prompt = tr('alertPrompt', {

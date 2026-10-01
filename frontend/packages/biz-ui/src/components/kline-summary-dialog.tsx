@@ -7,6 +7,7 @@ import { Button } from '@panwatch/base-ui/components/ui/button'
 import { buildKlineSuggestion } from '@/lib/kline-scorer'
 import { TechnicalBadge, technicalToneFromSuggestionAction } from '@panwatch/biz-ui/components/technical-badge'
 import { KlineIndicators, localizeTechnicalStatus } from '@panwatch/biz-ui/components/kline-indicators'
+import { DEFAULT_MARKET } from '../market'
 
 export interface KlineSummaryData {
   timeframe?: string
@@ -144,7 +145,7 @@ export function KlineSummaryDialog({
     setLoading(true)
     setError(null)
     setSummary(null)
-    const resolvedMarket = market || 'CN'
+    const resolvedMarket = market || DEFAULT_MARKET
     fetchAPI<KlineSummaryResponse>(`/klines/${encodeURIComponent(symbol)}/summary?market=${encodeURIComponent(resolvedMarket)}`)
       .then((data) => setSummary(data.summary || null))
       .catch((reason) => setError(reason instanceof Error ? reason.message : String(reason)))

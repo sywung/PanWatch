@@ -9,6 +9,7 @@ import {
   type HistoryComparisonResponse,
 } from '@panwatch/api'
 import { getMarketBadge } from '@panwatch/biz-ui'
+import { DEFAULT_MARKET, marketCurrency } from '../market'
 import { useLocalStorage } from '@/lib/utils'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@panwatch/base-ui/components/ui/dialog'
 import { Button } from '@panwatch/base-ui/components/ui/button'
@@ -154,7 +155,7 @@ function formatMarketCap(value: number | null | undefined, market?: string, engl
   if (!isFinite(n)) return '--'
   const m = String(market || '').toUpperCase()
   const abs = Math.abs(n)
-  const currency = m === 'US' ? 'USD' : m === 'HK' ? 'HKD' : 'CNY'
+  const currency = marketCurrency(m)
 
   // Quote providers normalize market capitalization in local-currency 100M units.
   // Convert that unit before adding an English currency suffix for every market.
@@ -166,7 +167,8 @@ function formatMarketCap(value: number | null | undefined, market?: string, engl
 
   if (m === 'US') return `${n.toFixed(2)}亿美元`
   if (m === 'HK') return `${n.toFixed(2)}亿港元`
-  return `${n.toFixed(2)}亿元`
+  if (m === 'TW') return `${n.toFixed(2)}亿新台币`
+  return `${n.toFixed(2)}亿元（人民币）`
 }
 
 function formatTime(isoTime?: string, locale = 'zh-CN'): string {
@@ -363,7 +365,7 @@ export default function StockInsightModal(props: {
     return label
   }
   const symbol = String(props.symbol || '').trim()
-  const market = String(props.market || 'CN').trim().toUpperCase()
+  const market = String(props.market || DEFAULT_MARKET).trim().toUpperCase()
   const [loading, setLoading] = useState(false)
   const [tab, setTab] = useState<InsightTab>('overview')
   const [newsHours, setNewsHours] = useLocalStorage<string>('stock_insight_news_hours', '168')
@@ -1276,7 +1278,7 @@ export default function StockInsightModal(props: {
             <div className="flex items-start justify-between gap-3 pr-10 md:pr-8">
               <div className="shrink-0">
                 <DialogTitle className="flex items-center gap-2 flex-wrap">
-                  <span className={`text-[10px] px-2 py-0.5 rounded ${badge.style}`}>{tr(`markets.${market}`)}</span>
+      {badge && <span className={`text-[10px] px-2 py-0.5 rounded ${badge.style}`}>{tr(`markets.${market}`)}</span>}
                   <span className="break-all">{resolvedName}</span>
                   <span className="font-mono text-[12px] text-muted-foreground">({symbol})</span>
                 </DialogTitle>

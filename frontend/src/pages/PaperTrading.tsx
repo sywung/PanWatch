@@ -129,7 +129,7 @@ export default function PaperTradingPage() {
   // 资金配置
   const [configOpen, setConfigOpen] = useState(false)
   const [cfgTotal, setCfgTotal] = useState('')
-  const [cfgRatios, setCfgRatios] = useState<{ CN: string; HK: string; US: string }>({ CN: '', HK: '', US: '' })
+  const [cfgRatios, setCfgRatios] = useState<{ TW: string; CN: string; HK: string; US: string }>({ TW: '', CN: '', HK: '', US: '' })
   const [cfgSaving, setCfgSaving] = useState(false)
 
   // 通知设置
@@ -222,6 +222,7 @@ export default function PaperTradingPage() {
       setCfgTotal(String(Math.round(acc.initial_capital)))
       const a = acc.market_allocations || {}
       setCfgRatios({
+        TW: String(Math.round((a.TW ?? 0) * 100)),
         CN: String(Math.round((a.CN ?? 0) * 100)),
         HK: String(Math.round((a.HK ?? 0) * 100)),
         US: String(Math.round((a.US ?? 0) * 100)),
@@ -233,6 +234,7 @@ export default function PaperTradingPage() {
 
   const handleSaveConfig = async () => {
     const total = Number(cfgTotal)
+    const tw = Number(cfgRatios.TW) || 0
     const cn = Number(cfgRatios.CN) || 0
     const hk = Number(cfgRatios.HK) || 0
     const us = Number(cfgRatios.US) || 0
@@ -248,7 +250,7 @@ export default function PaperTradingPage() {
     try {
       await paperTradingApi.updateSettings({
         initial_capital: total,
-        market_allocations: { CN: cn / 100, HK: hk / 100, US: us / 100 },
+      market_allocations: { TW: tw / 100, CN: cn / 100, HK: hk / 100, US: us / 100 },
       })
       toast(message('configSaved'), 'success')
       setConfigOpen(false)
@@ -324,7 +326,7 @@ export default function PaperTradingPage() {
   }
 
   const totalPages = Math.ceil(tradesTotal / tradesPageSize)
-  const ratioSum = (Number(cfgRatios.CN) || 0) + (Number(cfgRatios.HK) || 0) + (Number(cfgRatios.US) || 0)
+  const ratioSum = (Number(cfgRatios.TW) || 0) + (Number(cfgRatios.CN) || 0) + (Number(cfgRatios.HK) || 0) + (Number(cfgRatios.US) || 0)
 
   return (
     <div className="space-y-5">
@@ -378,8 +380,8 @@ export default function PaperTradingPage() {
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-sm">
             <span className="text-muted-foreground text-xs">{tr('tradingMarket')}</span>
-            {(['ALL', 'CN', 'HK', 'US'] as const).map(m => {
-              const label = m === 'ALL' ? tr('all') : m === 'CN' ? tr('cn') : m === 'HK' ? tr('hk') : tr('us')
+            {(['ALL', 'TW', 'CN', 'HK', 'US'] as const).map(m => {
+              const label = m === 'ALL' ? tr('all') : m === 'TW' ? paperT('stocksPage.markets.tw') : m === 'CN' ? tr('cn') : m === 'HK' ? tr('hk') : tr('us')
               const active = marketView === m
               const ratio = m !== 'ALL' ? account.market_allocations?.[m] : undefined
               const isOff = m !== 'ALL' && (ratio ?? 0) <= 0
@@ -658,8 +660,8 @@ export default function PaperTradingPage() {
                   {tr('total', { ratio: ratioSum })}{ratioSum > 100 ? tr('over100') : ''}
                 </span>
               </div>
-              {(['CN', 'HK', 'US'] as const).map(m => {
-                const label = m === 'CN' ? tr('cn') : m === 'HK' ? tr('hk') : tr('us')
+              {(['TW', 'CN', 'HK', 'US'] as const).map(m => {
+                const label = m === 'TW' ? paperT('stocksPage.markets.tw') : m === 'CN' ? tr('cn') : m === 'HK' ? tr('hk') : tr('us')
                 const pct = Number(cfgRatios[m]) || 0
                 const amount = ((Number(cfgTotal) || 0) * pct) / 100
                 return (

@@ -78,9 +78,11 @@ export interface DashboardPortfolioSummary {
     total_assets: number
   }
   exchange_rates?: {
-    HKD_CNY: number
-    USD_CNY?: number
+    USD_TWD?: number | null
+    HKD_TWD?: number | null
+    CNY_TWD?: number | null
   }
+  base_currency?: 'TWD' | string
 }
 
 export interface DashboardWatchStock {
@@ -177,7 +179,7 @@ export interface DashboardRiskSignalItem extends StrategySignalItem {
 
 export interface DashboardOverviewResponse {
   generated_at: string
-  market: 'ALL' | 'CN' | 'HK' | 'US'
+  market: 'ALL' | import('@panwatch/biz-ui').MarketCode
   snapshot_date: string
   data_freshness: {
     strategy_snapshot_date: string
@@ -260,7 +262,7 @@ export const dashboardApi = {
     ),
 
   overview: (params?: {
-    market?: 'ALL' | 'CN' | 'HK' | 'US'
+  market?: 'ALL' | import('@panwatch/biz-ui').MarketCode
     action_limit?: number
     risk_limit?: number
     days?: number

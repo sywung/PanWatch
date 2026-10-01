@@ -30,6 +30,7 @@ import { localizeAgentDescription, localizeAgentName } from '@/i18n/agent-labels
 import { getCurrentLocale } from '@/i18n'
 import { marketSignTextClass } from '@/lib/market-colors'
 import { parseAssistantPortfolioTarget } from '@/lib/assistant-navigation'
+import { BASE_CURRENCY, DEFAULT_MARKET, getMarketBadge, marketCurrency } from '@panwatch/biz-ui'
 
 interface AgentResult {
   success?: boolean
@@ -113,8 +114,9 @@ interface PortfolioSummary {
     total_assets: number
   }
   exchange_rates?: {
-    HKD_CNY: number
-    USD_CNY?: number
+    USD_TWD?: number | null
+    HKD_TWD?: number | null
+    CNY_TWD?: number | null
   }
   quotes?: Record<string, { current_price: number | null; change_pct: number | null }>
 }
@@ -232,7 +234,7 @@ interface PriceAlertRuleSummary {
   enabled: boolean
 }
 
-const emptyStockForm: StockForm = { symbol: '', name: '', market: 'CN' }
+const emptyStockForm: StockForm = { symbol: '', name: '', market: DEFAULT_MARKET }
 const emptyAccountForm: AccountForm = { name: '', available_funds: '0' }
 
 const buildQuoteItemsFrom = (stockList: Stock[], portfolio: PortfolioSummary | null): QuoteRequestItem[] => {
@@ -266,7 +268,7 @@ const toQuoteMap = (rows: QuoteResponse[]): Record<string, { current_price: numb
 const toPriceAlertSummaryMap = (rows: PriceAlertRuleSummary[]): Record<string, { total: number; enabled: number }> => {
   const map: Record<string, { total: number; enabled: number }> = {}
   for (const row of rows || []) {
-    const key = `${String(row.market || 'CN').toUpperCase()}:${String(row.stock_symbol || '').toUpperCase()}`
+    const key = `${String(row.market || DEFAULT_MARKET).toUpperCase()}:${String(row.stock_symbol || '').toUpperCase()}`
     if (!map[key]) map[key] = { total: 0, enabled: 0 }
     map[key].total += 1
     if (row.enabled) map[key].enabled += 1
@@ -282,8 +284,7 @@ const mergePortfolioQuotes = (
 ): PortfolioSummary | null => {
   if (!portfolio) return null
 
-  const hkdRate = portfolio.exchange_rates?.HKD_CNY ?? 0.92
-  const usdRate = portfolio.exchange_rates?.USD_CNY ?? 7.25
+  const rates = portfolio.exchange_rates
 
   let grandMarketValue = 0
   let grandCost = 0
@@ -299,9 +300,10 @@ const mergePortfolioQuotes = (
       const quote = quotes[`${pos.market}:${pos.symbol}`]
       const current_price = quote?.current_price ?? pos.current_price ?? null
       const change_pct = quote?.change_pct ?? pos.change_pct ?? null
-      const rate = pos.market === 'HK' ? hkdRate : pos.market === 'US' ? usdRate : 1
+      const currency = marketCurrency(pos.market)
+      const rate = currency === BASE_CURRENCY ? 1 : rates?.[`${currency}_${BASE_CURRENCY}` as 'USD_TWD' | 'HKD_TWD' | 'CNY_TWD'] ?? null
 
-      const cost = pos.cost_price * pos.quantity * rate
+      const cost = rate == null ? 0 : pos.cost_price * pos.quantity * rate
       accCost += cost
 
       let market_value: number | null = null
@@ -311,7 +313,7 @@ const mergePortfolioQuotes = (
       let daily_pnl: number | null = null
       let daily_pnl_pct: number | null = null
 
-      if (current_price != null) {
+      if (current_price != null && rate != null) {
         market_value = current_price * pos.quantity
         market_value_cny = market_value * rate
         accMarketValue += market_value_cny
@@ -319,7 +321,7 @@ const mergePortfolioQuotes = (
         pnl_pct = cost > 0 ? (pnl / cost * 100) : 0
       }
 
-      if (current_price != null && change_pct != null && change_pct !== -100) {
+      if (current_price != null && rate != null && change_pct != null && change_pct !== -100) {
         const prev = current_price / (1 + change_pct / 100)
         if (isFinite(prev) && prev > 0) {
           daily_pnl = round2((current_price - prev) * pos.quantity * rate)
@@ -331,7 +333,7 @@ const mergePortfolioQuotes = (
       return {
         ...pos,
         current_price,
-        current_price_cny: current_price != null ? current_price * rate : null,
+        current_price_cny: current_price != null && rate != null ? current_price * rate : null,
         change_pct,
         market_value,
         market_value_cny,
@@ -339,7 +341,7 @@ const mergePortfolioQuotes = (
         pnl_pct,
         daily_pnl,
         daily_pnl_pct,
-        exchange_rate: pos.market === 'HK' || pos.market === 'US' ? rate : null,
+        exchange_rate: currency === BASE_CURRENCY ? null : rate,
       }
     })
 
@@ -437,13 +439,13 @@ export default function StocksPage() {
   // Kline Dialog
   const [klineDialogOpen, setKlineDialogOpen] = useState(false)
   const [klineDialogSymbol, setKlineDialogSymbol] = useState('')
-  const [klineDialogMarket, setKlineDialogMarket] = useState('CN')
+  const [klineDialogMarket, setKlineDialogMarket] = useState<string>(DEFAULT_MARKET)
   const [klineDialogName, setKlineDialogName] = useState<string | undefined>(undefined)
   const [klineDialogHasPosition, setKlineDialogHasPosition] = useState<boolean>(false)
   const [klineDialogInitialSummary, setKlineDialogInitialSummary] = useState<KlineSummary | null>(null)
   const [insightOpen, setInsightOpen] = useState(false)
   const [insightSymbol, setInsightSymbol] = useState('')
-  const [insightMarket, setInsightMarket] = useState('CN')
+  const [insightMarket, setInsightMarket] = useState<string>(DEFAULT_MARKET)
   const [insightName, setInsightName] = useState<string | undefined>(undefined)
   const [insightHasPosition, setInsightHasPosition] = useState(false)
 
@@ -472,7 +474,7 @@ export default function StocksPage() {
 
   // Position form
   const [positionDialogOpen, setPositionDialogOpen] = useState(false)
-  const [positionForm, setPositionForm] = useState<PositionForm>({ account_id: 0, stock_id: 0, cost_price: '', quantity: '', invested_amount: '', trading_style: '', stock_symbol: '', stock_name: '', stock_market: 'CN' })
+  const [positionForm, setPositionForm] = useState<PositionForm>({ account_id: 0, stock_id: 0, cost_price: '', quantity: '', invested_amount: '', trading_style: '', stock_symbol: '', stock_name: '', stock_market: DEFAULT_MARKET })
   const [editPositionId, setEditPositionId] = useState<number | null>(null)
   const [positionDialogAccountId, setPositionDialogAccountId] = useState<number | null>(null)
   const [positionSearchQuery, setPositionSearchQuery] = useState('')
@@ -866,10 +868,10 @@ export default function StocksPage() {
 
   const openKlineDialog = useCallback((symbol: string, market: string, name?: string, hasPosition?: boolean) => {
     setKlineDialogSymbol(symbol)
-    setKlineDialogMarket(market || 'CN')
+    setKlineDialogMarket(market || DEFAULT_MARKET)
     setKlineDialogName(name)
     setKlineDialogHasPosition(!!hasPosition)
-    const m = market || 'CN'
+    const m = market || DEFAULT_MARKET
     setKlineDialogInitialSummary(klineSummaries[`${m}:${symbol}`] || null)
     setKlineDialogOpen(true)
   }, [klineSummaries])
@@ -901,7 +903,7 @@ export default function StocksPage() {
 
   const openStockDetail = useCallback((stockSymbol: string, stockMarket: string, stockName?: string, hasPosition?: boolean) => {
     setInsightSymbol(stockSymbol)
-    setInsightMarket(stockMarket || 'CN')
+    setInsightMarket(stockMarket || DEFAULT_MARKET)
     setInsightName(stockName)
     setInsightHasPosition(!!hasPosition)
     setInsightOpen(true)
@@ -1215,7 +1217,7 @@ export default function StocksPage() {
         trading_style: '',
         stock_symbol: '',
         stock_name: '',
-        stock_market: 'CN',
+        stock_market: DEFAULT_MARKET,
       })
       setEditPositionId(null)
     }
@@ -1434,16 +1436,10 @@ export default function StocksPage() {
     return value.toFixed(2)
   }
 
-  const marketLabel = (m: string) => m === 'CN' ? stockT('stocksPage.markets.cn') : m === 'HK' ? stockT('stocksPage.markets.hk') : m === 'US' ? stockT('stocksPage.markets.us') : m
+  const marketLabel = (m: string) => m === 'TW' ? stockT('stocksPage.markets.tw') : m === 'CN' ? stockT('stocksPage.markets.cn') : m === 'HK' ? stockT('stocksPage.markets.hk') : m === 'US' ? stockT('stocksPage.markets.us') : m
+  const badgeFor = (m: string) => getMarketBadge(m, code => stockT(`stocksPage.markets.${code === 'CN' ? 'cnShort' : code === 'HK' ? 'hkShort' : code === 'US' ? 'usShort' : code}`))
   const marketStatusLabel = (status: string, fallback: string) =>
     stockT(`stocksPage.marketStatus.${status}`, { defaultValue: fallback })
-
-  // 市场徽章样式和短标签
-  const marketBadge = (m: string) => {
-    if (m === 'HK') return { style: 'bg-orange-500/10 text-orange-600', label: stockT('stocksPage.markets.hkShort') }
-    if (m === 'US') return { style: 'bg-green-500/10 text-green-600', label: stockT('stocksPage.markets.usShort') }
-    return { style: 'bg-blue-500/10 text-blue-600', label: 'A' }
-  }
 
   // 保留原始精度显示价格（不强制截断小数位）
   const formatPrice = (value: number) => {
@@ -1458,13 +1454,13 @@ export default function StocksPage() {
   }
 
   const getPriceAlertSummary = (symbol: string, market: string) => {
-    const key = `${String(market || 'CN').toUpperCase()}:${String(symbol || '').toUpperCase()}`
+    const key = `${String(market || DEFAULT_MARKET).toUpperCase()}:${String(symbol || '').toUpperCase()}`
     return priceAlertSummaryMap[key] || { total: 0, enabled: 0 }
   }
 
   // 获取股票的建议信息（优先使用建议池，包含来源和时间信息）
   const getSuggestionForStock = (symbol: string, market: string, hasPosition?: boolean): { suggestion: SuggestionInfo | null; kline: KlineSummary | null } => {
-    const key = `${market || 'CN'}:${symbol}`
+    const key = `${market || DEFAULT_MARKET}:${symbol}`
     // 优先使用建议池的建议（包含来源和时间信息）
     const poolSug =
       poolSuggestions[key] ||
@@ -1472,7 +1468,7 @@ export default function StocksPage() {
         const fallback = poolSuggestions[symbol]
         if (!fallback) return null
         const fm = String(fallback.stock_market || '').toUpperCase()
-        return fm && fm !== String(market || 'CN').toUpperCase() ? null : fallback
+        return fm && fm !== String(market || DEFAULT_MARKET).toUpperCase() ? null : fallback
       })()
     if (poolSug) {
       const preloadedKline = klineSummaries[key] || (suggestions[symbol]?.kline as any) || null
@@ -1868,6 +1864,7 @@ export default function StocksPage() {
                 <div className="flex items-center gap-1">
                   {[
                     { value: '', label: stockT('stocksPage.markets.all') },
+                    { value: 'TW', label: stockT('stocksPage.markets.tw') },
                     { value: 'CN', label: stockT('stocksPage.markets.cn') },
                     { value: 'HK', label: stockT('stocksPage.markets.hk') },
                     { value: 'US', label: stockT('stocksPage.markets.us') },
@@ -1910,7 +1907,7 @@ export default function StocksPage() {
                   value={searchQuery}
                   onChange={e => handleSearchInput(e.target.value)}
                   onFocus={() => searchResults.length > 0 && setShowDropdown(true)}
-                  placeholder={stockT('stocksPage.messages.searchPlaceholder', { example: searchMarket === 'HK' ? '00700 or Tencent' : searchMarket === 'US' ? 'AAPL or Apple' : '600519 or Kweichow Moutai' })}
+                  placeholder={stockT('stocksPage.messages.searchPlaceholder', { example: searchMarket === 'TW' ? '2330 or 台積電' : searchMarket === 'HK' ? '00700 or Tencent' : searchMarket === 'US' ? 'AAPL or Apple' : '600519 or Kweichow Moutai' })}
                   className="pl-10"
                   autoComplete="off"
                 />
@@ -2044,8 +2041,8 @@ export default function StocksPage() {
                           <tbody>
                             {account.positions.map((pos, i) => {
                               const stock = stocks.find(s => s.id === pos.stock_id)
-                              const badge = marketBadge(pos.market)
-                              const isForeign = pos.market === 'HK' || pos.market === 'US'
+                              const badge = badgeFor(pos.market)
+                              const isForeign = marketCurrency(pos.market) !== BASE_CURRENCY
                               const changeColor = marketSignTextClass(pos.change_pct)
                               const pnlColor = marketSignTextClass(pos.pnl)
                               return (
@@ -2082,7 +2079,7 @@ export default function StocksPage() {
                                   className={`group hover:bg-accent/30 transition-colors ${i > 0 ? 'border-t border-border/20' : ''} ${draggingPositionId === pos.id ? 'opacity-60' : ''}`}
                                 >
                                   <td className="px-4 py-2.5">
-                                    <span className={`text-[9px] px-1 py-0.5 rounded mr-1.5 ${badge.style}`}>{badge.label}</span>
+                                    {badge && <span className={`text-[9px] px-1 py-0.5 rounded mr-1.5 ${badge.style}`}>{badge.label}</span>}
                                     <span className="font-mono text-[12px] font-semibold text-foreground">
                                       {pos.symbol}
                                     </span>
@@ -2109,7 +2106,7 @@ export default function StocksPage() {
                                     })()}
                                   </td>
                                   <td className={`px-4 py-2.5 text-right font-mono text-[12px] ${changeColor}`}>
-                                    {pos.current_price != null ? <span>{pos.current_price.toFixed(2)}{isForeign ? (pos.market === 'HK' ? ' HKD' : ' USD') : ''}</span> : '—'}
+                                    {pos.current_price != null ? <span>{pos.current_price.toFixed(2)}{isForeign ? ` ${marketCurrency(pos.market)}` : ''}</span> : '—'}
                                   </td>
                                   <td className={`px-4 py-2.5 text-right font-mono text-[12px] ${changeColor}`}>
                                     {pos.change_pct != null ? `${pos.change_pct >= 0 ? '+' : ''}${pos.change_pct.toFixed(2)}%` : '—'}
@@ -2122,7 +2119,7 @@ export default function StocksPage() {
                                         {isForeign ? (
                                           <>
                                             <span>{formatMoney(pos.market_value)} {pos.market === 'HK' ? 'HKD' : 'USD'}</span>
-                                            {pos.market_value_cny && <span className="text-[10px] text-muted-foreground/60">≈{formatMoney(pos.market_value_cny)}</span>}
+                                            {pos.market_value_cny != null && <span className="text-[10px] text-muted-foreground/60">≈{formatMoney(pos.market_value_cny)}</span>}
                                           </>
                                         ) : <span>{formatMoney(pos.market_value)}</span>}
                                       </div>
@@ -2132,7 +2129,7 @@ export default function StocksPage() {
                                     {pos.pnl != null ? (
                                       <div className="flex flex-col items-end">
                                         <span>{pos.pnl >= 0 ? '+' : ''}{formatMoney(pos.pnl)}</span>
-                                        <span className="text-[10px] opacity-70">{pos.pnl_pct != null ? `${pos.pnl_pct >= 0 ? '+' : ''}${pos.pnl_pct.toFixed(2)}%` : ''}{isForeign && ' CNY'}</span>
+                                        <span className="text-[10px] opacity-70">{pos.pnl_pct != null ? `${pos.pnl_pct >= 0 ? '+' : ''}${pos.pnl_pct.toFixed(2)}%` : ''}{isForeign && ` ${BASE_CURRENCY}`}</span>
                                       </div>
                                     ) : '—'}
                                   </td>
@@ -2212,7 +2209,7 @@ export default function StocksPage() {
                       <div className="md:hidden divide-y divide-border/30">
                         {account.positions.map(pos => {
                           const stock = stocks.find(s => s.id === pos.stock_id)
-                          const badge = marketBadge(pos.market)
+                          const badge = badgeFor(pos.market)
                           const changeColor = marketSignTextClass(pos.change_pct)
                           const pnlColor = marketSignTextClass(pos.pnl)
                           return (
@@ -2251,7 +2248,7 @@ export default function StocksPage() {
                               {/* Row 1: Stock info + Current price */}
                               <div className="flex items-center justify-between gap-2 mb-2">
                                 <div className="flex items-center gap-1.5 min-w-0">
-                                  <span className={`shrink-0 text-[9px] px-1 py-0.5 rounded ${badge.style}`}>{badge.label}</span>
+                                  {badge && <span className={`shrink-0 text-[9px] px-1 py-0.5 rounded ${badge.style}`}>{badge.label}</span>}
                                   <span className="shrink-0 font-mono text-[12px] font-semibold text-foreground">
                                     {pos.symbol}
                                   </span>
@@ -2385,6 +2382,7 @@ export default function StocksPage() {
             <div className="flex items-center gap-1">
               {[
                 { value: '', label: stockT('stocksPage.markets.all'), count: stocks.length },
+                { value: 'TW', label: stockT('stocksPage.markets.tw'), count: stocks.filter(s => s.market === 'TW').length },
                 { value: 'CN', label: stockT('stocksPage.markets.cn'), count: stocks.filter(s => s.market === 'CN').length },
                 { value: 'HK', label: stockT('stocksPage.markets.hk'), count: stocks.filter(s => s.market === 'HK').length },
                 { value: 'US', label: stockT('stocksPage.markets.us'), count: stocks.filter(s => s.market === 'US').length },
@@ -2477,9 +2475,7 @@ export default function StocksPage() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className={`text-[9px] px-1 py-0.5 rounded ${marketBadge(stock.market).style}`}>
-                            {marketBadge(stock.market).label}
-                          </span>
+                          {badgeFor(stock.market) && <span className={`text-[9px] px-1 py-0.5 rounded ${badgeFor(stock.market)!.style}`}>{badgeFor(stock.market)!.label}</span>}
                           <button
                             className="font-mono text-[12px] font-semibold text-foreground hover:text-primary"
                             onClick={(e) => { e.stopPropagation(); openStockDetail(stock.symbol, stock.market, stock.name, false) }}
@@ -2728,9 +2724,7 @@ export default function StocksPage() {
           <div className="space-y-4 mt-2">
             {editPositionId ? (
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-accent/30">
-                <span className={`text-[9px] px-1.5 py-0.5 rounded ${marketBadge(positionForm.stock_market).style}`}>
-                  {marketBadge(positionForm.stock_market).label}
-                </span>
+                {badgeFor(positionForm.stock_market) && <span className={`text-[9px] px-1.5 py-0.5 rounded ${badgeFor(positionForm.stock_market)!.style}`}>{badgeFor(positionForm.stock_market)!.label}</span>}
                 <span className="font-mono text-[12px] text-muted-foreground">{positionForm.stock_symbol}</span>
                 <span className="text-[13px] text-foreground">{positionForm.stock_name}</span>
               </div>
@@ -2741,6 +2735,7 @@ export default function StocksPage() {
                   <div className="flex items-center gap-1">
                     {[
                       { value: '', label: stockT('stocksPage.markets.all') },
+                      { value: 'TW', label: stockT('stocksPage.markets.tw') },
                       { value: 'CN', label: stockT('stocksPage.markets.cn') },
                       { value: 'HK', label: stockT('stocksPage.markets.hk') },
                       { value: 'US', label: stockT('stocksPage.markets.us') },
@@ -2780,9 +2775,7 @@ export default function StocksPage() {
                           onClick={() => selectPositionStock(item)}
                           className="w-full flex items-center gap-2 px-3 py-2 text-[13px] hover:bg-accent/50 text-left transition-colors"
                         >
-                          <span className={`text-[9px] px-1 py-0.5 rounded ${marketBadge(item.market).style}`}>
-                            {marketBadge(item.market).label}
-                          </span>
+                          {badgeFor(item.market) && <span className={`text-[9px] px-1 py-0.5 rounded ${badgeFor(item.market)!.style}`}>{badgeFor(item.market)!.label}</span>}
                           <span className="font-mono text-muted-foreground text-[12px]">{item.symbol}</span>
                           <span className="flex-1 text-foreground">{item.name}</span>
                         </button>
@@ -2792,9 +2785,7 @@ export default function StocksPage() {
                 </div>
                 {positionForm.stock_symbol && (
                   <div className="mt-2 flex items-center gap-2">
-                    <span className={`text-[9px] px-1.5 py-0.5 rounded ${marketBadge(positionForm.stock_market).style}`}>
-                      {marketBadge(positionForm.stock_market).label}
-                    </span>
+                    {badgeFor(positionForm.stock_market) && <span className={`text-[9px] px-1.5 py-0.5 rounded ${badgeFor(positionForm.stock_market)!.style}`}>{badgeFor(positionForm.stock_market)!.label}</span>}
                     <span className="font-mono text-[12px] text-muted-foreground">{positionForm.stock_symbol}</span>
                     <span className="text-[13px] text-foreground">{positionForm.stock_name}</span>
                     <button

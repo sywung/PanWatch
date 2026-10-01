@@ -1,11 +1,11 @@
 export interface AssistantPortfolioTarget {
   view: 'kline'
   symbol: string
-  market: 'CN' | 'HK' | 'US'
+  market: import('@panwatch/biz-ui').MarketCode
 }
 
 const SYMBOL_PATTERN = /^[A-Za-z0-9.]{1,32}$/
-const MARKETS = new Set<AssistantPortfolioTarget['market']>(['CN', 'HK', 'US'])
+const MARKETS = new Set<AssistantPortfolioTarget['market']>(['TW', 'CN', 'HK', 'US'])
 
 export function parseAssistantPortfolioTarget(
   params: URLSearchParams,

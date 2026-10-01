@@ -1,6 +1,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@panwatch/base-ui/components/ui/dialog'
 import InteractiveKline from '@panwatch/biz-ui/components/InteractiveKline'
 import { useTranslation } from 'react-i18next'
+import { DEFAULT_MARKET } from '../market'
 
 export default function KlineModal(props: {
   open: boolean
@@ -14,7 +15,7 @@ export default function KlineModal(props: {
 }) {
   const { t } = useTranslation('bizUi')
   const symbol = String(props.symbol || '').trim()
-  const market = String(props.market || '').trim() || 'CN'
+  const market = String(props.market || '').trim() || DEFAULT_MARKET
 
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>

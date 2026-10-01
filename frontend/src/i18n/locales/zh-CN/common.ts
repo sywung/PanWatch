@@ -57,7 +57,7 @@ export const common = {
   },
   markets: {
     all: '全部市场',
-    CN: 'A股',
+    TW: '台股', CN: 'A股',
     HK: '港股',
     US: '美股',
   },

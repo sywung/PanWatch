@@ -203,3 +203,18 @@ def test_intraday_market_label_tw():
     assert market_label(MarketCode.TW, "zh-TW") == "台股"
     assert market_label(MarketCode.TW, "zh-CN") == "台股"
     assert market_label(MarketCode.TW, "en-US") == "Taiwan market"
+
+
+def test_capital_flow_text_english_units_and_sell_sign():
+    from src.modules.market.capital_flow_text import format_capital_flow_line
+
+    sell = {"type": "three_institutions", "foreign_net": -60_000, "trust_net": 5_000,
+            "dealer_net": 5_000, "institutional_net": -50_000, "unit": "股"}
+    en = format_capital_flow_line(sell, "en-US")
+    assert en.startswith("Institutional net sell 50,000 shares")
+    assert "股" not in en and "--" not in en
+    tw = format_capital_flow_line(sell, "zh-TW")
+    assert tw.startswith("三大法人賣超 50,000 股")
+    assert "买" not in tw and "卖" not in tw  # 整句繁体,不混简体
+    cn = format_capital_flow_line(sell, "zh-CN")
+    assert cn.startswith("三大法人卖超 50,000 股") and "外资" in cn

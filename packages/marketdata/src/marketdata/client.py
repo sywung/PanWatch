@@ -53,7 +53,9 @@ INDEX_TENCENT: dict[str, str] = {
     "DJI": "usDJI",         # 道琼斯
     "INX": "usINX",         # 标普500
 }
-INDEX_YAHOO: dict[str, str] = {"TWII": "^TWII", "TPEX": "^TWOII"}
+# Yahoo 只有加权指数(^TWII);柜买指数没有对应代码(实测 ^TWOII 等均 404),
+# 柜买指数仅提供 tw_index_quotes() 的实时报价,不提供日K
+INDEX_YAHOO: dict[str, str] = {"TWII": "^TWII"}
 
 
 class MarketData:

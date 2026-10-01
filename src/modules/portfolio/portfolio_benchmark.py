@@ -130,7 +130,7 @@ def compute_benchmark_metrics(
 
 def _fetch_benchmark_series(code: str, days: int) -> tuple[list[str], list[float]]:
     """取基准指数日K → (dates, closes);失败返回 ([], [])。"""
-    if code in {"TWII", "TPEX"}:
+    if code == "TWII":  # 柜买指数无日K来源,不支援作基准
         try:
             from src.platform.marketdata.marketdata_client import get_market_data
             bars = get_market_data().index_klines(code, market="TW", days=days)
@@ -225,7 +225,7 @@ def build_portfolio_benchmark(
 
     bench_map = dict(zip(bench_dates, bench_closes))
     bench_vals = [bench_map[d] for d in dates]
-    annualize = _ANNUALIZE if benchmark_code in {"TWII", "TPEX"} else 242
+    annualize = _ANNUALIZE if benchmark_code == "TWII" else 242
     metrics = compute_benchmark_metrics(dates, nav, bench_vals, annualize=annualize)
     if metrics:
         metrics["benchmark_code"] = benchmark_code

@@ -13,7 +13,9 @@ TW_FILES = sorted((FRONTEND / "src/i18n/locales/zh-TW").glob("*.ts")) + [
     FRONTEND / "src/lib/logger-map.zh-TW.ts"
 ]
 
-MAINLAND_TERMS = ["當前", "默認", "獲取", "渠道", "推送", "校驗", "發送", "社交平台", "落庫"]
+MAINLAND_TERMS = ["當前", "默認", "獲取", "渠道", "推送", "校驗", "發送", "社交平台", "落庫",
+                  # 第三批(2026-10-01 浏览器验收):OpenCC s2twp 把「代码」转成「程式碼」、「参数」转成「引数」
+                  "程式碼", "引數", "示例", "通過 OpenAI"]
 
 
 @pytest.mark.parametrize("term", MAINLAND_TERMS)

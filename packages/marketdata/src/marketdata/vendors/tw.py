@@ -7,13 +7,49 @@ import re
 
 from marketdata.symbol import Symbol
 from marketdata.types import (
-    CapitalFlow, DividendItem, EventItem, Fundamentals, MarginItem, ShareholderItem,
+    CapitalFlow, DividendItem, EventItem, Fundamentals, MarginItem, Quote, ShareholderItem,
 )
 from marketdata.vendors import tw_bulk
 from marketdata.vendors.base import (
-    CapitalFlowVendor, DividendVendor, EventsVendor, FundamentalsVendor,
+    CapitalFlowVendor, DividendVendor, EventsVendor, FundamentalsVendor, QuoteVendor,
     MarginVendor, ShareholdersVendor,
 )
+
+
+class TpexEsbQuoteVendor(QuoteVendor):
+    """TPEx 興櫃盤後行情 vendor。"""
+
+    name = "tpex_esb"
+    supports_markets = {"TW"}
+
+    def fetch(self, symbols: list[Symbol], config: dict) -> list[Quote]:
+        wanted = {symbol.code.strip().upper() for symbol in symbols}
+        if not wanted:
+            return []
+        payload = tw_bulk.get_json("https://www.tpex.org.tw/openapi/v1/tpex_esb_latest_statistics")
+        rows = payload if isinstance(payload, list) else []
+        out = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            code = str(row.get("SecuritiesCompanyCode") or "").strip().upper()
+            if code not in wanted:
+                continue
+            current = tw_bulk.number(row.get("LatestPrice"))
+            previous = tw_bulk.number(row.get("PreviousAveragePrice"))
+            if current is None:
+                continue
+            out.append(Quote(
+                symbol=code, market="TW", name=str(row.get("CompanyName") or ""),
+                current_price=current, prev_close=previous,
+                high_price=tw_bulk.number(row.get("Highest")),
+                low_price=tw_bulk.number(row.get("Lowest")),
+                change_amount=current - previous if previous is not None else None,
+                change_pct=((current - previous) / previous * 100)
+                if previous not in (None, 0) else None,
+                volume=tw_bulk.number(row.get("TransactionVolume")),
+            ))
+        return out
 
 from marketdata.vendors.tw_common import (
     _MOPS_URL, _T86_URL, _TDCC_URL, _TPEX, _TPEX_FOREIGN_DIFF,

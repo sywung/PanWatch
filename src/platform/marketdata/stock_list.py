@@ -23,6 +23,7 @@ CACHE_TTL = 86400 * 7  # 7 days
 
 TWSE_STOCK_LIST_URL = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"
 TPEX_STOCK_LIST_URL = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes"
+TPEX_ESB_STOCK_LIST_URL = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_R"
 TW_SYMBOL_RE = re.compile(r"^(\d{4}|00\d{2,4}[A-Z]?)$")
 
 # OpenCC 体积较大且只在台股名称搜索时需要，因此惰性初始化。
@@ -84,8 +85,9 @@ def _load_cache() -> list[dict] | None:
             data = json.load(f)
         stocks = data["stocks"]
         if time.time() - data.get("ts", 0) < CACHE_TTL:
-            # 没有台股的旧版本缓存需要立即升级，不能继续沿用原 TTL。
-            if any(item.get("market") == "TW" for item in stocks if isinstance(item, dict)):
+            # 没有台股或板别字段的旧版本缓存需要立即升级，不能继续沿用原 TTL。
+            tw_items = [item for item in stocks if isinstance(item, dict) and item.get("market") == "TW"]
+            if tw_items and all(item.get("board") for item in tw_items):
                 return stocks
     except (json.JSONDecodeError, KeyError):
         pass
@@ -288,6 +290,14 @@ def _fetch_tpex_raw() -> list[dict]:
     return data if isinstance(data, list) else []
 
 
+def _fetch_esb_raw() -> list[dict]:
+    """获取 TPEx 興櫃股票原始列表"""
+    resp = httpx.get(TPEX_ESB_STOCK_LIST_URL, headers=HEADERS, timeout=30)
+    resp.raise_for_status()
+    data = resp.json()
+    return data if isinstance(data, list) else []
+
+
 def _fetch_tw_stock_list() -> list[dict]:
     """合并 TWSE 和 TPEx 列表，并过滤非股票类代码"""
     rows = []
@@ -299,10 +309,15 @@ def _fetch_tw_stock_list() -> list[dict]:
         rows.extend((row, "SecuritiesCompanyCode", "CompanyName") for row in _fetch_tpex_raw())
     except Exception as e:
         logger.warning(f"TPEx 获取台股列表失败: {e}")
+    try:
+        rows.extend((row, "SecuritiesCompanyCode", "CompanyAbbreviation", "ESB") for row in _fetch_esb_raw())
+    except Exception as e:
+        logger.warning(f"TPEx 興櫃获取台股列表失败: {e}")
 
     stocks = []
     seen = set()
-    for row, code_key, name_key in rows:
+    for row_data in rows:
+        row, code_key, name_key, *board_data = row_data
         if not isinstance(row, dict):
             continue
         symbol = str(row.get(code_key) or "").strip().upper()
@@ -310,7 +325,9 @@ def _fetch_tw_stock_list() -> list[dict]:
         if not symbol or not name or not TW_SYMBOL_RE.fullmatch(symbol) or symbol in seen:
             continue
         seen.add(symbol)
-        stocks.append({"symbol": symbol, "name": name, "market": "TW"})
+        item = {"symbol": symbol, "name": name, "market": "TW"}
+        item["board"] = board_data[0] if board_data else ("TSE" if code_key == "Code" else "OTC")
+        stocks.append(item)
     return stocks
 
 

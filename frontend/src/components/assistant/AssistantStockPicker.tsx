@@ -8,6 +8,7 @@ export interface AssistantStockSearchResult {
   symbol: string
   name: string
   market: string
+  board?: string
 }
 
 interface AssistantStockPickerProps {
@@ -129,6 +130,7 @@ export function AssistantStockPicker({ onSelect, onCancel, disabled = false }: A
               className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50"
             >
               <span className="min-w-0 truncate text-[13px] font-medium text-foreground">{stock.name}</span>
+              {stock.board === 'ESB' && <span className="text-[10px] text-amber-600">{assistantT('stocksPage.esb')}</span>}
               <span className="shrink-0 font-mono text-[11px] text-muted-foreground">{stock.market}:{stock.symbol}</span>
             </button>
           ))}

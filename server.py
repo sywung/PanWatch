@@ -42,7 +42,11 @@ from src.modules.automation.chart_analyst import ChartAnalystAgent
 from src.modules.automation.intraday_monitor import IntradayMonitorAgent
 from src.modules.automation.premarket_outlook import PremarketOutlookAgent
 from src.modules.automation.tradingagents import TradingAgentsAgent
-from src.modules.market.data_collector import DEFAULT_TEST_SYMBOLS, DEFAULT_TEST_SYMBOLS_BY_MARKET
+from src.modules.market.data_collector import (
+    DEFAULT_TEST_SYMBOLS,
+    DEFAULT_TEST_SYMBOLS_BY_MARKET,
+    ESB_TEST_SYMBOLS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -477,6 +481,29 @@ DATA_SOURCE_SEEDS: list[dict] = [
             "priority": 0,
             "supports_batch": True,
             "test_symbols": list(DEFAULT_TEST_SYMBOLS_BY_MARKET["TW"]),
+        },
+        {
+            "name": "Fugle 行情（興櫃）",
+            "type": "quote",
+            "provider": "fugle",
+            "config": {
+                "api_key": "",
+                "description": "Fugle 富果 API，主要用于興櫃即时报价；请在此填入 API key（免费申请），未填则自动略过。",
+            },
+            "enabled": True,
+            "priority": 1,
+            "supports_batch": False,
+            "test_symbols": list(ESB_TEST_SYMBOLS),
+        },
+        {
+            "name": "櫃買興櫃盤後行情",
+            "type": "quote",
+            "provider": "tpex_esb",
+            "config": {"description": "櫃買中心興櫃盤後行情，免 API key。"},
+            "enabled": True,
+            "priority": 2,
+            "supports_batch": True,
+            "test_symbols": list(ESB_TEST_SYMBOLS),
         },
         {
             "name": "东方财富行情",

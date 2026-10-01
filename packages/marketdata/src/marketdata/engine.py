@@ -23,13 +23,14 @@ logger = logging.getLogger(__name__)
 class Engine:
     def __init__(self, *, datatype: str, vendors: dict[str, Vendor],
                  config: ConfigProvider, metrics: MetricsSink,
-                 cache: TTLCache, default_ttl: float):
+                 cache: TTLCache, default_ttl: float, fill_missing: bool = False):
         self.datatype = datatype
         self.vendors = vendors
         self.config = config
         self.metrics = metrics
         self.cache = cache
         self.default_ttl = default_ttl
+        self.fill_missing = fill_missing
 
     def fetch(self, req: Request, *, cache_ttl_sec: float | None = None, min_count: int = 1) -> Response:
         key = req.cache_key(self.datatype)
@@ -43,6 +44,8 @@ class Engine:
 
         last_err = ""
         best: Response | None = None
+        remaining = set(req.symbols)
+        merged: list = []
         for src in sources:
             if not src.enabled:
                 continue
@@ -55,7 +58,8 @@ class Engine:
             t0 = time.monotonic()
             try:
                 call_config = {**(src.config or {}), "days": req.limit, **dict(req.extra)}
-                data = vendor.fetch(syms, call_config)
+                request_syms = [sym for sym in syms if sym.code in remaining] if self.fill_missing else syms
+                data = vendor.fetch(request_syms, call_config)
             except Exception as e:
                 latency = int((time.monotonic() - t0) * 1000)
                 self.metrics.record(vendor=src.vendor, datatype=self.datatype, market=market,
@@ -70,6 +74,18 @@ class Engine:
                 self.metrics.record(vendor=src.vendor, datatype=self.datatype, market=market,
                                     ok=True, count=len(data), latency_ms=latency)
                 resp = Response(ok=True, data=data, vendor=src.vendor, latency_ms=latency)
+                if self.fill_missing:
+                    for item in data:
+                        symbol = getattr(item, "symbol", None)
+                        if symbol in remaining:
+                            merged.append(item)
+                            remaining.remove(symbol)
+                    if not remaining:
+                        resp = Response(ok=True, data=merged, vendor=src.vendor, latency_ms=latency)
+                        ttl = cache_ttl_sec if cache_ttl_sec is not None else self.default_ttl
+                        self.cache.set(key, resp, ttl_sec=ttl)
+                        return resp
+                    continue
                 if len(data) >= min_count:
                     ttl = cache_ttl_sec if cache_ttl_sec is not None else self.default_ttl
                     self.cache.set(key, resp, ttl_sec=ttl)
@@ -82,6 +98,13 @@ class Engine:
                                     ok=False, count=0, latency_ms=latency, error="empty")
                 last_err = "empty"
 
+        if self.fill_missing:
+            if merged:
+                resp = Response(ok=True, data=merged, vendor="", latency_ms=0)
+                ttl = cache_ttl_sec if cache_ttl_sec is not None else self.default_ttl
+                self.cache.set(key, resp, ttl_sec=ttl)
+                return resp
+            return Response(ok=False, data=None, error=last_err or "no enabled provider")
         if best is not None:
             ttl = cache_ttl_sec if cache_ttl_sec is not None else self.default_ttl
             self.cache.set(key, best, ttl_sec=ttl)

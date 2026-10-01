@@ -140,6 +140,7 @@ interface SearchResult {
   symbol: string
   name: string
   market: string
+  board?: string
 }
 
 interface QuoteRequestItem {
@@ -1924,6 +1925,7 @@ export default function StocksPage() {
                     >
                       <span className="font-mono text-muted-foreground text-[12px] w-14">{item.symbol}</span>
                       <span className="flex-1 font-medium text-foreground">{item.name}</span>
+                      {item.board === 'ESB' && <span className="text-[10px] text-amber-600">{stockT('stocksPage.esb')}</span>}
                       <Badge variant="secondary">{marketLabel(item.market)}</Badge>
                     </button>
                   ))}
@@ -2778,6 +2780,7 @@ export default function StocksPage() {
                           {badgeFor(item.market) && <span className={`text-[9px] px-1 py-0.5 rounded ${badgeFor(item.market)!.style}`}>{badgeFor(item.market)!.label}</span>}
                           <span className="font-mono text-muted-foreground text-[12px]">{item.symbol}</span>
                           <span className="flex-1 text-foreground">{item.name}</span>
+                          {item.board === 'ESB' && <span className="text-[10px] text-amber-600">{stockT('stocksPage.esb')}</span>}
                         </button>
                       ))}
                     </div>

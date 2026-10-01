@@ -69,6 +69,7 @@ class MarketData:
             metrics=self.metrics,
             cache=TTLCache(default_ttl_sec=5.0),
             default_ttl=5.0,
+            fill_missing=True,
         )
         self._kline_engine = Engine(
             datatype="kline",

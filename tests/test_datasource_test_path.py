@@ -105,13 +105,18 @@ class TestKlineSourceTestPath(unittest.IsolatedAsyncioTestCase):
         """带股票代码的内置数据源测试:多市场源用四市场各两条默认样本;只支持台股的源用台股样本。"""
         from marketdata.registry import VENDOR_CLASSES_BY_TYPE
         from server import DATA_SOURCE_SEEDS
-        from src.modules.market.data_collector import DEFAULT_TEST_SYMBOLS, DEFAULT_TEST_SYMBOLS_BY_MARKET
+        from src.modules.market.data_collector import (
+            DEFAULT_TEST_SYMBOLS, DEFAULT_TEST_SYMBOLS_BY_MARKET, ESB_TEST_SYMBOLS,
+        )
 
         for seed in DATA_SOURCE_SEEDS:
             if not seed["test_symbols"]:
                 continue
             cls = VENDOR_CLASSES_BY_TYPE.get(seed["type"], {}).get(seed["provider"])
-            if cls is not None and getattr(cls, "supports_markets", None) == {"TW"}:
+            if seed["provider"] in ("fugle", "tpex_esb"):
+                # 兴柜专用报价源:样本要含兴柜代码,否则测试按钮测不到
+                self.assertEqual(seed["test_symbols"], list(ESB_TEST_SYMBOLS), seed["name"])
+            elif cls is not None and getattr(cls, "supports_markets", None) == {"TW"}:
                 self.assertEqual(seed["test_symbols"], list(DEFAULT_TEST_SYMBOLS_BY_MARKET["TW"]), seed["name"])
             else:
                 self.assertEqual(seed["test_symbols"], list(DEFAULT_TEST_SYMBOLS), seed["name"])

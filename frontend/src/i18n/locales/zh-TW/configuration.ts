@@ -116,6 +116,9 @@ export const configuration = {
       xueqiuLabel: '雪球 Cookies',
       xueqiuPlaceholder: 'xq_a_token=...; xq_r_token=...',
       xueqiuHelp: '在瀏覽器 DevTools → Network 中複製完整 Cookie 字串',
+      fugleLabel: 'Fugle API key',
+      fuglePlaceholder: '貼上 Fugle API key',
+      fugleHelp: '請到 Fugle 開發者頁面申請 API key',
     },
     messages: {
       loadFailed: '載入資料來源失敗',
@@ -289,6 +292,7 @@ export const configuration = {
     title: '機會頁', subtitle: '市場池優先，候選必須具備可執行入場計劃', latestSnapshot: '最新快照', refresh: '重新整理', currentCandidates: '當前候選（全域性）', actionable: '可執行', watching: '觀察', marketPoolRatio: '市場池佔比', marketPool: '市場池', watchPool: '關注池', mixedPool: '融合', filteredResult: '本次篩選結果', unheld: '未持倉', winRate3d: '3日勝率（自動評估）', autoSamples: '自動樣本', avgAlpha: '平均 Alpha 因子', sample: '樣本', avgCatalyst: '平均事件催化', crowdPenalty: '擁擠懲罰', avgQualityRisk: '平均品質/風險', qualityHint: '品質分越高越好', constraintDowngrade: '組合約束降級', constraintHint: 'Top20 被風控降級數量', marketRisk: '市場狀態與組合風險', confidence: '置信', concentration: '集中度', highRiskRatio: '高風險佔比', apply: '應用篩選', clear: '清空篩選', loading: '載入中...', empty: '暫無滿足條件的機會', share: '分享圖', autoEvaluation: '評估：自動後驗', factorWeights: '因子權重與戰績', score: '評分', entry: '入場', stopLoss: '止損', target: '目標', invalidation: '失效', strategy: '策略', sourcePool: '來源池', sourceAgent: '來源 Agent', risk: '風險', regime: '市場狀態', holding: '持倉', held: '持倉中', unheldStatus: '未持倉', market: '市場', catalyst: '催化', quality: '品質', riskPenalty: '風險懲罰', relativeStrength: '相對強弱', eventCatalyst: '事件催化', constraint: '組合約束', autoDowngraded: '已自動降級', source: '來源', marketCandidate: '市場候選', watchedStock: '已關注標的', watchPoolShort: '關注池', marketPlusWatch: '市場+關注', marketPoolShort: '市場池', riskLevels: { low: '低風險', medium: '中風險', high: '高風險' }, actions: { hold: '觀望', add: '建倉', entryMissing: '待補充入場位', noEntry: '當前不建議開倉', candidate: '候選建議' }, agents: { premarket_outlook: '盤前分析', intraday_monitor: '盤中監測', daily_report: '收盤復盤', news_digest: '新聞速遞', market_scan: '市場掃描' }, markets: { ALL: '全部市場', CN: 'A股', HK: '港股', US: '美股' }, filters: { allSources: '全部來源', marketScan: '市場池', mixed: '融合池', watchlist: '關注池', allHolding: '全部持倉狀態', onlyUnheld: '僅未持倉', onlyHeld: '僅持倉中', allStrategies: '全部策略', allRisks: '全部風險等級', score90: '評分90+', score80: '評分80+', score70: '評分70+', score60: '評分60+', score50: '評分50+', scoreAny: '評分不過濾' }, errors: { timeout: '策略層請求超時，已降級展示候選快照', noMarket: '當前{{market}}暫無滿足條件機會，已展示全市場結果', noSnapshot: '暫無機會快照，請點選「重新整理」生成一次', loadFailed: '載入失敗', refreshBackground: '後台重新整理失敗：{{message}}', stillRunning: '重新整理任務仍在後台執行，請稍後重試', submitted: '已提交後台重新整理任務，完成後自動更新', running: '重新整理任務已在執行中，完成後自動更新', slow: '重新整理任務耗時較長，已在後台繼續執行，請稍後再點重新整理', refreshFailed: '重新整理失敗' },
   },
   stocksPage: {
+    esb: '興櫃',
     markets: { all: '全部', tw: '台股', cn: 'A股', cnShort: 'A股', hk: '港股', hkShort: '港', us: '美股', usShort: '美' },
     marketStatus: { trading: '交易中', pre_market: '盤前', break: '午間休市', after_hours: '已收盤', closed: '休市', unknown: '未知' },
     messages: {

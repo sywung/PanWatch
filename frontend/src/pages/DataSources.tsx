@@ -114,6 +114,9 @@ const PROVIDER_CREDENTIAL_FIELDS: Record<string, CredentialFieldDef[]> = {
   xueqiu: [
     { key: 'cookies', labelKey: 'dataSources.credentials.xueqiuLabel', placeholderKey: 'dataSources.credentials.xueqiuPlaceholder', secret: true, helpKey: 'dataSources.credentials.xueqiuHelp' },
   ],
+  fugle: [
+    { key: 'api_key', labelKey: 'dataSources.credentials.fugleLabel', placeholderKey: 'dataSources.credentials.fuglePlaceholder', secret: true, helpKey: 'dataSources.credentials.fugleHelp' },
+  ],
 }
 
 const emptyForm: DataSourceForm = {

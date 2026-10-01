@@ -16,12 +16,15 @@ from src.platform.marketdata.models import DEFAULT_MARKET, MarketCode
 
 # 数据源测试的统一样本。每个市场固定两个稳定、容易识别的代码，避免新建数据源
 # 时只测到 A 股，导致港股/美股 provider 的市场路由问题直到生产才暴露。
-DEFAULT_TEST_SYMBOLS_BY_MARKET: dict[str, tuple[str, str]] = {
+DEFAULT_TEST_SYMBOLS_BY_MARKET: dict[str, tuple[str, ...]] = {
     "TW": ("2330", "6488"),
     "CN": ("600519", "601127"),
     "HK": ("00700", "00386"),
     "US": ("AAPL", "NVDA"),
 }
+# 兴柜专用报价源(fugle / tpex_esb)的测试样本:兴柜 1260 + 上市 2330
+ESB_TEST_SYMBOLS: tuple[str, ...] = ("1260", "2330")
+
 DEFAULT_TEST_SYMBOLS: tuple[str, ...] = tuple(
     symbol
     for symbols in DEFAULT_TEST_SYMBOLS_BY_MARKET.values()

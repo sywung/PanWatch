@@ -87,7 +87,7 @@ def test_cache_without_tw_is_treated_as_stale(monkeypatch, tmp_path, fake_source
 def test_fresh_cache_with_tw_is_used_without_refetch(monkeypatch, tmp_path):
     cache = tmp_path / "stock_list_cache.json"
     cache.write_text(json.dumps({"ts": time.time(), "stocks": [
-        {"symbol": "2330", "name": "台積電", "market": "TW"},
+        {"symbol": "2330", "name": "台積電", "market": "TW", "board": "TSE"},
     ]}), encoding="utf-8")
     monkeypatch.setattr(sl, "CACHE_FILE", cache)
 
@@ -95,7 +95,7 @@ def test_fresh_cache_with_tw_is_used_without_refetch(monkeypatch, tmp_path):
         raise AssertionError("不应重新拉取")
 
     monkeypatch.setattr(sl, "_fetch_twse_raw", forbidden)
-    assert sl.get_stock_list() == [{"symbol": "2330", "name": "台積電", "market": "TW"}]
+    assert sl.get_stock_list() == [{"symbol": "2330", "name": "台積電", "market": "TW", "board": "TSE"}]
 
 
 @pytest.fixture

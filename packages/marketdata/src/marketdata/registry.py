@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from marketdata.vendors.capital_flow import EastmoneyCapitalFlowVendor, SinaCapitalFlowVendor
 from marketdata.vendors.eastmoney import EastmoneyQuoteVendor
+from marketdata.vendors.fugle import FugleQuoteVendor
 from marketdata.vendors.events import EventsVendor
 from marketdata.vendors.fundamentals import EastmoneyFundamentalsVendor, TencentFundamentalsVendor
 from marketdata.vendors.flash_news import (
@@ -41,6 +42,7 @@ from marketdata.vendors.northbound import HexinNorthboundVendor
 from marketdata.vendors.sina import SinaQuoteVendor
 from marketdata.vendors.tencent import TencentQuoteVendor
 from marketdata.vendors.twse import TwseMisQuoteVendor
+from marketdata.vendors.tw import TpexEsbQuoteVendor
 from marketdata.vendors.yfinance import YFinanceQuoteVendor
 from marketdata.vendors.tw import (
     TwseFundamentalsVendor,
@@ -65,6 +67,8 @@ VENDOR_CLASSES_BY_TYPE: dict[str, dict[str, type]] = {
         "eastmoney": EastmoneyQuoteVendor,
         "yfinance": YFinanceQuoteVendor,
         "twse": TwseMisQuoteVendor,
+        "fugle": FugleQuoteVendor,
+        "tpex_esb": TpexEsbQuoteVendor,
     },
     "kline": {
         "tencent": TencentKlineVendor,

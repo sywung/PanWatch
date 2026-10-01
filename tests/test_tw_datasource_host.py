@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import re
+from datetime import datetime, timezone
+from email.utils import format_datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -44,7 +47,12 @@ def offline_tw(monkeypatch):
     def fake_download(url, params=None):
         for key, name in ROUTES.items():
             if key in url:
-                return (FX / name).read_text(encoding="utf-8")
+                text = (FX / name).read_text(encoding="utf-8")
+                if name.endswith(".xml"):
+                    # 新闻测试路径只留最近 2 小时;把 fixture 的发布时间改成「现在」,避免随时间失效
+                    now = format_datetime(datetime.now(timezone.utc), usegmt=True)
+                    text = re.sub(r"<pubDate>[^<]*</pubDate>", f"<pubDate>{now}</pubDate>", text)
+                return text
         raise AssertionError(f"未预期的请求: {url}")
 
     monkeypatch.setattr(tw_bulk, "_download", fake_download)

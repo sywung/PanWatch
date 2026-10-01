@@ -1,0 +1,26 @@
+{
+ "date": "2026-10-01",
+ "type": "EQUITY",
+ "exchange": "TPEx",
+ "market": "ESB",
+ "symbol": "1260",
+ "name": "富味鄉",
+ "referencePrice": 31.18,
+ "previousClose": 31.95,
+ "openPrice": 31.95,
+ "highPrice": 31.95,
+ "lowPrice": 30.45,
+ "closePrice": 31.95,
+ "lastPrice": 31.95,
+ "change": 0.77,
+ "changePercent": 2.47,
+ "total": {
+  "tradeValue": 861559,
+  "tradeVolume": 27892,
+  "tradeVolumeAtBid": 15863,
+  "tradeVolumeAtAsk": 12029,
+  "transaction": 29,
+  "time": 1790823077310000
+ },
+ "lastUpdated": 1790823077310000
+}

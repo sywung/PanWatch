@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 
 def _yf_ticker(sym: Symbol) -> str:
+    if sym.market == Market.TW:
+        return f"{sym.code}.TW"
     if sym.market == Market.HK:
         return f"{int(sym.code):04d}.HK" if sym.code.isdigit() else f"{sym.code}.HK"
     return sym.code
@@ -21,7 +23,7 @@ def _yf_ticker(sym: Symbol) -> str:
 
 class YFinanceQuoteVendor(QuoteVendor):
     name = "yfinance"
-    supports_markets = {"HK", "US"}
+    supports_markets = {"HK", "US", "TW"}
 
     def fetch(self, symbols: list[Symbol], config: dict) -> list[Quote]:
         if not symbols:
@@ -34,7 +36,17 @@ class YFinanceQuoteVendor(QuoteVendor):
         out: list[Quote] = []
         for s in symbols:
             try:
-                info = yf.Ticker(_yf_ticker(s)).fast_info
+                tickers = [_yf_ticker(s)]
+                if s.market == Market.TW:
+                    tickers.append(f"{s.code}.TWO")
+                info = None
+                for ticker in tickers:
+                    candidate = yf.Ticker(ticker).fast_info
+                    if candidate.get("last_price"):
+                        info = candidate
+                        break
+                if info is None:
+                    continue
                 last = float(info["last_price"]) if info.get("last_price") else None
                 if last is None:
                     record_error(f"yfinance {_yf_ticker(s)}: 返回空(last_price 缺失,可能 Yahoo 不可达/被限流/需要代理)")

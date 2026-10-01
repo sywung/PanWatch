@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Any, Callable
 
 from marketdata import PACKAGE_VENDORS_BY_TYPE, capture_errors
+from marketdata.registry import VENDOR_CLASSES_BY_TYPE
 
 from src.platform.persistence.database import SessionLocal
 from src.platform.persistence.models import DataSource
@@ -16,6 +17,7 @@ from src.platform.marketdata.models import DEFAULT_MARKET, MarketCode
 # 数据源测试的统一样本。每个市场固定两个稳定、容易识别的代码，避免新建数据源
 # 时只测到 A 股，导致港股/美股 provider 的市场路由问题直到生产才暴露。
 DEFAULT_TEST_SYMBOLS_BY_MARKET: dict[str, tuple[str, str]] = {
+    "TW": ("2330", "6488"),
     "CN": ("600519", "601127"),
     "HK": ("00700", "00386"),
     "US": ("AAPL", "NVDA"),
@@ -441,6 +443,12 @@ class DataCollectorManager:
             return await self._test_kline_source(source, test_symbols)
 
         elif source.type == "capital_flow":
+            if source.provider == "twse":
+                from marketdata import MarketData, SourceConfig, StaticConfigProvider
+                md = MarketData(config=StaticConfigProvider({"capital_flow": [SourceConfig(vendor="twse", config=source.config or {}, enabled=True)]}))
+                rows = [md.capital_flow(s, market="TW") for s in test_symbols[:_TEST_SYMBOL_LIMIT]]
+                rows = [r for r in rows if r]
+                return CollectorResult(success=bool(rows), data=[{"symbol": r.symbol, "name": r.name, "foreign_net": r.foreign_net} for r in rows], count=len(rows), error="" if rows else "获取资金流向失败")
             from src.platform.marketdata.collectors.capital_flow_collector import CapitalFlowCollector
 
             collector = CapitalFlowCollector(MarketCode.CN)
@@ -502,6 +510,11 @@ class DataCollectorManager:
             # This is only for connectivity/format validation, not for production logic.
             lookback_days = 365
             since = datetime.now() - timedelta(days=lookback_days)
+            if source.provider == "twse":
+                from marketdata import MarketData, SourceConfig, StaticConfigProvider
+                md = MarketData(config=StaticConfigProvider({"events": [SourceConfig(vendor="twse", config=source.config or {}, enabled=True)]}))
+                items = md.events(test_symbols[:_TEST_SYMBOL_LIMIT], market="TW", since_days=365)
+                return CollectorResult(success=bool(items), data=[{"title": i.title[:80], "time": i.publish_time.strftime("%m-%d %H:%M"), "event_type": i.event_type} for i in items[:10]], count=len(items), error="" if items else "未获取到事件数据")
             if source.provider == "eastmoney":
                 cfg = source.config or {}
                 collector = EastMoneyEventsCollector(
@@ -706,7 +719,9 @@ class DataCollectorManager:
         try:
             # 包内 news publish_time 是 aware(UTC),now 也须 aware,否则 since 过滤崩
             from datetime import timezone
-            news = md.news(test_symbols, names=names, now=datetime.now(timezone.utc))
+            cls = VENDOR_CLASSES_BY_TYPE["news"].get(source.provider)
+            market = next(iter(cls.supports_markets)) if cls and len(cls.supports_markets) == 1 else DEFAULT_MARKET.value
+            news = md.news(test_symbols, market=market, names=names, now=datetime.now(timezone.utc))
         except Exception as e:
             return CollectorResult(success=False, error=str(e))
 
@@ -744,7 +759,9 @@ class DataCollectorManager:
         )
 
         try:
-            items = md.flash_news(limit=20)
+            cls = VENDOR_CLASSES_BY_TYPE["flash_news"].get(source.provider)
+            market = next(iter(cls.supports_markets)) if cls and len(cls.supports_markets) == 1 else DEFAULT_MARKET.value
+            items = md.flash_news(market=market, limit=20)
         except Exception as e:
             return CollectorResult(success=False, error=str(e))
 
@@ -841,7 +858,9 @@ class DataCollectorManager:
         test_date = cfg.get("test_date") or datetime.now().strftime("%Y-%m-%d")
 
         try:
-            items = md.dragon_tiger(date=test_date)
+            cls = VENDOR_CLASSES_BY_TYPE["dragon_tiger"].get(source.provider)
+            market = next(iter(cls.supports_markets)) if cls and len(cls.supports_markets) == 1 else DEFAULT_MARKET.value
+            items = md.dragon_tiger(date=test_date, market=market)
         except Exception as e:
             return CollectorResult(success=False, error=str(e))
 

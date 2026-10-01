@@ -42,7 +42,7 @@ from src.modules.automation.chart_analyst import ChartAnalystAgent
 from src.modules.automation.intraday_monitor import IntradayMonitorAgent
 from src.modules.automation.premarket_outlook import PremarketOutlookAgent
 from src.modules.automation.tradingagents import TradingAgentsAgent
-from src.modules.market.data_collector import DEFAULT_TEST_SYMBOLS
+from src.modules.market.data_collector import DEFAULT_TEST_SYMBOLS, DEFAULT_TEST_SYMBOLS_BY_MARKET
 
 logger = logging.getLogger(__name__)
 
@@ -476,7 +476,7 @@ DATA_SOURCE_SEEDS: list[dict] = [
             "enabled": True,
             "priority": 0,
             "supports_batch": True,
-            "test_symbols": list(DEFAULT_TEST_SYMBOLS),
+            "test_symbols": list(DEFAULT_TEST_SYMBOLS_BY_MARKET["TW"]),
         },
         {
             "name": "东方财富行情",
@@ -503,12 +503,58 @@ DATA_SOURCE_SEEDS: list[dict] = [
             "type": "quote",
             "provider": "yfinance",
             "config": {
-                "description": "Yahoo Finance,需 pip install yfinance。适用 HK/US,A 股不可用。",
+                "description": "Yahoo Finance,需 pip install yfinance。适用 HK/US,并作为台股 .TW/.TWO 备援。",
             },
-            "enabled": False,
+            "enabled": True,
             "priority": 10,
             "supports_batch": True,
             "test_symbols": list(DEFAULT_TEST_SYMBOLS),
+        },
+        # 台股全市场开放资料（仅支持 TW）
+        {
+            "name": "證交所基本面", "type": "fundamentals", "provider": "twse",
+            "config": {}, "enabled": True, "priority": 0, "supports_batch": True,
+            "test_symbols": list(DEFAULT_TEST_SYMBOLS_BY_MARKET["TW"]),
+        },
+        {
+            "name": "證交所三大法人", "type": "capital_flow", "provider": "twse",
+            "config": {}, "enabled": True, "priority": 0, "supports_batch": True,
+            "test_symbols": list(DEFAULT_TEST_SYMBOLS_BY_MARKET["TW"]),
+        },
+        {
+            "name": "證交所融資融券", "type": "margin", "provider": "twse",
+            "config": {}, "enabled": True, "priority": 0, "supports_batch": True,
+            "test_symbols": list(DEFAULT_TEST_SYMBOLS_BY_MARKET["TW"]),
+        },
+        {
+            "name": "證交所股利", "type": "dividend", "provider": "twse",
+            "config": {}, "enabled": True, "priority": 0, "supports_batch": True,
+            "test_symbols": list(DEFAULT_TEST_SYMBOLS_BY_MARKET["TW"]),
+        },
+        {
+            "name": "集保股權分散", "type": "shareholders", "provider": "tdcc",
+            "config": {}, "enabled": True, "priority": 0, "supports_batch": True,
+            "test_symbols": list(DEFAULT_TEST_SYMBOLS_BY_MARKET["TW"]),
+        },
+        {
+            "name": "證交所重大訊息", "type": "events", "provider": "twse",
+            "config": {}, "enabled": True, "priority": 0, "supports_batch": True,
+            "test_symbols": list(DEFAULT_TEST_SYMBOLS_BY_MARKET["TW"]),
+        },
+        {
+            "name": "證交所注意處置股", "type": "dragon_tiger", "provider": "twse",
+            "config": {"test_date": ""}, "enabled": True, "priority": 0, "supports_batch": False,
+            "test_symbols": list(DEFAULT_TEST_SYMBOLS_BY_MARKET["TW"]),
+        },
+        {
+            "name": "Yahoo 奇摩股市新聞", "type": "news", "provider": "yahoo_tw",
+            "config": {}, "enabled": True, "priority": 0, "supports_batch": False,
+            "test_symbols": list(DEFAULT_TEST_SYMBOLS_BY_MARKET["TW"]),
+        },
+        {
+            "name": "鉅亨網台股快訊", "type": "flash_news", "provider": "cnyes",
+            "config": {}, "enabled": True, "priority": 0, "supports_batch": False,
+            "test_symbols": list(DEFAULT_TEST_SYMBOLS_BY_MARKET["TW"]),
         },
         # 事件日历数据源（基于公告结构化）
         {

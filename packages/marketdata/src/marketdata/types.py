@@ -62,7 +62,7 @@ class Bar:
 
 @dataclass
 class CapitalFlow:
-    """资金流向(对齐 PanWatch src/collectors/capital_flow_collector.CapitalFlow)。"""
+    """资金流向。台股使用 foreign/trust/dealer/institutional_net（单位见 unit）。"""
 
     symbol: str
     name: str
@@ -73,6 +73,12 @@ class CapitalFlow:
     mid_net_inflow: float | None = None        # 中单净流入
     small_net_inflow: float | None = None      # 小单净流入
     main_net_5d: float | None = None           # 5日主力净流入
+    foreign_net: float | None = None           # 台股外资买卖超
+    trust_net: float | None = None             # 台股投信买卖超
+    dealer_net: float | None = None            # 台股自营商买卖超
+    institutional_net: float | None = None     # 台股三大法人合计
+    unit: str = ""                              # 台股为张/股等原始单位
+    trade_date: str = ""                        # 台股交易日
 
 
 @dataclass(frozen=True)
@@ -174,6 +180,7 @@ class MarginItem:
     rq_sell_vol: float | None = None    # 融券卖出量(股)
     rq_repay_vol: float | None = None   # 融券偿还量(股)
     total_balance: float | None = None  # 两融余额(元)
+    unit: str = "元"                    # 台股为张
 
 
 @dataclass
@@ -186,6 +193,8 @@ class ShareholderItem:
     change_num: int | None = None      # 户数变化(较上期)
     change_ratio: float | None = None  # 户数环比变化(%)
     avg_shares: float | None = None    # 户均持股(股)
+    big_holder_ratio: float | None = None    # 台股持股超过400张的占比(%)
+    thousand_lot_ratio: float | None = None   # 台股持股超过1000张的占比(%)
 
 
 @dataclass

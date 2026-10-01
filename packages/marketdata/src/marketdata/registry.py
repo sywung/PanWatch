@@ -42,6 +42,11 @@ from marketdata.vendors.sina import SinaQuoteVendor
 from marketdata.vendors.tencent import TencentQuoteVendor
 from marketdata.vendors.twse import TwseMisQuoteVendor
 from marketdata.vendors.yfinance import YFinanceQuoteVendor
+from marketdata.vendors.tw import (
+    TwseFundamentalsVendor, TwseCapitalFlowVendor, TwseMarginVendor,
+    TwseDividendVendor, TdccShareholdersVendor, TwseEventsVendor,
+    TwseDragonTigerVendor, YahooTwNewsVendor, CnyesFlashNewsVendor,
+)
 
 # 各数据类型 → {vendor name: vendor 类}。注意:vendor 的 import 本身是廉价的
 # (可选三方依赖如 yfinance 均在 fetch() 内部惰性 import),模块级导入不会引入重依赖。
@@ -62,35 +67,44 @@ VENDOR_CLASSES_BY_TYPE: dict[str, dict[str, type]] = {
     "capital_flow": {
         "eastmoney": EastmoneyCapitalFlowVendor,
         "sina": SinaCapitalFlowVendor,
+        "twse": TwseCapitalFlowVendor,
     },
     "events": {
         "eastmoney": EventsVendor,
+        "twse": TwseEventsVendor,
     },
     "fundamentals": {
         "tencent": TencentFundamentalsVendor,
         "eastmoney": EastmoneyFundamentalsVendor,
+        "twse": TwseFundamentalsVendor,
     },
     "flash_news": {
         "cls": ClsFlashNewsVendor,
         "sina": SinaFlashNewsVendor,
         "eastmoney": EastmoneyFlashNewsVendor,
+        "cnyes": CnyesFlashNewsVendor,
     },
     "news": {
         "xueqiu": XueqiuNewsVendor,
         "eastmoney_news": EastmoneyStockNewsVendor,
         "eastmoney": EastmoneyAnnNewsVendor,
+        "yahoo_tw": YahooTwNewsVendor,
     },
     "dragon_tiger": {
         "eastmoney": EastmoneyDragonTigerVendor,
+        "twse": TwseDragonTigerVendor,
     },
     "margin": {
         "eastmoney": EastmoneyMarginVendor,
+        "twse": TwseMarginVendor,
     },
     "shareholders": {
         "eastmoney": EastmoneyShareholdersVendor,
+        "tdcc": TdccShareholdersVendor,
     },
     "dividend": {
         "eastmoney": EastmoneyDividendVendor,
+        "twse": TwseDividendVendor,
     },
     "northbound": {
         "ths": HexinNorthboundVendor,

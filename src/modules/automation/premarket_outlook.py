@@ -26,6 +26,7 @@ from src.modules.research.signals.structured_output import (
 from src.platform.observability.log_context import get_log_context
 from src.platform.marketdata.models import MarketCode
 from src.modules.market.capital_flow_text import format_capital_flow_line
+from src.modules.market.chan_analysis import format_chan_summary
 
 logger = logging.getLogger(__name__)
 
@@ -331,6 +332,9 @@ class PremarketOutlookAgent(BaseAgent):
                 continue
 
             lines.append(f"\n### {stock.name}（{stock.symbol}）")
+            chan_text = format_chan_summary(tech.get("chan"), context.report_language)
+            if chan_text:
+                lines.append(chan_text)
             if stock_quality:
                 lines.append(
                     f"- 数据质量：{stock_quality.get('score', 0)}（实时新闻 {stock_quality.get('realtime_news_count', 0)} 条，扩展新闻 {stock_quality.get('extended_news_count', 0)} 条，历史新闻 {stock_quality.get('history_news_count', 0)} 条）"

@@ -20,6 +20,7 @@ from src.modules.research.signals import SignalPackBuilder
 from src.modules.research.signals.structured_output import try_parse_action_json
 from src.platform.marketdata.models import DEFAULT_MARKET, MarketCode, StockData, MARKETS
 from src.modules.market.capital_flow_text import format_capital_flow_line
+from src.modules.market.chan_analysis import format_chan_summary
 
 logger = logging.getLogger(__name__)
 
@@ -165,6 +166,9 @@ class IntradayMonitorAgent(BaseAgent):
         stock_data = pack.quote if pack and pack.quote else None
 
         kline_summary = pack.technical if pack else None
+        chan_text = format_chan_summary(
+            (kline_summary or {}).get("chan"), context.report_language
+        )
 
         # 获取历史分析（为 AI 提供更多上下文）
         daily_analysis = get_latest_analysis(
@@ -182,6 +186,7 @@ class IntradayMonitorAgent(BaseAgent):
             "stocks": [stock_data] if stock_data else [],
             "stock_data": stock_data,
             "kline_summary": kline_summary,
+            "chan_summary": chan_text,
             "signal_pack": pack,
             "daily_analysis": daily_analysis.content if daily_analysis else None,
             "premarket_analysis": premarket_analysis.content
@@ -395,10 +400,12 @@ class IntradayMonitorAgent(BaseAgent):
                 )
                 lines.append(f"- {atr_line}")
 
-            # 均线
-            lines.append(
-                f"- MA5：{format_num(kline.get('ma5'))} | MA10：{format_num(kline.get('ma10'))} | MA20：{format_num(kline.get('ma20'))} | MA60：{format_num(kline.get('ma60'))}"
-            )
+        # 均线
+        lines.append(
+            f"- MA5：{format_num(kline.get('ma5'))} | MA10：{format_num(kline.get('ma10'))} | MA20：{format_num(kline.get('ma20'))} | MA60：{format_num(kline.get('ma60'))}"
+        )
+        if data.get("chan_summary"):
+            lines.append(data["chan_summary"])
 
         # 资金流向（仅A股，若可用）
         pack = data.get("signal_pack")

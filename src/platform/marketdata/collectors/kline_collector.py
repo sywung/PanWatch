@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import importlib
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -32,6 +33,7 @@ kline_source = fetch_source
 _KLINE_CACHE: dict[str, tuple[float, int, list["KlineData"]]] = {}
 _KLINE_TTL_TRADING_S = 180
 _KLINE_TTL_CLOSED_S = 1800
+_CHAN_CACHE: dict[str, tuple[float, dict | None, int]] = {}
 
 # 失败负缓存:源短暂故障(Server disconnected/限流)时,冷却窗口内不再联网。
 # 复活的批量消费者(entry_candidates/strategy_engine/backtest/组合归因)会并发地
@@ -632,10 +634,27 @@ class KlineCollector:
 
     def get_kline_summary(self, symbol: str) -> dict:
         """获取 K 线摘要（用于 prompt 和前端展示）"""
-        klines = self.get_klines(symbol, days=120)
+        klines = self.get_klines(symbol, days=250)
         if not klines:
             return {"error": "无K线数据"}
         indicators = self.get_technical_indicators(klines=klines)
+        chan = None
+        try:
+            chan_analysis = importlib.import_module("src.modules.market.chan_analysis")
+            analyze_chan = chan_analysis.analyze_chan
+            chan_key = f"{self.market.value}:{symbol}"
+            cached = _CHAN_CACHE.get(chan_key)
+            now_ts = time.time()
+            if cached and now_ts - cached[0] < 600 and cached[2] == id(analyze_chan):
+                chan = cached[1]
+            else:
+                m30_bars = get_market_data().intraday_klines(
+                    symbol, market=self.market.value, interval="30m"
+                )
+                chan = analyze_chan(klines, m30_bars)
+                _CHAN_CACHE[chan_key] = (now_ts, chan, id(analyze_chan))
+        except Exception as exc:
+            logger.warning("缠论摘要失败: %s", exc)
 
         # 最近5日表现
         recent_5 = klines[-5:] if len(klines) >= 5 else klines
@@ -724,6 +743,7 @@ class KlineCollector:
                 "support_resistance": {"windows": [5, 20, 60]},
             },
             "last_close": last_close,
+            "chan": chan,
             "recent_5_up": up_days,
             "trend": trend,
             # MACD

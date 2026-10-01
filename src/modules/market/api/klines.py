@@ -101,6 +101,25 @@ def _aggregate_klines(klines, interval: str) -> list:
     return out
 
 
+@router.get("/{symbol}/chan")
+def get_kline_chan(symbol: str, market: str = DEFAULT_MARKET.value, level: str = "day"):
+    """获取单级别缠论结构。"""
+    if level not in ("day", "30m"):
+        raise api_error(400, "chan_level_invalid", "缠论级别必须是 day 或 30m")
+    market_code = _parse_market(market)
+    collector = KlineCollector(market_code)
+    if level == "day":
+        bars = collector.get_klines(symbol, days=250)
+    else:
+        from src.platform.marketdata.collectors.kline_collector import get_market_data
+        bars = get_market_data().intraday_klines(symbol, market=market_code.value, interval="30m")
+    from src.modules.market.chan_analysis import analyze_level
+    result = analyze_level(bars, level)
+    if result is None:
+        raise api_error(404, "chan_unavailable", "缠论数据不可用")
+    return result
+
+
 @router.get("/{symbol}")
 def get_klines(symbol: str, market: str = DEFAULT_MARKET.value, days: int = 60, interval: str = "1d"):
     """获取单只股票K线数据"""

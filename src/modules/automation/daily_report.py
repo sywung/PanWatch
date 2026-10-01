@@ -21,6 +21,7 @@ from src.modules.research.signals.structured_output import (
 )
 from src.platform.marketdata.models import MarketCode, IndexData
 from src.modules.market.capital_flow_text import format_capital_flow_line
+from src.modules.market.chan_analysis import format_chan_summary
 
 logger = logging.getLogger(__name__)
 
@@ -218,6 +219,9 @@ class DailyReportAgent(BaseAgent):
             # 技术指标
             tech = (pack.technical if pack else None) or {"error": "无技术指标数据"}
             if not tech.get("error"):
+                chan_text = format_chan_summary(tech.get("chan"), context.report_language)
+                if chan_text:
+                    lines.append(chan_text)
                 ma5 = safe_num(tech.get("ma5"))
                 ma10 = safe_num(tech.get("ma10"))
                 ma20 = safe_num(tech.get("ma20"))

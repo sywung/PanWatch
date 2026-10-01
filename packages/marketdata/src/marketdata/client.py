@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import time
 from datetime import datetime, timedelta
+from datetime import timezone
+from zoneinfo import ZoneInfo
 
 from marketdata.cache import TTLCache
 from marketdata.defaults import InMemoryMetricsSink
@@ -152,6 +154,64 @@ class MarketData:
                       extra=(("days", days),))
         resp = self._kline_engine.fetch(req, min_count=min_count, cache_ttl_sec=0)
         return resp.data or []
+
+    def intraday_klines(self, symbol: str, *, market: str, interval: str = "30m") -> list:
+        """从 Yahoo 取得近 60 天的分线数据。"""
+        from marketdata.vendors.kline import (
+            _YAHOO_CHART_URL,
+            _TW_SUFFIX_HINT,
+            market_get,
+        )
+        from marketdata.types import Bar
+
+        market = str(market).upper()
+        if market == "CN":
+            return []
+        suffixes = [""]
+        if market == "TW":
+            hint = _TW_SUFFIX_HINT.get(symbol)
+            suffixes = [hint] if hint else []
+            suffixes.extend(x for x in (".TW", ".TWO") if x not in suffixes)
+        elif market == "HK":
+            suffixes = [f"{int(symbol):04d}.HK" if symbol.isdigit() else f"{symbol}.HK"]
+        tz_name = {
+            "TW": "Asia/Taipei",
+            "HK": "Asia/Hong_Kong",
+            "US": "America/New_York",
+        }[market]
+        for suffix in suffixes:
+            ysym = f"{symbol}{suffix}" if market == "TW" else (suffix or symbol)
+            payload = market_get(
+                _YAHOO_CHART_URL.format(sym=ysym),
+                params={"interval": interval, "range": "60d"},
+            )
+            try:
+                item = payload["chart"]["result"][0]
+                timestamps = item.get("timestamp") or []
+                quote = (item.get("indicators", {}).get("quote") or [{}])[0]
+                out = []
+                for i, stamp in enumerate(timestamps):
+                    values = [
+                        quote.get(key, [])[i] for key in ("open", "close", "high", "low")
+                    ]
+                    if any(value is None for value in values):
+                        continue
+                    local = datetime.fromtimestamp(int(stamp), timezone.utc).astimezone(
+                        ZoneInfo(tz_name)
+                    )
+                    volume = (quote.get("volume") or [0])[i] or 0
+                    out.append(Bar(
+                        date=local.strftime("%Y-%m-%d %H:%M"), open=float(values[0]),
+                        close=float(values[1]), high=float(values[2]), low=float(values[3]),
+                        volume=float(volume),
+                    ))
+                if out:
+                    if market == "TW":
+                        _TW_SUFFIX_HINT[symbol] = suffix
+                    return out
+            except (IndexError, KeyError, TypeError, ValueError, OSError):
+                continue
+        return []
 
     def quotes(self, symbols: list[str | Symbol], *, market: str | None = None) -> list[Quote]:
         """批量报价。symbols 可跨市场:未显式给 market 时按代码自动识别并分组。"""

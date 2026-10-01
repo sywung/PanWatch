@@ -198,3 +198,32 @@ def test_failover_chain_carries_each_models_extra_params(monkeypatch):
     primary = SimpleNamespace(id=1, name="qwen", model="Qwen3.6", service_id=1, extra_params=NO_THINK)
     fo.build_failover_client(primary, primary_svc, max_fallbacks=0)
     assert made[0] == ("Qwen3.6", NO_THINK)
+
+
+def test_failover_fallback_models_carry_their_own_extra_params(db, monkeypatch):
+    # 主模型(Azure)失败时切到本机 Qwen,备援请求也必须带 Qwen 自己的参数,主模型的不能串过去
+    from src.platform.ai import ai_failover as fo
+    from src.platform.persistence.models import AIModel, AIService
+
+    azure = AIService(name="Azure", base_url="https://azure/v1", api_key="a")
+    omlx = AIService(name="oMLX", base_url="http://host.containers.internal:9999/v1", api_key="k")
+    db.add_all([azure, omlx])
+    db.commit()
+    gpt = AIModel(name="gpt", service_id=azure.id, model="gpt-6", is_default=True)
+    qwen = AIModel(name="qwen", service_id=omlx.id, model="Qwen3.6", extra_params=NO_THINK)
+    gemma = AIModel(name="gemma", service_id=omlx.id, model="gemma-4")
+    db.add_all([gpt, qwen, gemma])
+    db.commit()
+
+    made = []
+
+    def fake_make_client(base_url, api_key, model, proxy, extra_body=None):
+        made.append((model, extra_body))
+        return SimpleNamespace(model=model)
+
+    monkeypatch.setattr(fo, "_make_client", fake_make_client)
+    fo.build_failover_client(gpt, azure, db=db, max_fallbacks=2)
+    by_model = dict(made)
+    assert by_model["gpt-6"] in (None, {})
+    assert by_model["Qwen3.6"] == NO_THINK
+    assert by_model["gemma-4"] in (None, {})

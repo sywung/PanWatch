@@ -11,12 +11,18 @@ from marketdata.symbol import Symbol
 def test_yfinance_parses(monkeypatch):
     fake = types.ModuleType("yfinance")
 
+    class _FastInfo:
+        # 真实 yfinance>=1.x 的 FastInfo:snake_case 只能用属性取(字典键是 camelCase)
+        last_price = 150.0
+        previous_close = 148.0
+        open = 149.0
+        day_high = 151.0
+        day_low = 147.0
+        last_volume = 1000
+
     class _T:
         def __init__(self, ticker):
-            self.fast_info = {
-                "last_price": 150.0, "previous_close": 148.0,
-                "open": 149.0, "day_high": 151.0, "day_low": 147.0, "last_volume": 1000,
-            }
+            self.fast_info = _FastInfo()
 
     fake.Ticker = _T
     monkeypatch.setitem(sys.modules, "yfinance", fake)

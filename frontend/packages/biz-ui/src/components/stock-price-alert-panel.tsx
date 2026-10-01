@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import PriceAlertFormDialog, { type AlertConditionItem, type PriceAlertFormState, type PriceAlertSubmitPayload } from '@panwatch/biz-ui/components/price-alert-form-dialog'
 import { useToast } from '@panwatch/base-ui/components/ui/toast'
 import { useTranslation } from 'react-i18next'
+import { DEFAULT_MARKET } from '../market'
 
 interface StockItem {
   id: number
@@ -76,7 +77,7 @@ export default function StockPriceAlertPanel(props: {
   const tr = (key: string, options?: Record<string, unknown>) =>
     (t as unknown as (key: string, options?: Record<string, unknown>) => string)(`stockPriceAlert.${key}`, options)
   const symbol = String(props.symbol || '').trim()
-  const market = String(props.market || 'CN').trim().toUpperCase()
+  const market = String(props.market || DEFAULT_MARKET).trim().toUpperCase()
   const mode = props.mode || 'icon'
 
   const [open, setOpen] = useState(false)

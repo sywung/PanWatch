@@ -17,7 +17,7 @@ export function AssistantWelcome({ onSubmit, onSelectStock, disabled = false }: 
   const uiT = t as unknown as (key: string, options?: Record<string, unknown>) => string
   const reportT = i18n.getFixedT(reportLanguage, 'configuration') as unknown as (key: string, options?: Record<string, unknown>) => string
   const quickQuestions = [
-    { label: uiT('assistantPage.welcome.analyzeStock'), question: reportT('assistantPage.askStock', { market: 'CN', symbol: '600519', name: 'Kweichow Moutai' }), icon: Search, kind: 'stock' },
+    { label: uiT('assistantPage.welcome.analyzeStock'), question: reportT('assistantPage.askStock', { market: 'TW', symbol: '2330', name: '台積電' }), icon: Search, kind: 'stock' },
     { label: uiT('assistantPage.welcome.diagnosePortfolio'), question: reportT('assistantPage.welcome.diagnoseQuestion'), icon: Briefcase, kind: 'question' },
     { label: uiT('assistantPage.welcome.findOpportunity'), question: reportT('assistantPage.welcome.opportunityQuestion'), icon: Sparkles, kind: 'question' },
   ]

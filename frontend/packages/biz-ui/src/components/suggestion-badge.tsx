@@ -8,6 +8,7 @@ import { useToast } from '@panwatch/base-ui/components/ui/toast'
 import { AiSuggestionBadge } from '@panwatch/biz-ui/components/ai-suggestion-badge'
 import { TechnicalBadge, technicalToneFromSuggestionAction } from '@panwatch/biz-ui/components/technical-badge'
 import { useTranslation } from 'react-i18next'
+import { DEFAULT_MARKET } from '../market'
 
 export interface SuggestionInfo {
   id?: number
@@ -418,7 +419,7 @@ export function SuggestionBadge({
           open={klineDialogOpen}
           onOpenChange={setKlineDialogOpen}
           symbol={stockSymbol || ''}
-          market={market || 'CN'}
+          market={market || DEFAULT_MARKET}
           stockName={stockName}
           hasPosition={hasPosition}
           initialSummary={kline as any}

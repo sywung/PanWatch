@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { useLocalStorage } from '@/lib/utils'
 import { useTranslation } from 'react-i18next'
 import { marketSignTextClass } from '@/lib/market-colors'
+import { DEFAULT_MARKET, type MarketCode } from '@panwatch/biz-ui'
 
 interface Props {
   monitorStocks: DashboardMonitorStock[]
@@ -26,13 +27,13 @@ export default function DiscoveryPanel({ monitorStocks, onOpenStock }: Props) {
   const { t } = useTranslation('configuration')
   const discoveryT = t as unknown as (key: string, options?: Record<string, unknown>) => string
   const tr = useCallback((key: string, options?: Record<string, unknown>) => discoveryT(`p4.components.discovery.${key}`, options), [discoveryT])
-  const marketLabel = useCallback((market: string) => discoveryT(`stocksPage.markets.${({ CN: 'cn', HK: 'hk', US: 'us' } as Record<string, string>)[market] || market}`), [discoveryT])
+  const marketLabel = useCallback((market: string) => discoveryT(`stocksPage.markets.${({ TW: 'tw', CN: 'cn', HK: 'hk', US: 'us' } as Record<string, string>)[market] || market}`), [discoveryT])
   const navigate = useNavigate()
   const [watchlist, setWatchlist] = useState<DashboardWatchStock[]>([])
   const [portfolioRaw, setPortfolioRaw] = useState<DashboardPortfolioSummary | null>(null)
 
   const [discoverTab, setDiscoverTab] = useLocalStorage<'boards' | 'stocks'>('panwatch_dashboard_discoverTab', 'boards')
-  const [discoverMarket, setDiscoverMarket] = useLocalStorage<'CN' | 'HK' | 'US'>('panwatch_dashboard_discoverMarket', 'CN')
+  const [discoverMarket, setDiscoverMarket] = useLocalStorage<MarketCode>('panwatch_dashboard_discoverMarket', DEFAULT_MARKET)
   const [stocksMode, setStocksMode] = useLocalStorage<'turnover' | 'gainers' | 'for_you'>('panwatch_dashboard_stocksMode', 'for_you')
   const [boardsMode, setBoardsMode] = useLocalStorage<'gainers' | 'turnover'>('panwatch_dashboard_boardsMode', 'gainers')
   const [hotStocks, setHotStocks] = useState<HotStockItem[]>([])
@@ -191,11 +192,12 @@ export default function DiscoveryPanel({ monitorStocks, onOpenStock }: Props) {
             <Button variant="outline" size="sm" onClick={() => navigate('/opportunities')} className="h-7 text-[12px]">
               {tr('openOpportunities')}
             </Button>
-            <Select value={discoverMarket} onValueChange={(v) => setDiscoverMarket(v as 'CN' | 'HK' | 'US')}>
+            <Select value={discoverMarket} onValueChange={(v) => setDiscoverMarket(v as MarketCode)}>
               <SelectTrigger className="h-7 w-[90px] text-[12px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="TW">{marketLabel('TW')}</SelectItem>
                 <SelectItem value="CN">{marketLabel('CN')}</SelectItem>
                 <SelectItem value="HK">{marketLabel('HK')}</SelectItem>
                 <SelectItem value="US">{marketLabel('US')}</SelectItem>
@@ -277,7 +279,7 @@ export default function DiscoveryPanel({ monitorStocks, onOpenStock }: Props) {
             hotBoards.length === 0 ? (
               <div className="py-6 text-center text-[12px] text-muted-foreground">
                 {discoverError || (discoverMarket === 'CN' ? tr('noData') : tr('noBoardsMarket', { market: marketLabel(discoverMarket) }))}
-                {discoverMarket !== 'CN' && (
+                {discoverMarket !== 'CN' && discoverMarket !== 'TW' && (
                   <div className="mt-2">
                     <Button variant="ghost" size="sm" className="h-7 text-[11px]" onClick={() => setDiscoverTab('stocks')}>
                       {tr('switchToStocks')}
@@ -362,7 +364,7 @@ export default function DiscoveryPanel({ monitorStocks, onOpenStock }: Props) {
                     key={s.symbol}
                     onClick={() => {
                       setBoardDialogOpen(false)
-                      onOpenStock(s.symbol, s.market || 'CN', s.name, false)
+                      onOpenStock(s.symbol, s.market || DEFAULT_MARKET, s.name, false)
                     }}
                     className="flex cursor-pointer items-center justify-between gap-3 rounded-xl bg-accent/20 p-3 text-left transition-colors hover:bg-accent/35"
                   >

@@ -1,8 +1,8 @@
 import i18n, { getCurrentLocale, type SupportedLocale } from './index'
-
-export type MarketCode = 'CN' | 'HK' | 'US'
+import { marketCurrency, type MarketCode } from '@panwatch/biz-ui'
 
 const MARKET_CURRENCIES: Record<MarketCode, string> = {
+  TW: 'TWD',
   CN: 'CNY',
   HK: 'HKD',
   US: 'USD',
@@ -43,7 +43,7 @@ export function formatMarketCurrency(
   options?: Intl.NumberFormatOptions,
   locale?: SupportedLocale,
 ): string {
-  return formatCurrency(value, MARKET_CURRENCIES[market], options, locale)
+  return formatCurrency(value, MARKET_CURRENCIES[market] ?? marketCurrency(market), options, locale)
 }
 
 export function formatDate(
@@ -57,7 +57,7 @@ export function formatDate(
 }
 
 export function formatMarketName(market: MarketCode | 'all' | string): string {
-  if (market === 'CN' || market === 'HK' || market === 'US' || market === 'all') {
+  if (market === 'TW' || market === 'CN' || market === 'HK' || market === 'US' || market === 'all') {
     return i18n.t(`common:markets.${market}`)
   }
   return market

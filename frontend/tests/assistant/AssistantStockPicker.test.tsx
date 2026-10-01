@@ -16,20 +16,20 @@ describe('AssistantStockPicker', () => {
 
   it('searches the selected market and returns the chosen stock', async () => {
     vi.mocked(fetchAPI).mockResolvedValue([
-      { symbol: '600519', name: '贵州茅台', market: 'CN' },
+      { symbol: '2330', name: '台積電', market: 'TW' },
     ])
     const onSelect = vi.fn()
     const user = userEvent.setup()
 
     render(<AssistantStockPicker onSelect={onSelect} onCancel={vi.fn()} />)
 
-    await user.type(screen.getByRole('searchbox', { name: '搜索股票' }), '茅台')
+    await user.type(screen.getByRole('searchbox', { name: '搜索股票' }), '台積電')
     await waitFor(() => expect(fetchAPI).toHaveBeenCalledWith(
-      '/stocks/search?q=%E8%8C%85%E5%8F%B0&market=CN',
+      '/stocks/search?q=%E5%8F%B0%E7%A9%8D%E9%9B%BB&market=TW',
       expect.any(Object),
     ))
-    await user.click(await screen.findByRole('button', { name: /贵州茅台/ }))
+    await user.click(await screen.findByRole('button', { name: /台積電/ }))
 
-    expect(onSelect).toHaveBeenCalledWith({ symbol: '600519', name: '贵州茅台', market: 'CN' })
+    expect(onSelect).toHaveBeenCalledWith({ symbol: '2330', name: '台積電', market: 'TW' })
   })
 })

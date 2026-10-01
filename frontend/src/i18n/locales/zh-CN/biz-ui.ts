@@ -1,5 +1,5 @@
 export const bizUi = {
-  logsLogger: '日志源',
+  logsLogger: '日志源', amountWithCurrency: '加仓金额（{{currency}}）', approximatelyWithCurrency: '约 {{currency}} {{amount}}',
   klineModal: { title: 'K线：{{symbol}}', fallbackTitle: 'K线', description: '日K/周K/月K切换，含MA/成交量/MACD。', noStock: '未选择股票' },
   interactiveKline: { loadFailed: '加载K线失败', title: 'K线图', rsi: '强弱线', intervals: { day: '日K', week: '周K', month: '月K' }, refresh: '刷新', libraryFailed: '图表库加载失败（网络受限时可能发生）。可稍后重试或检查网络/代理。', metrics: { latest: '最新价', change: '涨跌', amplitude: '振幅', range: '区间高低', averageVolume: '均量' }, hover: { open: '开盘价', close: '收盘价', high: '最高价', low: '最低价', ma5: '5日均线', ma10: '10日均线', ma20: '20日均线', macd: 'MACD线', signal: '信号线', rsi: 'RSI强弱' }, momentum: '动能指标（MACD{{rsi}}）', momentumRsi: ' + RSI强弱线', help: 'MACD 用来看趋势动能和拐点；RSI 用来看是否偏热/偏弱（一般 70 以上偏热，30 以下偏弱）。', tenThousand: '{{value}}万' },
   addPosition: { title: '加仓测算', emptySuffix: '（当前空仓 · 建仓测算）', collapse: '收起 ▾', expand: '展开 ▸', byShares: '按股数', byAmount: '按金额', shares: '加仓股数', amount: '加仓金额(元)', price: '加仓价', sharesExample: '如 200', amountExample: '如 10000', estimatedShares: '≈ {{shares}} 股{{lots}}', estimatedLots: '（≈{{lots}} 手）', afterCost: '加仓后成本', initialCost: '建仓成本', dilution: '摊薄', total: '合计股数 / 投入', lotWarning: '提示：A股通常 100 股/手，建议取整到 100 的倍数', inputHint: '填写加仓股数/金额与价格后自动计算', targetCost: '反推：目标成本', targetHint: '按加仓价反推所需股数', required: '需加 {{shares}} 股{{lots}}', approximately: '约 {{amount}} 元', targetInvalid: '需满足 加仓价 < 目标 < 现成本 才能降到该成本', evaluating: 'AI 评估中…', evaluate: '让 AI 评估适不适合加仓', aiResult: 'AI 结论 · 仅供参考', invalidInput: '请先填写有效的加仓股数/金额与价格', evalFailed: 'AI 评估失败', verdicts: { suitable: '适合', cautious: '谨慎', unsuitable: '不适合', unknown: '未知' } },
@@ -36,7 +36,7 @@ export const bizUi = {
   },
   stockInsight: {
     description: '概览、K线、AI建议、新闻、历史分析都在同一弹窗查看',
-    markets: { CN: 'A股', HK: '港股', US: '美股' },
+    markets: { TW: '台股', CN: 'A股', HK: '港股', US: '美股' },
     actions: { generating: '生成中', image: '图片', share: '分享', copy: '复制', processing: '处理中...', held: '持仓中', unfollow: '取消关注', follow: '快速关注', setting: '设置中...', setAlert: '一键设提醒', askAI: '问 AI', refresh: '刷新', holdingCannotUnfollow: '持仓中的股票无法取消关注', more: '更多', openDetails: '打开详情页 ↗' },
     tabs: { overview: '概览', suggestions: '建议 ({{count}})', reports: '报告 ({{count}})', deep: '深度', deepCount: '深度 (1)', kline: 'K线', announcements: '公告 ({{count}})', news: '新闻 ({{count}})' },
     autoRefresh: '自动刷新', seconds: '{{count}}秒',

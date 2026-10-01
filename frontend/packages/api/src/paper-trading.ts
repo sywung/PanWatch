@@ -1,4 +1,5 @@
 import { fetchAPI } from './client'
+import type { MarketCode } from '@panwatch/biz-ui'
 
 export interface PaperTradingAccountResponse {
   id: number
@@ -23,7 +24,7 @@ export interface PaperTradingAccountResponse {
   updated_at: string
 }
 
-export type MarketView = 'ALL' | 'CN' | 'HK' | 'US'
+export type MarketView = 'ALL' | MarketCode
 
 export interface PaperTradingPositionItem {
   id: number

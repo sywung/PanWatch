@@ -5,6 +5,7 @@ import { Button } from '@panwatch/base-ui/components/ui/button'
 import { Input } from '@panwatch/base-ui/components/ui/input'
 import { useToast } from '@panwatch/base-ui/components/ui/toast'
 import { useTranslation } from 'react-i18next'
+import { marketCurrency, marketLotSize } from '../market'
 
 export interface AddPositionCalc {
   newQty: number
@@ -90,7 +91,9 @@ export default function AddPositionCalculator({
   const [aiLoading, setAiLoading] = useState(false)
   const [aiResult, setAiResult] = useState<AddPositionEvalResult | null>(null)
 
-  const isCN = market === 'CN'
+  const isCN = market.toUpperCase() === 'CN'
+  const lotSize = marketLotSize(market)
+  const currency = marketCurrency(market)
 
   const addPrice = useMemo(() => {
     const p = parseFloat(priceRaw)
@@ -143,7 +146,7 @@ export default function AddPositionCalculator({
 
   const pricePlaceholder = currentPrice && currentPrice > 0 ? String(currentPrice) : tr('price')
   const hasHolding = currentQuantity > 0 && currentCost > 0
-  const lotWarn = isCN && addQty > 0 && Math.round(addQty) % 100 !== 0
+  const lotWarn = isCN && addQty > 0 && Math.round(addQty) % (lotSize ?? 100) !== 0
 
   return (
     <div className="mt-3 border-t border-border/50 pt-3">
@@ -178,7 +181,7 @@ export default function AddPositionCalculator({
           <div className="grid grid-cols-2 gap-2">
             <label className="space-y-1">
               <div className="text-[10px] text-muted-foreground">
-                {mode === 'shares' ? tr('shares') : tr('amount')}
+                {mode === 'shares' ? tr('shares') : t('amountWithCurrency', { currency })}
               </div>
               <Input
                 value={addRaw}
@@ -200,7 +203,7 @@ export default function AddPositionCalculator({
 
           {mode === 'amount' && addQty > 0 && (
             <div className="text-[10px] text-muted-foreground">
-              {tr('estimatedShares', { shares: fmtInt(addQty), lots: isCN ? tr('estimatedLots', { lots: fmtInt(addQty / 100) }) : '' })}
+              {tr('estimatedShares', { shares: fmtInt(addQty), lots: lotSize ? tr('estimatedLots', { lots: fmtInt(addQty / lotSize) }) : '' })}
             </div>
           )}
 
@@ -249,8 +252,8 @@ export default function AddPositionCalculator({
                   <span className="text-muted-foreground">{tr('targetHint')}</span>
                 ) : reverseShares != null ? (
                   <span>
-                    {tr('required', { shares: fmtInt(reverseShares), lots: isCN ? tr('estimatedLots', { lots: fmtInt(Math.ceil(reverseShares / 100)) }) : '' })}
-                    <br />{tr('approximately', { amount: fmtInt(reverseShares * addPrice) })}
+                    {tr('required', { shares: fmtInt(reverseShares), lots: lotSize ? tr('estimatedLots', { lots: fmtInt(Math.ceil(reverseShares / lotSize)) }) : '' })}
+                    <br />{t('approximatelyWithCurrency', { amount: fmtInt(reverseShares * addPrice), currency })}
                   </span>
                 ) : (
                   <span className="text-amber-600">{tr('targetInvalid')}</span>

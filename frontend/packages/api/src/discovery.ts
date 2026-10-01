@@ -1,4 +1,5 @@
 import { fetchAPI } from './client'
+import type { MarketCode } from '@panwatch/biz-ui'
 
 type QueryValue = string | number | boolean | null | undefined
 
@@ -33,7 +34,7 @@ export interface HotBoardItem {
 
 export const discoveryApi = {
   listHotStocks: (params?: {
-    market?: 'CN' | 'HK' | 'US'
+    market?: MarketCode
     mode?: 'turnover' | 'gainers' | 'for_you'
     limit?: number
   }) =>
@@ -46,7 +47,7 @@ export const discoveryApi = {
     ),
 
   listHotBoards: (params?: {
-    market?: 'CN' | 'HK' | 'US'
+    market?: MarketCode
     mode?: 'gainers' | 'turnover' | 'hot'
     limit?: number
   }) =>
@@ -72,4 +73,3 @@ export const discoveryApi = {
       })
     ),
 }
-

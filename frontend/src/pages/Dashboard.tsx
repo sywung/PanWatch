@@ -33,8 +33,8 @@ import BenchChart from '@/components/BenchChart'
 import BenchmarkShareCard from '@/components/BenchmarkShareCard'
 import DiagnosticsShareCard from '@/components/DiagnosticsShareCard'
 import DigestShareCard from '@/components/DigestShareCard'
-import { formatNumber } from '@/i18n/format'
 import { marketSignTextClass } from '@/lib/market-colors'
+import { BASE_CURRENCY, DEFAULT_MARKET } from '@panwatch/biz-ui'
 
 function pct(v?: number | null, digits = 2): string {
   if (v == null || !isFinite(v)) return '--'
@@ -50,11 +50,11 @@ function pctChipCls(v?: number | null): string {
   if (v < 0) return 'bg-market-down/10 text-market-down'
   return 'bg-accent text-muted-foreground'
 }
-/** 金额展示:+¥2,175 风格(千分位 + 正负号),脱敏场景外的常规展示用。 */
+/** 金额展示:+NT$2,175 风格(千分位 + 正负号),脱敏场景外的常规展示用。 */
 function fmtMoney(v?: number | null): string {
   if (v == null || !isFinite(v)) return '--'
   const sign = v > 0 ? '+' : v < 0 ? '-' : ''
-  return `${sign}¥${formatNumber(Math.abs(v), { maximumFractionDigits: 0 })}`
+  return `${sign}${new Intl.NumberFormat('en-US', { style: 'currency', currency: BASE_CURRENCY, maximumFractionDigits: 0 }).format(Math.abs(v))}`
 }
 /** 去掉常见 markdown 标记,供简报摘要行取纯文本用。 */
 function stripMarkdown(s: string): string {
@@ -121,7 +121,7 @@ export default function DashboardPage() {
   const [modal, setModal] = useState<{ open: boolean; symbol: string; market: string; name: string; hasPosition: boolean }>({
     open: false,
     symbol: '',
-    market: 'CN',
+    market: DEFAULT_MARKET,
     name: '',
     hasPosition: false,
   })
@@ -196,7 +196,7 @@ export default function DashboardPage() {
   }
 
   const openStock = (symbol: string, market: string, name = '', hasPosition = false) =>
-    setModal({ open: true, symbol, market: market || 'CN', name, hasPosition })
+    setModal({ open: true, symbol, market: market || DEFAULT_MARKET, name, hasPosition })
 
   const runAiReview = async () => {
     setAiReviewLoading(true)
@@ -493,7 +493,7 @@ export default function DashboardPage() {
                   <div
                     key={i}
                     className={`flex items-center gap-2 py-1 text-[12px] ${t.symbol ? 'cursor-pointer hover:bg-accent/30' : ''}`}
-                    onClick={() => t.symbol && openStock(t.symbol, t.market || 'CN', '')}
+                    onClick={() => t.symbol && openStock(t.symbol, t.market || DEFAULT_MARKET, '')}
                   >
                     <span className="shrink-0 rounded bg-amber-500/15 px-1 text-[9px] text-amber-600">
                       {t.type === 'no_alert' ? dashboardT('dashboard.addAlert') : dashboardT('dashboard.expiring')}
@@ -515,7 +515,7 @@ export default function DashboardPage() {
                   <div
                     key={i}
                     className={`flex items-center gap-3 py-2 ${it.symbol ? 'cursor-pointer hover:bg-accent/30' : ''}`}
-                    onClick={() => it.symbol && openStock(it.symbol, it.market || 'CN', it.name || '')}
+                    onClick={() => it.symbol && openStock(it.symbol, it.market || DEFAULT_MARKET, it.name || '')}
                   >
                     <span className={`shrink-0 rounded px-1 text-[9px] ${badge.cls}`}>{badge.label}</span>
                     <div className="min-w-0 flex-1">

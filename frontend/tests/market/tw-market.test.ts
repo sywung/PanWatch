@@ -120,6 +120,7 @@ const CN_DEFAULTS = [
   /market:\s*['"]CN['"]/, // { market: 'CN' } 初始值
   /stock_market:\s*['"]CN['"]/,
   /useState(<[^>]*>)?\(\s*['"]CN['"]\s*\)/, // useState('CN')
+  /useLocalStorage(<[^>]*>)?\([^)]*,\s*['"]CN['"]\s*\)/, // useLocalStorage('key', 'CN')
 ]
 const FX_LEGACY = [/HKD_CNY|USD_CNY/, /\?\?\s*(0\.92|7\.25)\b/, /[`'"]\$?\{?sign\}?¥/]
 const THREE_MARKET_UNION = [/['"]CN['"]\s*\|\s*['"]HK['"]\s*\|\s*['"]US['"]/]
@@ -130,6 +131,7 @@ describe('no hard-coded A-share defaults', () => {
     expect(CN_DEFAULTS.some((p) => p.test("const m = market ?? 'CN'"))).toBe(true)
     expect(CN_DEFAULTS.some((p) => p.test("{ symbol: '', name: '', market: 'CN' }"))).toBe(true)
     expect(CN_DEFAULTS.some((p) => p.test("useState<string>('CN')"))).toBe(true)
+    expect(CN_DEFAULTS.some((p) => p.test("useLocalStorage<'CN' | 'HK'>('panwatch_x', 'CN')"))).toBe(true)
     expect(FX_LEGACY.some((p) => p.test('portfolio.exchange_rates?.HKD_CNY ?? 0.92'))).toBe(true)
     expect(FX_LEGACY.some((p) => p.test('return `${sign}¥${formatNumber(v)}`'))).toBe(true)
     expect(THREE_MARKET_UNION.some((p) => p.test("market: 'CN' | 'HK' | 'US'"))).toBe(true)

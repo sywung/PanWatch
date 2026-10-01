@@ -8,6 +8,7 @@ import { useToast } from '@panwatch/base-ui/components/ui/toast'
 import { useTranslation } from 'react-i18next'
 import PriceAlertFormDialog, { type AlertConditionItem, type PriceAlertFormState, type PriceAlertSubmitPayload } from '@panwatch/biz-ui/components/price-alert-form-dialog'
 import { getCurrentLocale } from '@/i18n'
+import { DEFAULT_MARKET } from '@panwatch/biz-ui'
 
 type RuleOp = 'and' | 'or'
 
@@ -136,7 +137,7 @@ export default function PriceAlertsPage() {
     }
     const qStockId = Number(params.get('stock_id') || 0)
     const qSymbol = String(params.get('symbol') || '').trim().toUpperCase()
-    const qMarket = String(params.get('market') || '').trim().toUpperCase() || 'CN'
+    const qMarket = String(params.get('market') || '').trim().toUpperCase() || DEFAULT_MARKET
     const qName = String(params.get('name') || '').trim()
 
     const openWithStock = async () => {

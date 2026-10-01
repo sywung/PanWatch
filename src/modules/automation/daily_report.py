@@ -20,6 +20,7 @@ from src.modules.research.signals.structured_output import (
     try_extract_tagged_json,
 )
 from src.platform.marketdata.models import MarketCode, IndexData
+from src.modules.market.capital_flow_text import format_capital_flow_line
 
 logger = logging.getLogger(__name__)
 
@@ -59,14 +60,19 @@ class DailyReportAgent(BaseAgent):
         直接走 marketdata 新包(index_quotes)。
         与旧 _get_cn_index 口径一致：仅 CN 出数，其余市场返回空 list。
         """
-        if market_code != MarketCode.CN:
+        if market_code == MarketCode.TW:
+            items = get_market_data().tw_index_quotes()
+            index_market = MarketCode.TW
+        elif market_code == MarketCode.CN:
+            items = get_market_data().index_quotes(_CN_INDEX_TENCENT_SYMBOLS)
+            index_market = MarketCode.CN
+        else:
             return []
-        items = get_market_data().index_quotes(_CN_INDEX_TENCENT_SYMBOLS)
         return [
             IndexData(
                 symbol=item["symbol"],
                 name=item["name"],
-                market=MarketCode.CN,
+                market=index_market,
                 current_price=item["current_price"],
                 change_pct=item["change_pct"],
                 change_amount=item["change_amount"],
@@ -134,6 +140,8 @@ class DailyReportAgent(BaseAgent):
     def build_prompt(self, data: dict, context: AgentContext) -> tuple[str, str]:
         """构建日报 Prompt"""
         system_prompt = PROMPT_PATH.read_text(encoding="utf-8")
+        if any(getattr(s, "market", None) == MarketCode.TW for s in context.watchlist):
+            system_prompt += "\n台股说明：资金面使用三大法人买卖超（股数），融资融券单位为张，涨跌幅限制±10%，可当冲。\n"
 
         # 辅助函数：安全获取数值，None 转为默认值
         def safe_num(value, default=0):
@@ -278,16 +286,9 @@ class DailyReportAgent(BaseAgent):
             # 资金流向（仅A股）
             flow = (pack.capital_flow if pack else None) or {}
             if not flow.get("error") and flow.get("status"):
-                inflow = safe_num(flow.get("main_net_inflow"))
-                inflow_pct = safe_num(flow.get("main_net_inflow_pct"))
-                inflow_str = (
-                    f"{inflow / 1e8:+.2f}亿"
-                    if abs(inflow) >= 1e8
-                    else f"{inflow / 1e4:+.0f}万"
-                )
-                lines.append(
-                    f"- 资金：{flow['status']}，主力净流入{inflow_str}（{inflow_pct:+.1f}%）"
-                )
+                flow_line = format_capital_flow_line(flow, context.report_language)
+                if flow_line:
+                    lines.append(f"- 资金：{flow_line}")
                 if flow.get("trend_5d") and flow.get("trend_5d") != "无数据":
                     lines.append(f"- 5日资金：{flow['trend_5d']}")
 
@@ -432,6 +433,10 @@ class DailyReportAgent(BaseAgent):
                 prefix = get_cn_prefix(sym, upper=True)
                 symbol_map[f"{prefix}{sym}"] = sym
                 symbol_map[f"{sym}.{prefix}"] = sym
+            if getattr(s, "market", None) == MarketCode.TW:
+                symbol_map[f"{sym}.TW"] = sym
+                symbol_map[f"{sym}.TWO"] = sym
+                symbol_map[f"TW{sym}"] = sym
             if getattr(s, "name", ""):
                 name_map[s.name] = sym
 
@@ -533,6 +538,10 @@ class DailyReportAgent(BaseAgent):
                 prefix = get_cn_prefix(sym, upper=True)
                 symbol_map[f"{prefix}{sym}"] = sym
                 symbol_map[f"{sym}.{prefix}"] = sym
+            if getattr(s, "market", None) == MarketCode.TW:
+                symbol_map[f"{sym}.TW"] = sym
+                symbol_map[f"{sym}.TWO"] = sym
+                symbol_map[f"TW{sym}"] = sym
 
         for it in items:
             if not isinstance(it, dict):

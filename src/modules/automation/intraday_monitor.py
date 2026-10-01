@@ -19,6 +19,7 @@ from src.modules.automation.suggestion_pool import save_suggestion
 from src.modules.research.signals import SignalPackBuilder
 from src.modules.research.signals.structured_output import try_parse_action_json
 from src.platform.marketdata.models import DEFAULT_MARKET, MarketCode, StockData, MARKETS
+from src.modules.market.capital_flow_text import format_capital_flow_line
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,7 @@ def market_label(market: MarketCode, language: str = "zh-TW") -> str:
             MarketCode.CN: "A-shares",
             MarketCode.HK: "Hong Kong market",
             MarketCode.US: "U.S. market",
+            MarketCode.TW: "Taiwan market",
         }.get(market, market.value)
     if market == MarketCode.CN:
         return "A股"
@@ -44,6 +46,8 @@ def market_label(market: MarketCode, language: str = "zh-TW") -> str:
         return "港股"
     if market == MarketCode.US:
         return "美股"
+    if market == MarketCode.TW:
+        return "台股"
     return market.value
 
 
@@ -191,6 +195,8 @@ class IntradayMonitorAgent(BaseAgent):
     def build_prompt(self, data: dict, context: AgentContext) -> tuple[str, str]:
         """构建盘中分析 Prompt"""
         system_prompt = PROMPT_PATH.read_text(encoding="utf-8")
+        if any(getattr(s, "market", None) == MarketCode.TW for s in getattr(context, "watchlist", [])):
+            system_prompt += "\n台股说明：资金面使用三大法人买卖超（股数），融资融券单位为张，涨跌幅限制±10%，可当冲。\n"
 
         # 辅助函数：安全获取数值，None 转为默认值
         def safe_num(value, default=0):
@@ -404,17 +410,10 @@ class IntradayMonitorAgent(BaseAgent):
             and flow.get("status")
         ):
             try:
-                inflow = float(flow.get("main_net_inflow") or 0)
-                inflow_pct = float(flow.get("main_net_inflow_pct") or 0)
-                inflow_str = (
-                    f"{inflow / 1e8:+.2f}亿"
-                    if abs(inflow) >= 1e8
-                    else f"{inflow / 1e4:+.0f}万"
-                )
+                flow_line = format_capital_flow_line(flow, context.report_language)
                 lines.append("\n## 资金面")
-                lines.append(
-                    f"- 资金：{flow.get('status')}，主力净流入{inflow_str}（{inflow_pct:+.1f}%）"
-                )
+                if flow_line:
+                    lines.append(f"- 资金：{flow_line}")
                 if flow.get("trend_5d") and flow.get("trend_5d") != "无数据":
                     lines.append(f"- 5日资金：{flow.get('trend_5d')}")
             except Exception:

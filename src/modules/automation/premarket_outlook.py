@@ -25,6 +25,7 @@ from src.modules.research.signals.structured_output import (
 )
 from src.platform.observability.log_context import get_log_context
 from src.platform.marketdata.models import MarketCode
+from src.modules.market.capital_flow_text import format_capital_flow_line
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +93,17 @@ class PremarketOutlookAgent(BaseAgent):
         except Exception as e:
             logger.warning("[%s] 获取美股指数失败: %s", trace_id, e)
         logger.info("[%s] 隔夜指数采集完成: count=%s", trace_id, len(us_indices))
+
+        tw_indices = []
+        if any(s.market == MarketCode.TW for s in context.watchlist):
+            try:
+                items = get_market_data().tw_index_quotes()
+                tw_indices = [{"name": item.get("name") or item.get("symbol"),
+                               "current": item.get("current_price"),
+                               "change_pct": item.get("change_pct")}
+                              for item in items]
+            except Exception as e:
+                logger.warning("[%s] 获取台股指数失败: %s", trace_id, e)
 
         # 3/4. SignalPack（技术面+持仓+新闻）
         builder = SignalPackBuilder()
@@ -205,6 +217,7 @@ class PremarketOutlookAgent(BaseAgent):
             if yesterday_analysis
             else None,
             "us_indices": us_indices,
+            "tw_indices": tw_indices,
             "signal_packs": packs,
             "symbol_contexts": symbol_contexts,
             "quality_overview": quality_overview,
@@ -216,6 +229,8 @@ class PremarketOutlookAgent(BaseAgent):
     def build_prompt(self, data: dict, context: AgentContext) -> tuple[str, str]:
         """构建盘前分析 Prompt"""
         system_prompt = PROMPT_PATH.read_text(encoding="utf-8")
+        if any(getattr(s, "market", None) == MarketCode.TW for s in context.watchlist):
+            system_prompt += "\n台股说明：资金面使用三大法人买卖超（股数），融资融券单位为张，涨跌幅限制±10%，可当冲。\n"
 
         # 辅助函数：安全获取数值，None 转为默认值
         def safe_num(value, default=0):
@@ -242,6 +257,12 @@ class PremarketOutlookAgent(BaseAgent):
             global_topic = (quality_overview.get("global_news_topic") or {})
             if global_topic.get("summary"):
                 lines.append(f"- 历史新闻主题：{global_topic.get('summary')}")
+            lines.append("")
+
+        if data.get("tw_indices"):
+            lines.append("## 台股大盤")
+            for idx in data["tw_indices"]:
+                lines.append(f"- {idx.get('name')}: {safe_num(idx.get('current'), 0):.2f} {safe_num(idx.get('change_pct'), 0):+.2f}%")
             lines.append("")
 
         # 昨日分析回顾
@@ -357,23 +378,16 @@ class PremarketOutlookAgent(BaseAgent):
             # 资金流向（仅A股，若可用）
             flow = (pack.capital_flow if pack else None) or {}
             if (
-                getattr(stock, "market", None) == MarketCode.CN
+                getattr(stock, "market", None) in (MarketCode.CN, MarketCode.TW)
                 and isinstance(flow, dict)
                 and flow
                 and not flow.get("error")
                 and flow.get("status")
             ):
                 try:
-                    inflow = float(flow.get("main_net_inflow") or 0)
-                    inflow_pct = float(flow.get("main_net_inflow_pct") or 0)
-                    inflow_str = (
-                        f"{inflow / 1e8:+.2f}亿"
-                        if abs(inflow) >= 1e8
-                        else f"{inflow / 1e4:+.0f}万"
-                    )
-                    lines.append(
-                        f"- 资金：{flow.get('status')}，主力净流入{inflow_str}（{inflow_pct:+.1f}%）"
-                    )
+                    flow_line = format_capital_flow_line(flow, context.report_language)
+                    if flow_line:
+                        lines.append(f"- 资金：{flow_line}")
                     if flow.get("trend_5d") and flow.get("trend_5d") != "无数据":
                         lines.append(f"- 5日资金：{flow.get('trend_5d')}")
                 except Exception:
@@ -521,6 +535,10 @@ class PremarketOutlookAgent(BaseAgent):
                 prefix = get_cn_prefix(sym, upper=True)
                 symbol_map[f"{prefix}{sym}"] = sym
                 symbol_map[f"{sym}.{prefix}"] = sym
+            if getattr(s, "market", None) == MarketCode.TW:
+                symbol_map[f"{sym}.TW"] = sym
+                symbol_map[f"{sym}.TWO"] = sym
+                symbol_map[f"TW{sym}"] = sym
             if getattr(s, "name", ""):
                 name_map[s.name] = sym
 
@@ -614,6 +632,10 @@ class PremarketOutlookAgent(BaseAgent):
                 prefix = get_cn_prefix(sym, upper=True)
                 symbol_map[f"{prefix}{sym}"] = sym
                 symbol_map[f"{sym}.{prefix}"] = sym
+            if getattr(s, "market", None) == MarketCode.TW:
+                symbol_map[f"{sym}.TW"] = sym
+                symbol_map[f"{sym}.TWO"] = sym
+                symbol_map[f"TW{sym}"] = sym
 
         for it in items:
             if not isinstance(it, dict):
@@ -899,6 +921,7 @@ class PremarketOutlookAgent(BaseAgent):
             title=result.title,
             raw_data={
                 "us_indices": data.get("us_indices"),
+                "tw_indices": data.get("tw_indices"),
                 "timestamp": data.get("timestamp"),
                 "quality_overview": quality_overview,
                 "context_summary": compact_context,

@@ -65,12 +65,14 @@ INDEX_TENCENT: dict[str, tuple[str, str]] = {
     "399006": ("sz399006", "创业板指"),
     "000001": ("sh000001", "上证指数"),
 }
-DEFAULT_BENCHMARK = "000300"
-_ANNUALIZE = 242  # A股年化交易日数
+DEFAULT_BENCHMARK = "TWII"
+_ANNUALIZE = 245  # 台股年化交易日数
 
 
 def benchmark_label(code: str) -> str:
-    return INDEX_TENCENT.get(code, (code, code))[1]
+    return {"TWII": "加權指數", "TPEX": "櫃買指數"}.get(
+        code, INDEX_TENCENT.get(code, (code, code))[1]
+    )
 
 
 def compute_benchmark_metrics(
@@ -128,6 +130,13 @@ def compute_benchmark_metrics(
 
 def _fetch_benchmark_series(code: str, days: int) -> tuple[list[str], list[float]]:
     """取基准指数日K → (dates, closes);失败返回 ([], [])。"""
+    if code in {"TWII", "TPEX"}:
+        try:
+            from src.platform.marketdata.marketdata_client import get_market_data
+            bars = get_market_data().index_klines(code, market="TW", days=days)
+            return [b.date for b in bars], [b.close for b in bars]
+        except Exception:
+            return [], []
     tsym = INDEX_TENCENT.get(
         code, (code if code.startswith(("sh", "sz")) else f"sh{code}", code)
     )[0]
@@ -216,7 +225,8 @@ def build_portfolio_benchmark(
 
     bench_map = dict(zip(bench_dates, bench_closes))
     bench_vals = [bench_map[d] for d in dates]
-    metrics = compute_benchmark_metrics(dates, nav, bench_vals)
+    annualize = _ANNUALIZE if benchmark_code in {"TWII", "TPEX"} else 242
+    metrics = compute_benchmark_metrics(dates, nav, bench_vals, annualize=annualize)
     if metrics:
         metrics["benchmark_code"] = benchmark_code
         metrics["benchmark_label"] = benchmark_label(benchmark_code)

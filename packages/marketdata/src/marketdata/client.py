@@ -53,6 +53,7 @@ INDEX_TENCENT: dict[str, str] = {
     "DJI": "usDJI",         # 道琼斯
     "INX": "usINX",         # 标普500
 }
+INDEX_YAHOO: dict[str, str] = {"TWII": "^TWII", "TPEX": "^TWOII"}
 
 
 class MarketData:
@@ -173,6 +174,44 @@ class MarketData:
         from marketdata.vendors.tencent import fetch_raw
         return fetch_raw(list(tencent_symbols)) if tencent_symbols else []
 
+    def tw_index_quotes(self) -> list[dict]:
+        """通过 TWSE MIS 取得加权与櫃买指数行情。"""
+        from marketdata.vendors import twse
+        payload = twse.market_get(
+            "https://mis.twse.com.tw/stock/api/getStockInfo.jsp",
+            host_key="mis.twse.com.tw",
+            params={"ex_ch": "tse_t00.tw|otc_o00.tw", "json": "1", "delay": "0"},
+            headers={"User-Agent": "Mozilla/5.0"}, timeout=10, parse="json",
+            log_label="TWSE指数行情",
+        )
+        rows = payload.get("msgArray") if isinstance(payload, dict) else []
+        wanted = {"t00": ("TWII", "加權指數"), "o00": ("TPEX", "櫃買指數")}
+        out = []
+        for row in rows or []:
+            if not isinstance(row, dict):
+                continue
+            code = str(row.get("c") or "").lower()
+            if code not in wanted:
+                continue
+            def num(key):
+                try:
+                    value = row.get(key)
+                    return None if value in (None, "", "-") else float(value)
+                except (TypeError, ValueError):
+                    return None
+            previous = num("y")
+            current = num("z")
+            if current is None:
+                current = previous
+            if current is None:
+                continue
+            change = current - previous if previous is not None else 0.0
+            out.append({"symbol": wanted[code][0], "name": wanted[code][1],
+                        "current_price": current, "change_pct": change / previous * 100 if previous else 0.0,
+                        "change_amount": change, "volume": num("v") or 0.0,
+                        "turnover": num("t") or num("a") or 0.0})
+        return out
+
     def index_klines(self, code: str, *, market: str, days: int = 120) -> list:
         """指数日K:东财 secid 主源;失败/未映射(如美股指数)走腾讯原始符号兜底;都无 → []。
 
@@ -180,6 +219,9 @@ class MarketData:
         ②美股指数(IXIC/DJI/INX)东财无 secid,腾讯可出(仅最近几根,短但可用)。返回 list[Bar]。
         """
         c = str(code).strip()
+        if market.upper() == "TW" and c.upper() in INDEX_YAHOO:
+            from marketdata.vendors.kline import fetch_yahoo_kline_raw
+            return fetch_yahoo_kline_raw(INDEX_YAHOO[c.upper()], days)
         secid = INDEX_SECID.get(c) or INDEX_SECID.get(c.upper())
         if secid:
             from marketdata.vendors.kline import fetch_eastmoney_kline

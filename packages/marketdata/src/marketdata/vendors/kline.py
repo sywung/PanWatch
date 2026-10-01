@@ -18,6 +18,36 @@ _STOOQ_URL = "https://stooq.com/q/d/l/"
 _YAHOO_CHART_URL = "https://query2.finance.yahoo.com/v8/finance/chart/{sym}"
 
 
+def fetch_yahoo_kline_raw(ysym: str, days: int) -> list[Bar]:
+    """按 Yahoo 原始代码取 K 线，供指数等不应套用股票后缀的场景使用。"""
+    payload = market_get(
+        _YAHOO_CHART_URL.format(sym=ysym), host_key="query2.finance.yahoo.com",
+        params={"interval": "1d", "range": _yahoo_range(days)},
+        headers={"User-Agent": "Mozilla/5.0"}, timeout=10, retries=2,
+        parse="json", log_label="Yahoo指数K线", symbol=ysym,
+    )
+    if not isinstance(payload, dict):
+        return []
+    result = ((payload.get("chart") or {}).get("result")) or []
+    if not result:
+        return []
+    item = result[0] or {}
+    timestamps = item.get("timestamp") or []
+    quote = ((item.get("indicators") or {}).get("quote") or [{}])[0] or {}
+    out = []
+    for i, ts in enumerate(timestamps):
+        try:
+            values = [quote.get(k, [])[i] for k in ("open", "close", "high", "low")]
+            if any(v is None for v in values):
+                continue
+            out.append(Bar(date=datetime.fromtimestamp(ts, timezone.utc).date().isoformat(),
+                           open=float(values[0]), close=float(values[1]), high=float(values[2]),
+                           low=float(values[3]), volume=float((quote.get("volume") or [0])[i] or 0)))
+        except (IndexError, TypeError, ValueError, OSError):
+            continue
+    return out
+
+
 def _days(config: dict, default: int = 60) -> int:
     try:
         return int(config.get("days") or default)

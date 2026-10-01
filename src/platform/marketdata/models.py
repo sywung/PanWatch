@@ -18,6 +18,8 @@ ALL_MARKETS: tuple[str, ...] = (
     "US",
 )
 
+CAPITAL_FLOW_MARKETS = frozenset({"CN", "TW"})
+
 
 @dataclass
 class TradingSession:

@@ -599,7 +599,7 @@ def portfolio_diagnostics(db: Session = Depends(get_db)):
 
 @router.get("/portfolio/benchmark")
 def portfolio_benchmark(
-    days: int = 60, benchmark: str = "000300", db: Session = Depends(get_db)
+    days: int = 60, benchmark: str = "TWII", db: Session = Depends(get_db)
 ):
     """真实持仓组合 vs 基准:超额收益/信息比率/相对回撤 + 归一化净值曲线。"""
     from src.modules.portfolio.portfolio_benchmark import (
@@ -682,7 +682,7 @@ def portfolio_todos(db: Session = Depends(get_db)):
 
 
 @router.get("/portfolio/attribution")
-def portfolio_attribution(days: int = 60, benchmark: str = "000300", db: Session = Depends(get_db)):
+def portfolio_attribution(days: int = 60, benchmark: str = "TWII", db: Session = Depends(get_db)):
     """近 days 日各持仓对组合收益的贡献(谁拖累/贡献),降序。"""
     from src.modules.portfolio.portfolio_benchmark import DEFAULT_BENCHMARK, build_attribution
 

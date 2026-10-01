@@ -30,6 +30,7 @@ _INDEX_BY_MARKET: dict[str, tuple[str, str]] = {
     "CN": ("000300", "沪深300"),
     "HK": ("HSI", "恒生指数"),
     "US": (".INX", "标普500"),
+    "TW": ("TWII", "加權指數"),
 }
 # A股若 000300 取数失败时的兜底指数(上证指数)。
 _CN_INDEX_FALLBACK: tuple[str, str] = ("000001", "上证指数")

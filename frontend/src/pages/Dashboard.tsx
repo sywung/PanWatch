@@ -88,6 +88,8 @@ const INDEX_TRANSLATION_KEYS: Record<string, string> = {
   IXIC: 'nasdaq',
   DJI: 'dowJones',
   '000300': 'csi300',
+  TWII: 'twii',
+  TPEX: 'tpex',
 }
 
 export default function DashboardPage() {

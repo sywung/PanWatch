@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from src.platform.marketdata.collectors.kline_collector import KlineCollector
 from src.platform.marketdata.collectors.news_collector import NewsCollector, NewsItem
 from src.platform.marketdata.marketdata_client import md_stock_data
-from src.platform.marketdata.models import MarketCode
+from src.platform.marketdata.models import MarketCode, CAPITAL_FLOW_MARKETS
 from src.platform.marketdata.models import StockData
 
 
@@ -281,28 +281,28 @@ class SignalPackBuilder:
                         }
                     )
 
-        # 4) Capital flow (CN only)
-        flow_map: dict[str, dict] = {}
+        # 4) Capital flow (CN/TW)
+        flow_map: dict[tuple[MarketCode, str], dict] = {}
         if include_capital_flow:
-            cn_symbols = [sym for sym, market, _ in symbols if market == MarketCode.CN]
-            if cn_symbols:
+            flow_symbols = [(sym, market) for sym, market, _ in symbols if market.value in CAPITAL_FLOW_MARKETS]
+            if flow_symbols:
                 if flow_disabled:
-                    for sym in cn_symbols:
-                        key = (MarketCode.CN, sym)
+                    for sym, market in flow_symbols:
+                        key = (market, sym)
                         self._flow_cache[key] = {"error": "资金流向数据源已禁用"}
                         self._flow_source_cache[key] = "disabled"
-                        flow_map[sym] = self._flow_cache[key]
+                        flow_map[key] = self._flow_cache[key]
                 else:
                     try:
                         from src.platform.marketdata.collectors.capital_flow_collector import (
                             CapitalFlowCollector,
                         )
 
-                        collector = CapitalFlowCollector(MarketCode.CN)
-                        for sym in cn_symbols:
-                            key = (MarketCode.CN, sym)
+                        for sym, market in flow_symbols:
+                            collector = CapitalFlowCollector(market)
+                            key = (market, sym)
                             if key in self._flow_cache:
-                                flow_map[sym] = self._flow_cache[key]
+                                flow_map[key] = self._flow_cache[key]
                                 if key not in self._flow_source_cache:
                                     self._flow_source_cache[key] = "cache"
                                 continue
@@ -310,7 +310,8 @@ class SignalPackBuilder:
                             last_err = None
                             for provider, cfg in flow_providers:
                                 try:
-                                    if provider != "eastmoney":
+                                    actual_provider = "twse" if market == MarketCode.TW and provider == "eastmoney" else provider
+                                    if actual_provider not in {"eastmoney", "twse"}:
                                         logger.info(
                                             f"SignalPack capital_flow 未支持 provider={provider}，跳过"
                                         )
@@ -318,7 +319,7 @@ class SignalPackBuilder:
                                     self._flow_cache[key] = (
                                         collector.get_capital_flow_summary(sym)
                                     )
-                                    self._flow_source_cache[key] = provider
+                                    self._flow_source_cache[key] = actual_provider
                                     last_err = None
                                     break
                                 except Exception as e:
@@ -332,7 +333,7 @@ class SignalPackBuilder:
                                     else "获取资金流向失败"
                                 }
                                 self._flow_source_cache.setdefault(key, "unavailable")
-                            flow_map[sym] = self._flow_cache[key]
+                            flow_map[key] = self._flow_cache[key]
                     except Exception as e:
                         logger.warning(f"SignalPack capital_flow 采集失败: {e}")
 
@@ -441,8 +442,8 @@ class SignalPackBuilder:
             if include_events:
                 if not events_by_symbol.get(sym):
                     missing.append("events")
-            if include_capital_flow and market == MarketCode.CN:
-                flow = flow_map.get(sym) or {}
+            if include_capital_flow and market.value in CAPITAL_FLOW_MARKETS:
+                flow = flow_map.get((market, sym)) or {}
                 if not flow or flow.get("error"):
                     missing.append("capital_flow")
 
@@ -463,8 +464,8 @@ class SignalPackBuilder:
                 )
                 if include_news
                 else None,
-                capital_flow=flow_map.get(sym)
-                if (include_capital_flow and market == MarketCode.CN)
+                capital_flow=flow_map.get((market, sym))
+                if (include_capital_flow and market.value in CAPITAL_FLOW_MARKETS)
                 else None,
                 events=EventsSnapshot(
                     days=int(events_days), items=events_by_symbol.get(sym, [])[:5]
@@ -478,9 +479,9 @@ class SignalPackBuilder:
                     else "skipped",
                     "news": "db" if include_news else "skipped",
                     "capital_flow": self._flow_source_cache.get(
-                        (MarketCode.CN, sym), "unknown"
+                        (market, sym), "unknown"
                     )
-                    if (include_capital_flow and market == MarketCode.CN)
+                    if (include_capital_flow and market.value in CAPITAL_FLOW_MARKETS)
                     else "skipped",
                     "events": self._events_source_cache.get(events_key, "unknown")
                     if include_events

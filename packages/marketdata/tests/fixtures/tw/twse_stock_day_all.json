@@ -1,0 +1,67 @@
+[
+ {
+  "Date": "1150930",
+  "Code": "0050",
+  "Name": "元大台灣50",
+  "TradeVolume": "60951975",
+  "TradeValue": "6863160831",
+  "OpeningPrice": "112.50",
+  "HighestPrice": "113.05",
+  "LowestPrice": "112.05",
+  "ClosingPrice": "112.05",
+  "Change": "0.7500",
+  "Transaction": "61201"
+ },
+ {
+  "Date": "1150930",
+  "Code": "1101",
+  "Name": "台泥",
+  "TradeVolume": "104957435",
+  "TradeValue": "2745271403",
+  "OpeningPrice": "25.35",
+  "HighestPrice": "26.70",
+  "LowestPrice": "25.20",
+  "ClosingPrice": "26.30",
+  "Change": "1.0000",
+  "Transaction": "28474"
+ },
+ {
+  "Date": "1150930",
+  "Code": "2317",
+  "Name": "鴻海",
+  "TradeVolume": "27366648",
+  "TradeValue": "6907802068",
+  "OpeningPrice": "253.50",
+  "HighestPrice": "254.00",
+  "LowestPrice": "251.50",
+  "ClosingPrice": "251.50",
+  "Change": "1.0000",
+  "Transaction": "17134"
+ },
+ {
+  "Date": "1150930",
+  "Code": "2330",
+  "Name": "台積電",
+  "TradeVolume": "34282491",
+  "TradeValue": "85388527300",
+  "OpeningPrice": "2495.00",
+  "HighestPrice": "2510.00",
+  "LowestPrice": "2480.00",
+  "ClosingPrice": "2480.00",
+  "Change": "5.0000",
+  "Transaction": "83797"
+ },
+ {
+  "Date": "1150930",
+  "Code": "2454",
+  "Name": "聯發科",
+  "TradeVolume": "8292336",
+  "TradeValue": "41454142305",
+  "OpeningPrice": "5010.00",
+  "HighestPrice": "5100.00",
+  "LowestPrice": "4920.00",
+  "ClosingPrice": "4920.00",
+  "Change": "10.0000",
+  "Transaction": "52843"
+ }
+]

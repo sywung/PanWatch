@@ -1,0 +1,42 @@
+[
+ {
+  "Date": "1150930",
+  "SecuritiesCompanyCode": "5347",
+  "CompanyName": "世界",
+  "Close": "181.00",
+  "Change": "+2.50",
+  "Open": "184.50",
+  "High": "185.00",
+  "Low": "179.00",
+  "Average": "181.16",
+  "TradingShares": "23813597",
+  "TransactionAmount": "4314117535",
+  "TransactionNumber": "22002",
+  "LatestBidPrice": "181.00",
+  "LatesAskPrice": "181.50",
+  "Capitals": "1878502192",
+  "NextReferencePrice": "181.00",
+  "NextLimitUp": "199.00",
+  "NextLimitDown": "163.00"
+ },
+ {
+  "Date": "1150930",
+  "SecuritiesCompanyCode": "6488",
+  "CompanyName": "環球晶",
+  "Close": "1035.00",
+  "Change": "+90.00",
+  "Open": "966.00",
+  "High": "1035.00",
+  "Low": "953.00",
+  "Average": "995.61",
+  "TradingShares": "18827804",
+  "TransactionAmount": "18745131067",
+  "TransactionNumber": "36111",
+  "LatestBidPrice": "1035.00",
+  "LatesAskPrice": "0.00",
+  "Capitals": "478113725",
+  "NextReferencePrice": "1035.00",
+  "NextLimitUp": "1135.00",
+  "NextLimitDown": "932.00"
+ }
+]

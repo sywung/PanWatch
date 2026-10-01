@@ -20,11 +20,11 @@ afterEach(async () => {
 })
 
 describe('internationalization runtime', () => {
-  it('normalizes unknown locales to Chinese without browser-language detection', () => {
+  it('normalizes unknown locales to Traditional Chinese without browser-language detection', () => {
     expect(normalizeLocale('zh-CN')).toBe('zh-CN')
     expect(normalizeLocale('en-GB')).toBe('en-US')
-    expect(normalizeLocale('ja-JP')).toBe('zh-CN')
-    expect(normalizeLocale(null)).toBe('zh-CN')
+    expect(normalizeLocale('ja-JP')).toBe('zh-TW')
+    expect(normalizeLocale(null)).toBe('zh-TW')
   })
 
   it('uses a saved preference before browser language', () => {
@@ -32,11 +32,11 @@ describe('internationalization runtime', () => {
     expect(detectInitialLocale('en-US', ['zh-CN'])).toBe('en-US')
   })
 
-  it('defaults new visitors by browser language', () => {
-    expect(detectInitialLocale(null, ['zh-Hans-CN'])).toBe('zh-CN')
-    expect(detectInitialLocale(null, ['en-GB'])).toBe('en-US')
-    expect(detectInitialLocale(null, ['ja-JP'])).toBe('en-US')
-    expect(detectInitialLocale(null, [])).toBe('en-US')
+  it('defaults new visitors to Traditional Chinese regardless of browser language', () => {
+    expect(detectInitialLocale(null, ['zh-Hans-CN'])).toBe('zh-TW')
+    expect(detectInitialLocale(null, ['en-GB'])).toBe('zh-TW')
+    expect(detectInitialLocale(null, ['ja-JP'])).toBe('zh-TW')
+    expect(detectInitialLocale(null, [])).toBe('zh-TW')
   })
 
   it('persists language changes and updates the document language', async () => {

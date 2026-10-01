@@ -20,6 +20,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DATA_DIR = PROJECT_ROOT / "data"
 CACHE_FILE = DATA_DIR / "stock_list_cache.json"
 CACHE_TTL = 86400 * 7  # 7 days
+# 台股来源有失败时,缓存只保留这么久就重抓
+PARTIAL_RETRY_SEC = 1800
 
 TWSE_STOCK_LIST_URL = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"
 TPEX_STOCK_LIST_URL = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes"
@@ -77,27 +79,42 @@ EASTMONEY_BJ_PARAMS = {
 PAGE_SIZE = 100
 
 
-def _load_cache() -> list[dict] | None:
+def _read_cache_file() -> dict | None:
+    """读取缓存文件原始内容(不判断过期);不存在或损坏返回 None。"""
     if not os.path.exists(CACHE_FILE):
         return None
     try:
         with open(CACHE_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-        stocks = data["stocks"]
-        if time.time() - data.get("ts", 0) < CACHE_TTL:
-            # 没有台股或板别字段的旧版本缓存需要立即升级，不能继续沿用原 TTL。
-            tw_items = [item for item in stocks if isinstance(item, dict) and item.get("market") == "TW"]
-            if tw_items and all(item.get("board") for item in tw_items):
-                return stocks
-    except (json.JSONDecodeError, KeyError):
-        pass
+        return data if isinstance(data, dict) and isinstance(data.get("stocks"), list) else None
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def _load_cache() -> list[dict] | None:
+    data = _read_cache_file()
+    if not data:
+        return None
+    stocks = data["stocks"]
+    age = time.time() - data.get("ts", 0)
+    if age >= CACHE_TTL:
+        return None
+    # 台股来源有失败的缓存(或旧版未记录状态的缓存)只用 PARTIAL_RETRY_SEC,过后重抓,
+    # 不能让一次失败的残缺清单沿用 7 天
+    if data.get("partial", True) and age >= PARTIAL_RETRY_SEC:
+        return None
+    # 没有台股或板别字段的旧版本缓存需要立即升级，不能继续沿用原 TTL。
+    tw_items = [item for item in stocks if isinstance(item, dict) and item.get("market") == "TW"]
+    if tw_items and all(item.get("board") for item in tw_items):
+        return stocks
     return None
 
 
-def _save_cache(stocks: list[dict]):
+def _save_cache(stocks: list[dict], *, partial: bool = False, failed: list[str] | None = None):
     os.makedirs(DATA_DIR, exist_ok=True)
+    payload = {"ts": time.time(), "stocks": stocks, "partial": partial, "failed": failed or []}
     with open(CACHE_FILE, "w", encoding="utf-8") as f:
-        json.dump({"ts": time.time(), "stocks": stocks}, f, ensure_ascii=False)
+        json.dump(payload, f, ensure_ascii=False)
 
 
 HEADERS = {
@@ -298,50 +315,72 @@ def _fetch_esb_raw() -> list[dict]:
     return data if isinstance(data, list) else []
 
 
+_TW_BOARD_SOURCES = (
+    ("TSE", "_fetch_twse_raw", "Code", "Name"),
+    ("OTC", "_fetch_tpex_raw", "SecuritiesCompanyCode", "CompanyName"),
+    ("ESB", "_fetch_esb_raw", "SecuritiesCompanyCode", "CompanyAbbreviation"),
+)
+
+
+def _fetch_tw_stock_list_with_status() -> tuple[list[dict], list[str]]:
+    """合并上市/上柜/兴柜清单;返回 (清单, 失败或回空的板别)。"""
+    stocks: list[dict] = []
+    failed: list[str] = []
+    seen: set[str] = set()
+    for board, fetcher_name, code_key, name_key in _TW_BOARD_SOURCES:
+        try:
+            raw = globals()[fetcher_name]()
+        except Exception as e:
+            logger.warning(f"台股 {board} 列表获取失败: {e}")
+            failed.append(board)
+            continue
+        count = 0
+        for row in raw or []:
+            if not isinstance(row, dict):
+                continue
+            symbol = str(row.get(code_key) or "").strip().upper()
+            name = str(row.get(name_key) or "").strip()
+            if not symbol or not name or not TW_SYMBOL_RE.fullmatch(symbol) or symbol in seen:
+                continue
+            seen.add(symbol)
+            stocks.append({"symbol": symbol, "name": name, "market": "TW", "board": board})
+            count += 1
+        if count == 0:
+            logger.warning(f"台股 {board} 列表为空")
+            failed.append(board)
+    return stocks, failed
+
+
 def _fetch_tw_stock_list() -> list[dict]:
     """合并 TWSE 和 TPEx 列表，并过滤非股票类代码"""
-    rows = []
-    try:
-        rows.extend((row, "Code", "Name") for row in _fetch_twse_raw())
-    except Exception as e:
-        logger.warning(f"TWSE 获取台股列表失败: {e}")
-    try:
-        rows.extend((row, "SecuritiesCompanyCode", "CompanyName") for row in _fetch_tpex_raw())
-    except Exception as e:
-        logger.warning(f"TPEx 获取台股列表失败: {e}")
-    try:
-        rows.extend((row, "SecuritiesCompanyCode", "CompanyAbbreviation", "ESB") for row in _fetch_esb_raw())
-    except Exception as e:
-        logger.warning(f"TPEx 興櫃获取台股列表失败: {e}")
+    return _fetch_tw_stock_list_with_status()[0]
 
-    stocks = []
-    seen = set()
-    for row_data in rows:
-        row, code_key, name_key, *board_data = row_data
-        if not isinstance(row, dict):
-            continue
-        symbol = str(row.get(code_key) or "").strip().upper()
-        name = str(row.get(name_key) or "").strip()
-        if not symbol or not name or not TW_SYMBOL_RE.fullmatch(symbol) or symbol in seen:
-            continue
-        seen.add(symbol)
-        item = {"symbol": symbol, "name": name, "market": "TW"}
-        item["board"] = board_data[0] if board_data else ("TSE" if code_key == "Code" else "OTC")
-        stocks.append(item)
-    return stocks
+
+def _carry_over_tw_boards(stocks: list[dict], failed: list[str]) -> list[dict]:
+    """失败的板别沿用上一份缓存(即使已过期)的资料,避免整板消失。"""
+    old = _read_cache_file()
+    if not old or not failed:
+        return stocks
+    have = {s["symbol"] for s in stocks}
+    kept = [
+        item for item in old["stocks"]
+        if isinstance(item, dict) and item.get("market") == "TW"
+        and item.get("board") in failed and item.get("symbol") not in have
+    ]
+    if kept:
+        logger.info(f"台股 {','.join(failed)} 沿用上一份缓存 {len(kept)} 只")
+    return stocks + kept
 
 
 def refresh_stock_list() -> list[dict]:
     """拉取台股、A 股和港股等列表并缓存"""
     stocks = []
 
-    # 台股: TWSE 上市 + TPEx 上柜，放在清单最前面
-    try:
-        tw_stocks = _fetch_tw_stock_list()
-        stocks.extend(tw_stocks)
-        logger.info(f"获取台股列表成功: {len(tw_stocks)} 只")
-    except Exception as e:
-        logger.warning(f"获取台股列表失败: {e}")
+    # 台股: TWSE 上市 + TPEx 上柜 + 兴柜，放在清单最前面
+    tw_stocks, tw_failed = _fetch_tw_stock_list_with_status()
+    tw_stocks = _carry_over_tw_boards(tw_stocks, tw_failed)
+    stocks.extend(tw_stocks)
+    logger.info(f"获取台股列表: {len(tw_stocks)} 只" + (f"(失败板别 {tw_failed})" if tw_failed else ""))
 
     # A 股: 东方财富优先，akshare 备用
     try:
@@ -386,7 +425,7 @@ def refresh_stock_list() -> list[dict]:
         logger.warning(f"东方财富获取北交所失败: {e}")
 
     if stocks:
-        _save_cache(stocks)
+        _save_cache(stocks, partial=bool(tw_failed), failed=tw_failed)
     return stocks
 
 
@@ -476,6 +515,35 @@ def _realtime_search(query: str, market: str = "", limit: int = 20) -> list[dict
     return results
 
 
+MIS_URL = "https://mis.twse.com.tw/stock/api/getStockInfo.jsp"
+
+
+def _lookup_tw_code(query: str) -> list[dict]:
+    """本地清单查不到时,拿代码直接问证交所 mis 验证(上市/上柜)。
+
+    清单刷新失败或新上市股票尚未进清单时,仍能用代码搜到。非代码格式的查询不打网络。
+    """
+    code = query.strip().upper()
+    if not TW_SYMBOL_RE.fullmatch(code):
+        return []
+    try:
+        resp = httpx.get(
+            MIS_URL,
+            params={"ex_ch": f"tse_{code}.tw|otc_{code}.tw", "json": "1", "delay": "0"},
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=5,
+        )
+        rows = (resp.json() or {}).get("msgArray") or []
+    except Exception as e:
+        logger.warning(f"证交所验证台股代码失败 {code}: {e}")
+        return []
+    for row in rows:
+        if str(row.get("c") or "").strip().upper() == code and row.get("n"):
+            board = "OTC" if row.get("ex") == "otc" else "TSE"
+            return [{"symbol": code, "name": str(row["n"]).strip(), "market": "TW", "board": board}]
+    return []
+
+
 def search_stocks(query: str, market: str = "", limit: int = 20) -> list[dict]:
     """搜索股票；台股使用缓存，全市场搜索时台股结果优先"""
     q = query.strip()
@@ -483,10 +551,10 @@ def search_stocks(query: str, market: str = "", limit: int = 20) -> list[dict]:
         return []
 
     if market == "TW":
-        return _cached_search(q, market, limit)
+        return _cached_search(q, market, limit) or _lookup_tw_code(q)
 
     if market == "":
-        tw_results = _cached_search(q, "TW", limit)
+        tw_results = _cached_search(q, "TW", limit) or _lookup_tw_code(q)
         realtime_results = _realtime_search(q, market, limit)
         cached_results = _cached_search(q, market, limit)
         results = []

@@ -241,15 +241,15 @@ class ContextMaintenanceScheduler:
         )
 
     async def _refresh_trading_calendar_job(self):
-        """每日刷新 A 股交易日历。
+        """每日刷新 A 股与台股交易日历。
 
         日历只覆盖到当年年底,长跑实例跨年后会超出覆盖范围而降级为"只判周末",
         因此每天凌晨拉一次。安排在各类盘前通知之前,保证当天判断用的是新日历。
         """
-        from src.platform.scheduling.trading_calendar import refresh
+        from src.platform.scheduling.trading_calendar import refresh, refresh_tw
 
         try:
-            await refresh()
+            await asyncio.gather(refresh(), refresh_tw(), return_exceptions=True)
         except Exception as e:  # refresh 内部已兜异常,这里只防意外
             logger.exception(f"[上下文维护] 交易日历刷新异常: {e}")
 

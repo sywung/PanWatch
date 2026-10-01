@@ -7,6 +7,7 @@
 数据源
 - **A 股**:akshare 交易日历(`tool_trade_date_hist_sina`),含法定节假日,权威。
   结果缓存在内存,由 `refresh()` 更新(启动预热 + 每日凌晨刷新)。
+- **台股**:TWSE holidaySchedule API,失败时只判周末。
 - **港股 / 美股**:没有等价的公开日历源,只判周末(诚实降级,不假装支持节假日)。
 
 降级原则
@@ -31,15 +32,19 @@ logger = logging.getLogger(__name__)
 _CN_TRADING_DATES: frozenset[date] | None = None
 # 日历覆盖区间,用于判断查询日期是否落在可信范围内(跨年未刷新时会超出)
 _CN_RANGE: tuple[date, date] | None = None
+_TW_CLOSED_DATES: frozenset[date] | None = None
+_TW_YEARS: frozenset[int] = frozenset()
 
 _FALLBACK_TZ = "Asia/Shanghai"
 
 
 def reset_cache() -> None:
     """清空日历缓存(配置变更或测试用)。"""
-    global _CN_TRADING_DATES, _CN_RANGE
+    global _CN_TRADING_DATES, _CN_RANGE, _TW_CLOSED_DATES, _TW_YEARS
     _CN_TRADING_DATES = None
     _CN_RANGE = None
+    _TW_CLOSED_DATES = None
+    _TW_YEARS = frozenset()
 
 
 def _fetch_cn_trading_dates() -> frozenset[date]:
@@ -83,6 +88,69 @@ def refresh_blocking() -> bool:
 async def refresh() -> bool:
     """异步刷新日历(走线程池,不阻塞事件循环)。"""
     return await asyncio.to_thread(refresh_blocking)
+
+
+def _fetch_tw_holidays_raw() -> list[dict]:
+    """阻塞拉取台股休市日历。"""
+    import httpx
+
+    response = httpx.get(
+        "https://openapi.twse.com.tw/v1/holidaySchedule/holidaySchedule",
+        headers={"User-Agent": "Mozilla/5.0"}, timeout=15,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    return payload if isinstance(payload, list) else []
+
+
+def _roc_date(raw) -> date | None:
+    text = str(raw or "").strip()
+    if not text.isdigit() or len(text) != 7:
+        return None
+    try:
+        return date(int(text[:3]) + 1911, int(text[3:5]), int(text[5:]))
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_tw_holidays(raw) -> frozenset[date]:
+    """解析民国年日期;开始/最后交易日不是休市日。"""
+    out: set[date] = set()
+    for row in raw or []:
+        if not isinstance(row, dict):
+            continue
+        target = _roc_date(row.get("Date"))
+        name = str(row.get("Name") or "")
+        if target is not None and "開始交易" not in name and "最后交易" not in name and "最後交易" not in name:
+            out.add(target)
+    return frozenset(out)
+
+
+def refresh_tw_blocking() -> bool:
+    """同步刷新台股日历;失败或空结果保持降级状态。"""
+    global _TW_CLOSED_DATES, _TW_YEARS
+    try:
+        raw = _fetch_tw_holidays_raw()
+        closed = _parse_tw_holidays(raw)
+        years = frozenset(
+            target.year for row in raw or [] if isinstance(row, dict)
+            for target in [_roc_date(row.get("Date"))] if target is not None
+        )
+    except Exception as e:
+        logger.warning("[交易日历] 台股日历拉取失败,降级为只判周末: %s", e)
+        return False
+    if not closed or not years:
+        logger.warning("[交易日历] 台股日历为空,降级为只判周末")
+        return False
+    _TW_CLOSED_DATES = closed
+    _TW_YEARS = years
+    logger.info("[交易日历] 台股日历已加载: %s 个休市日,覆盖年份=%s", len(closed), sorted(years))
+    return True
+
+
+async def refresh_tw() -> bool:
+    """异步刷新台股日历(走线程池,不阻塞事件循环)。"""
+    return await asyncio.to_thread(refresh_tw_blocking)
 
 
 def _to_market_code(market):
@@ -143,14 +211,17 @@ def is_trading_day(market, d: date | datetime | None = None) -> bool:
             return target in _CN_TRADING_DATES
         logger.debug("[交易日历] %s 超出A股日历覆盖范围,降级为只判周末", target)
 
+    if code == MarketCode.TW and _TW_CLOSED_DATES and target.year in _TW_YEARS:
+        return target not in _TW_CLOSED_DATES
+
     # 港美股、日历缺失、超出覆盖范围:只判周末。
     return True
 
 
 def any_market_trading_day(d: date | datetime | None = None) -> bool:
-    """CN/HK/US 任一为交易日即 `True`。全市场休市(如周末)返回 `False`。"""
+    """CN/HK/US/TW 任一为交易日即 `True`。全市场休市(如周末)返回 `False`。"""
     from src.platform.marketdata.models import MarketCode
 
     return any(
-        is_trading_day(m, d) for m in (MarketCode.CN, MarketCode.HK, MarketCode.US)
+        is_trading_day(m, d) for m in (MarketCode.CN, MarketCode.HK, MarketCode.US, MarketCode.TW)
     )

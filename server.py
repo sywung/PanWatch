@@ -284,10 +284,10 @@ def seed_sample_stocks():
             return
 
         samples = [
+            {"symbol": "2330", "name": "台積電", "market": "TW"},
+            {"symbol": "2317", "name": "鴻海", "market": "TW"},
+            {"symbol": "0050", "name": "元大台灣50", "market": "TW"},
             {"symbol": "600519", "name": "贵州茅台", "market": "CN"},
-            {"symbol": "002594", "name": "比亚迪", "market": "CN"},
-            {"symbol": "300750", "name": "宁德时代", "market": "CN"},
-            {"symbol": "00700", "name": "腾讯控股", "market": "HK"},
             {"symbol": "AAPL", "name": "苹果", "market": "US"},
         ]
         for s in samples:
@@ -424,11 +424,11 @@ DATA_SOURCE_SEEDS: list[dict] = [
             "type": "kline",
             "provider": "yahoo",
             "config": {
-                "description": "Yahoo chart v8 日线(US/HK,免 key 免 crumb)。国内访问通常需代理,"
-                "在 config.proxy 填写代理地址后启用,作港股 K线第二源/美股更稳兜底。",
+                "description": "Yahoo chart v8 日线(US/HK/TW,台股 .TW/.TWO,免 key 免 crumb)。国内访问通常需代理,"
+                "在 config.proxy 填写代理地址后启用,作港股/台股 K线第二源/美股更稳兜底。",
                 "proxy": "",
             },
-            "enabled": False,  # 需代理,默认关(同 YFinance 口径),用户配好 proxy 再开
+            "enabled": True,
             "priority": 20,  # US/HK 最后兜底
             "supports_batch": False,
             "test_symbols": list(DEFAULT_TEST_SYMBOLS),
@@ -463,6 +463,16 @@ DATA_SOURCE_SEEDS: list[dict] = [
             "type": "quote",
             "provider": "tencent",
             "config": {},
+            "enabled": True,
+            "priority": 0,
+            "supports_batch": True,
+            "test_symbols": list(DEFAULT_TEST_SYMBOLS),
+        },
+        {
+            "name": "TWSE 即时行情",
+            "type": "quote",
+            "provider": "twse",
+            "config": {"description": "臺灣證交所 mis 即時行情(上市+上櫃,免 key)。"},
             "enabled": True,
             "priority": 0,
             "supports_batch": True,
@@ -1534,8 +1544,12 @@ async def lifespan(app):
     # 因此这里不阻塞启动,交给后台任务;之后每日 03:00 由上下文维护调度器刷新。
     try:
         from src.platform.scheduling.trading_calendar import refresh as refresh_trading_calendar
+        from src.platform.scheduling.trading_calendar import refresh_tw
 
-        asyncio.create_task(refresh_trading_calendar())
+        async def refresh_calendars():
+            await asyncio.gather(refresh_trading_calendar(), refresh_tw(), return_exceptions=True)
+
+        asyncio.create_task(refresh_calendars())
     except Exception as e:
         logger.warning(f"交易日历预热调度失败(降级为只判周末): {e}")
 

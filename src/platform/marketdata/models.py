@@ -8,6 +8,7 @@ class MarketCode(str, Enum):
     CN = "CN"  # A股
     HK = "HK"  # 港股
     US = "US"  # 美股
+    TW = "TW"  # 台股
 
 
 @dataclass
@@ -81,7 +82,15 @@ MARKETS: dict[MarketCode, MarketDef] = {
         ],
         symbol_pattern=r"^[A-Z]{1,5}$",
     ),
+    MarketCode.TW: MarketDef(
+        code=MarketCode.TW, name="台股", timezone="Asia/Taipei",
+        sessions=[TradingSession(time(9, 0), time(13, 30))],
+        symbol_pattern=r"^\d{4,6}[A-Z]?$",
+    ),
 }
+
+DEFAULT_MARKET = MarketCode.TW
+BASE_CURRENCY = "TWD"
 
 
 @dataclass

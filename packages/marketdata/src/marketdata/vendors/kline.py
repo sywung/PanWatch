@@ -217,59 +217,63 @@ class YahooKlineVendor(KlineVendor):
     """Yahoo chart v8 日K,零 crumb / 零 cookie(crumb 只有 quoteSummary 基本面才需要)。"""
 
     name = "yahoo"
-    supports_markets = {"US", "HK"}
+    supports_markets = {"US", "HK", "TW"}
 
     def fetch(self, symbols: list[Symbol], config: dict) -> list[Bar]:
         if not symbols:
             return []
         sym = symbols[0]
-        if sym.market not in (Market.US, Market.HK):
+        if sym.market not in (Market.US, Market.HK, Market.TW):
             return []
         days = _days(config)
-        ysym = sym.to_yfinance()
         proxy = config.get("proxy")
-        payload = market_get(
-            _YAHOO_CHART_URL.format(sym=ysym), host_key="query2.finance.yahoo.com",
-            params={"interval": "1d", "range": _yahoo_range(days)},
-            headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"},
-            timeout=10, retries=2, parse="json", proxy=proxy,
-            log_label="Yahoo K线", symbol=ysym,
-        )
-        if not isinstance(payload, dict):
-            return []
-        try:
-            result = ((payload.get("chart") or {}).get("result")) or []
-            if not result:
-                return []
-            r0 = result[0] or {}
-            timestamps = r0.get("timestamp") or []
-            indicators = r0.get("indicators") or {}
-            quote = (indicators.get("quote") or [{}])[0] or {}
-            adjcloses = (indicators.get("adjclose") or [{}])[0].get("adjclose") if indicators.get("adjclose") else None
-        except Exception:
-            return []
-        opens = quote.get("open") or []
-        highs = quote.get("high") or []
-        lows = quote.get("low") or []
-        closes = quote.get("close") or []
-        volumes = quote.get("volume") or []
-        out: list[Bar] = []
-        for i, ts in enumerate(timestamps or []):
+        suffixes = (".TW", ".TWO") if sym.market == Market.TW else ("")
+        for suffix in suffixes if isinstance(suffixes, tuple) else (suffixes,):
+            ysym = f"{sym.code}{suffix}" if suffix else sym.to_yfinance()
+            payload = market_get(
+                _YAHOO_CHART_URL.format(sym=ysym), host_key="query2.finance.yahoo.com",
+                params={"interval": "1d", "range": _yahoo_range(days)},
+                headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"},
+                timeout=10, retries=2, parse="json", proxy=proxy,
+                log_label="Yahoo K线", symbol=ysym,
+            )
+            if not isinstance(payload, dict):
+                continue
             try:
-                o = opens[i] if i < len(opens) else None
-                h = highs[i] if i < len(highs) else None
-                low = lows[i] if i < len(lows) else None
-                c = closes[i] if i < len(closes) else None
-                if o is None or h is None or low is None or c is None:
+                result = ((payload.get("chart") or {}).get("result")) or []
+                if not result:
                     continue
-                if adjcloses is not None and i < len(adjcloses) and adjcloses[i] is not None:
-                    c = adjcloses[i]
-                v = volumes[i] if i < len(volumes) and volumes[i] is not None else 0
-                date = datetime.fromtimestamp(int(ts), tz=timezone.utc).strftime("%Y-%m-%d")
-                out.append(Bar(date=date, open=float(o), close=float(c),
-                               high=float(h), low=float(low), volume=float(v)))
+                r0 = result[0] or {}
+                timestamps = r0.get("timestamp") or []
+                indicators = r0.get("indicators") or {}
+                quote = (indicators.get("quote") or [{}])[0] or {}
+                adjcloses = (indicators.get("adjclose") or [{}])[0].get("adjclose") if indicators.get("adjclose") else None
             except Exception:
                 continue
-        if days > 0 and len(out) > days:
-            out = out[-days:]
-        return out
+            opens = quote.get("open") or []
+            highs = quote.get("high") or []
+            lows = quote.get("low") or []
+            closes = quote.get("close") or []
+            volumes = quote.get("volume") or []
+            out: list[Bar] = []
+            for i, ts in enumerate(timestamps or []):
+                try:
+                    o = opens[i] if i < len(opens) else None
+                    h = highs[i] if i < len(highs) else None
+                    low = lows[i] if i < len(lows) else None
+                    c = closes[i] if i < len(closes) else None
+                    if o is None or h is None or low is None or c is None:
+                        continue
+                    if adjcloses is not None and i < len(adjcloses) and adjcloses[i] is not None:
+                        c = adjcloses[i]
+                    v = volumes[i] if i < len(volumes) and volumes[i] is not None else 0
+                    bar_date = datetime.fromtimestamp(int(ts), tz=timezone.utc).strftime("%Y-%m-%d")
+                    out.append(Bar(date=bar_date, open=float(o), close=float(c),
+                                   high=float(h), low=float(low), volume=float(v)))
+                except Exception:
+                    continue
+            if days > 0 and len(out) > days:
+                out = out[-days:]
+            if out or sym.market != Market.TW:
+                return out
+        return []

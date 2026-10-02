@@ -174,3 +174,55 @@ export const mergePortfolioQuotes = (
     },
   }
 }
+
+type FuturesPositionFigures = {
+  account_id: number
+  unrealized_pnl: number | null
+  margin_used: number | null
+  margin_call: boolean | null
+}
+
+/**
+ * 用已载入的期货持仓列表计算各账户的期货损益与保证金,并把未实现损益计入总资产。
+ * 持仓页以 include_quotes=false 载入汇总(后端此时期货损益为 0),所以以列表为准。
+ */
+export const applyFuturesPositions = (
+  portfolio: PortfolioSummary | null,
+  rows: FuturesPositionFigures[],
+): PortfolioSummary | null => {
+  if (!portfolio) return null
+
+  let grandFuturesPnl = 0
+  let grandFuturesMargin = 0
+  let grandAssets = 0
+
+  const accounts = portfolio.accounts.map(account => {
+    const own = rows.filter(row => row.account_id === account.id)
+    const futuresPnl = own.reduce((sum, row) => sum + (row.unrealized_pnl ?? 0), 0)
+    const futuresMargin = own.reduce((sum, row) => sum + (row.margin_used ?? 0), 0)
+    const totalAssets = round2(account.total_market_value + account.available_funds + futuresPnl)
+
+    grandFuturesPnl += futuresPnl
+    grandFuturesMargin += futuresMargin
+    grandAssets += totalAssets
+
+    return {
+      ...account,
+      futures_unrealized_pnl: round2(futuresPnl),
+      futures_margin_used: round2(futuresMargin),
+      futures_margin_call: own.some(row => row.margin_call === true),
+      total_assets: totalAssets,
+    }
+  })
+
+  return {
+    ...portfolio,
+    accounts,
+    total: {
+      ...portfolio.total,
+      total_assets: round2(grandAssets),
+      futures_unrealized_pnl: round2(grandFuturesPnl),
+      futures_margin_used: round2(grandFuturesMargin),
+    },
+  }
+}

@@ -5,7 +5,7 @@ import { fetchAPI, stocksApi, type AIService, type NotifyChannel } from '@panwat
 import { futuresPositionsApi, type FuturesPosition } from '@panwatch/api/futures-positions'
 import { klinesApi } from '@panwatch/api/klines'
 import { useLocalStorage } from '@/lib/utils'
-import { mergePortfolioQuotes, type PortfolioPosition as Position, type PortfolioSummary } from '@/lib/portfolio-merge'
+import { applyFuturesPositions, mergePortfolioQuotes, type PortfolioPosition as Position, type PortfolioSummary } from '@/lib/portfolio-merge'
 import {
   buildPortfolioStockKeys,
   loadPortfolioPageBackgroundData,
@@ -257,6 +257,8 @@ export default function StocksPage() {
   const [portfolio, setPortfolio] = useState<PortfolioSummary | null>(null)
   const [portfolioRaw, setPortfolioRaw] = useState<PortfolioSummary | null>(null)
   const [futuresPositions, setFuturesPositions] = useState<FuturesPosition[]>([])
+  // 汇总以 include_quotes=false 载入(期货损益为 0),每次重算后用最新期货列表补上
+  const futuresRowsRef = useRef<FuturesPosition[]>([])
   const [portfolioLoading, setPortfolioLoading] = useState(false)
   const [expandedAccounts, setExpandedAccounts] = useState<Set<number>>(new Set())
 
@@ -517,7 +519,10 @@ export default function StocksPage() {
 
   const refreshFuturesPositions = useCallback(async () => {
     try {
-      setFuturesPositions(await futuresPositionsApi.list())
+      const rows = await futuresPositionsApi.list()
+      futuresRowsRef.current = rows
+      setFuturesPositions(rows)
+      setPortfolio(prev => applyFuturesPositions(prev, rows))
     } catch (error) {
       console.warn('Failed to refresh futures positions:', error)
     }
@@ -527,7 +532,7 @@ export default function StocksPage() {
     try {
       const summary = await fetchAPI<PortfolioSummary>('/portfolio/summary?include_quotes=false')
       setPortfolioRaw(summary)
-      setPortfolio(mergePortfolioQuotes(summary, quotes))
+      setPortfolio(applyFuturesPositions(mergePortfolioQuotes(summary, quotes), futuresRowsRef.current))
       setAccounts(summary.accounts.map(account => ({
         id: account.id,
         name: account.name,
@@ -564,7 +569,7 @@ export default function StocksPage() {
 
   useEffect(() => {
     if (!portfolioRaw) return
-    setPortfolio(mergePortfolioQuotes(portfolioRaw, quotes))
+    setPortfolio(applyFuturesPositions(mergePortfolioQuotes(portfolioRaw, quotes), futuresRowsRef.current))
   }, [portfolioRaw, quotes])
 
   // 刷新 K 线摘要（批量接口）；并防止重入
@@ -654,7 +659,7 @@ export default function StocksPage() {
       setExpandedAccounts(new Set(portfolioData.accounts.map(account => account.id)))
       setQuotes(prev => ({ ...prev, ...quoteMap }))
       setKlineSummaries(prev => ({ ...prev, ...klineMap }))
-      setPortfolio(mergePortfolioQuotes(portfolioData, { ...quotes, ...quoteMap }))
+      setPortfolio(applyFuturesPositions(mergePortfolioQuotes(portfolioData, { ...quotes, ...quoteMap }), futuresRowsRef.current))
       void refreshFuturesPositions()
     } catch (e) {
       console.error(e)
@@ -694,7 +699,7 @@ export default function StocksPage() {
       setKlineSummaries({})
       setPoolSuggestions({})
       setPriceAlertSummaryMap({})
-      setPortfolio(mergePortfolioQuotes(coreData.portfolio, quoteMap))
+      setPortfolio(applyFuturesPositions(mergePortfolioQuotes(coreData.portfolio, quoteMap), futuresRowsRef.current))
       const nextAccounts = coreData.portfolio.accounts.map(account => ({
         id: account.id,
         name: account.name,

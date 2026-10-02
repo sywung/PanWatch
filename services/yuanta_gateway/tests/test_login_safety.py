@@ -86,3 +86,20 @@ def test_default_port_is_2885(monkeypatch):
     assert gateway.gateway_port() == 2885
     monkeypatch.setenv("GATEWAY_PORT", "9000")
     assert gateway.gateway_port() == 9000
+
+
+def test_placeholder_values_are_treated_as_missing():
+    """範例 env 檔沒改就啟動:不得拿佔位字去元大登入(會算一次失敗登入)。"""
+    for creds in ({"password": "請填登入密碼"}, {"pfx_password": "請填憑證密碼"},
+                  {"account": "S00000000000"}, {"account": "12345"}):
+        c, a = _client(**creds)
+        st = c.connect_and_login(timeout=0.2)
+        assert _logins(a) == [], creds
+        assert st["last_error"] == "missing_credentials"
+
+
+def test_futures_account_format_is_accepted():
+    c, a = _client(account="FF021000P001234567")
+    _answer_later(a, login_ok("FF021000P001234567"))
+    c.connect_and_login(timeout=2)
+    assert len(_logins(a)) == 1

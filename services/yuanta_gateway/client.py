@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import threading
 import time
 from collections import defaultdict, deque
@@ -12,6 +13,18 @@ from typing import Any
 
 MARKET_ENUM = {"TSE": "TWSE", "OTC": "TWOTC", "ESB": "TWEMERGING", "TAIFEX": "TAIFEX"}
 KLINE_PERIOD = {"1m": 0, "5m": 1, "15m": 2, "30m": 3, "60m": 4, "1d": 11, "1w": 12, "1M": 13}
+
+
+# 證券 S+11 碼、期貨 F+17 碼(例 FF021000P001234567);全 0 或「請填」為範例佔位字
+_ACCOUNT_RE = re.compile(r"^(S\d{11}|F[0-9A-Z]{17})$")
+
+
+def _credentials_look_valid(account: str, password: str, pfx_path: str, pfx_password: str) -> bool:
+    if not (account and password and pfx_path and pfx_password):
+        return False
+    if not _ACCOUNT_RE.fullmatch(account) or set(account[1:]) == {"0"}:
+        return False
+    return not any("請填" in value or "请填" in value for value in (password, pfx_password))
 
 
 class NotLoggedIn(Exception):
@@ -60,7 +73,7 @@ class YuantaClient:
             with self._state_lock:
                 if self._logged_in or self._auth_blocked:
                     return self.status()
-                if not (self._account and self._password and self._pfx_path and self._pfx_password):
+                if not _credentials_look_valid(self._account, self._password, self._pfx_path, self._pfx_password):
                     self._last_error = "missing_credentials"
                     self._auth_blocked = True
                     return self.status()

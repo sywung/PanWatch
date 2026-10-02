@@ -24,6 +24,9 @@ def cache_file(monkeypatch, tmp_path):
     monkeypatch.setattr(sl, "CACHE_FILE", path)
     monkeypatch.setattr(sl, "_realtime_search", lambda *a, **k: [])
     monkeypatch.setattr(sl, "_yahoo_search", lambda *a, **k: [])
+    # 「全部」搜索也查期货商品清单;没有缓存时会连期交所
+    from src.platform.marketdata import futures
+    monkeypatch.setattr(futures, "search_futures", lambda *a, **k: [])
     return path
 
 

@@ -10,6 +10,7 @@ import re
 import time
 import logging
 import concurrent.futures
+import threading
 from pathlib import Path
 
 import httpx
@@ -372,7 +373,32 @@ def _carry_over_tw_boards(stocks: list[dict], failed: list[str]) -> list[dict]:
     return stocks + kept
 
 
+_stock_list_refresh_lock = threading.Lock()
+_background_refresh_lock = threading.Lock()
+_background_refresh_thread: threading.Thread | None = None
+
+
 def refresh_stock_list() -> list[dict]:
+    """拉取并缓存股票清单;同一时间只抓一份,其他调用方等它完成后沿用结果"""
+    acquired = _stock_list_refresh_lock.acquire(blocking=False)
+    if not acquired:
+        # 已有刷新时等待它完成,缓存可用就直接复用。
+        _stock_list_refresh_lock.acquire()
+        try:
+            cached = _load_cache()
+            if cached is not None:
+                return cached
+            return _refresh_stock_list()
+        finally:
+            _stock_list_refresh_lock.release()
+
+    try:
+        return _refresh_stock_list()
+    finally:
+        _stock_list_refresh_lock.release()
+
+
+def _refresh_stock_list() -> list[dict]:
     """拉取台股、A 股和港股等列表并缓存"""
     stocks = []
 
@@ -429,22 +455,48 @@ def refresh_stock_list() -> list[dict]:
     return stocks
 
 
-def get_stock_list() -> list[dict]:
+def refresh_in_background() -> threading.Thread | None:
+    """在后台刷新股票清单;已有后台刷新时不重复启动。"""
+    global _background_refresh_thread
+    with _background_refresh_lock:
+        if _background_refresh_thread is not None and _background_refresh_thread.is_alive():
+            return None
+
+        def _refresh():
+            try:
+                refresh_stock_list()
+            except Exception:
+                logger.exception("后台刷新股票列表失败")
+
+        thread = threading.Thread(target=_refresh, daemon=True)
+        _background_refresh_thread = thread
+        thread.start()
+        return thread
+
+
+def get_stock_list(block: bool = True) -> list[dict]:
     """获取股票列表(优先缓存)"""
     cached = _load_cache()
     if cached:
         return cached
-    return refresh_stock_list()
+    if block:
+        return refresh_stock_list()
+
+    old_cache = _read_cache_file()
+    stocks = old_cache["stocks"] if old_cache else []
+    refresh_in_background()
+    return stocks
 
 
 # 东方财富从台湾连线常逾时(5 秒);失败后这段时间内直接跳过,改走 Yahoo 搜索
 EASTMONEY_BACKOFF_SEC = 600
 _eastmoney_skip_until = 0.0
+_eastmoney_failures = 0
 
 
 def _realtime_search(query: str, market: str = "", limit: int = 20) -> list[dict]:
     """东方财富实时搜索 API"""
-    global _eastmoney_skip_until
+    global _eastmoney_skip_until, _eastmoney_failures
     import urllib.parse
 
     if time.time() < _eastmoney_skip_until:
@@ -453,13 +505,17 @@ def _realtime_search(query: str, market: str = "", limit: int = 20) -> list[dict
     url = f"https://searchapi.eastmoney.com/api/suggest/get?input={urllib.parse.quote(query)}&type=14&count={limit * 5}"
 
     try:
-        with httpx.Client(timeout=5) as client:
+        with httpx.Client(timeout=httpx.Timeout(5, connect=2)) as client:
             resp = client.get(url, headers=HEADERS)
             data = resp.json()
     except Exception as e:
-        logger.warning(f"实时搜索失败,{EASTMONEY_BACKOFF_SEC}s 内改用 Yahoo 搜索: {e}")
-        _eastmoney_skip_until = time.time() + EASTMONEY_BACKOFF_SEC
+        _eastmoney_failures += 1
+        backoff = min(EASTMONEY_BACKOFF_SEC * 2 ** (_eastmoney_failures - 1), 6 * 3600)
+        logger.warning(f"实时搜索失败,{backoff}s 内改用 Yahoo 搜索: {e}")
+        _eastmoney_skip_until = time.time() + backoff
         return []
+
+    _eastmoney_failures = 0
 
     items = data.get("QuotationCodeTable", {}).get("Data", [])
     if not items:
@@ -672,7 +728,7 @@ def search_stocks(query: str, market: str = "", limit: int = 20) -> list[dict]:
 
 def _cached_search(query: str, market: str = "", limit: int = 20) -> list[dict]:
     """从缓存中模糊搜索股票"""
-    stocks = get_stock_list()
+    stocks = get_stock_list(block=False)
     if not stocks:
         return []
 

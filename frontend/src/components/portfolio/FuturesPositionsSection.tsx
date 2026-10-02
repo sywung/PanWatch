@@ -50,8 +50,8 @@ export function FuturesPositionsSection({ accountId, positions, formatMoney, for
     try {
       await futuresPositionsApi.remove(deleting.id)
       setDeleting(null)
-      await onChanged()
       toast(tr('deleted'), 'success')
+      void onChanged()
     } catch (error) {
       toast(error instanceof Error ? error.message : tr('deleteFailed'), 'error')
     } finally {

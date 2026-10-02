@@ -155,9 +155,10 @@ export function FuturesPositionDialog({ open, onOpenChange, accountId, position,
       } else {
         await futuresPositionsApi.create({ account_id: accountId, product_code: product.symbol, ...payload })
       }
-      await onSaved()
+      // 先关闭再背景刷新:整页重载含报价与 K 线摘要,要好几秒
       onOpenChange(false)
       toast(position ? tr('updated') : tr('created'), 'success')
+      void onSaved()
     } catch (error) {
       const code = error instanceof Error ? (error as Error & { errorCode?: string }).errorCode : undefined
       const knownCodes = [

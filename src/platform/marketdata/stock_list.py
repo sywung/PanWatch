@@ -15,6 +15,8 @@ from pathlib import Path
 
 import httpx
 
+from src.platform.marketdata.models import ALL_MARKETS
+
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -457,7 +459,8 @@ def _refresh_stock_list() -> list[dict]:
 
 
 # 从台湾连东方财富清单接口常失败;某市场整批没抓到时沿用上一份缓存,不能把它从清单里清空
-_CARRY_OVER_MARKETS = ("CN", "HK", "US")
+# 台股另有按板别沿用(_carry_over_tw_boards)
+_CARRY_OVER_MARKETS = tuple(m for m in ALL_MARKETS if m != "TW")
 
 
 def _carry_over_missing_markets(stocks: list[dict]) -> list[dict]:

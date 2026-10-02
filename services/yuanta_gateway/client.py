@@ -63,12 +63,14 @@ class YuantaClient:
         self._last_error = ""
         # 帳密/憑證錯誤或停權後不再自動登入:元大有每日登入次數與黑名單機制
         self._auth_blocked = False
+        # 交易主機連上後才能登入(實測 Open 後約 3.5～4.4 秒);太早送 Login 會被丟掉
+        self._trade_host_ready = threading.Event()
         self._last_login_failure: float | None = None
         self._pending: dict[str, dict[str, Any]] = {}
         self._function_locks: defaultdict[str, threading.RLock] = defaultdict(threading.RLock)
         self._last_call: dict[str, float] = {}
 
-    def connect_and_login(self, timeout: float = 15) -> dict:
+    def connect_and_login(self, timeout: float = 30, connect_timeout: float = 20) -> dict:
         with self._function_locks["Login"]:
             with self._state_lock:
                 if self._logged_in or self._auth_blocked:
@@ -95,6 +97,12 @@ class YuantaClient:
                         self._logged_in = False
                         self._last_error = f"connection error: {type(exc).__name__}"
                     return self.status()
+
+            if not self._trade_host_ready.wait(connect_timeout):
+                with self._state_lock:
+                    self._last_error = "connect timeout"
+                    self._last_login_failure = self._clock()
+                return self.status()
 
             try:
                 result = self._request(
@@ -143,7 +151,10 @@ class YuantaClient:
             if index == 1:
                 with self._state_lock:
                     self._connected = True
+                if "交易主機" in str(obj_value or ""):
+                    self._trade_host_ready.set()
             elif index in (2, 3):
+                self._trade_host_ready.clear()
                 with self._state_lock:
                     self._connected = False
                     self._logged_in = False

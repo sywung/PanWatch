@@ -50,13 +50,21 @@ class FakeAdapter:
         self.calls = []
         self.handler = None
         self.trader = SimpleNamespace(
-            Open=lambda env: self.calls.append(("Open", env)),
+            Open=self._open,
             Login=lambda *a: self.calls.append(("Login", a)) or True,
             GetWatchListAll=lambda account, quotes: self.calls.append(("GetWatchListAll", account, quotes)) or True,
             GetKLine=lambda *a: self.calls.append(("GetKLine", a)) or True,
             Close=lambda: self.calls.append(("Close",)),
             Dispose=lambda: self.calls.append(("Dispose",)),
         )
+
+    connect_on_open = True
+
+    def _open(self, env):
+        self.calls.append(("Open", env))
+        if self.connect_on_open:
+            import threading
+            threading.Timer(0.02, lambda: self.handler and self.handler(0, 1, "", None, "交易主機Is Connected!!")).start()
 
     def create_trader(self, log_dir):
         return self.trader

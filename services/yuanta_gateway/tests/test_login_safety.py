@@ -111,3 +111,13 @@ def test_branch_code_with_letters_is_accepted():
     _answer_later(a, login_ok("S981r1691656"))
     c.connect_and_login(timeout=2)
     assert len(_logins(a)) == 1
+
+
+def test_login_waits_for_trade_host_connection():
+    """實測:Open 後要等「交易主機 Is Connected」才能登入,太早送會被丟掉、等到逾時。"""
+    c, a = _client()
+    a.connect_on_open = False
+    st = c.connect_and_login(timeout=0.3, connect_timeout=0.2)
+    assert _logins(a) == []
+    assert st["last_error"] == "connect timeout"
+    assert st["retry_allowed"] is True

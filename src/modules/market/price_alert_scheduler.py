@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 from src.modules.market.price_alert_engine import ENGINE
 
@@ -40,12 +42,21 @@ class PriceAlertScheduler:
         finally:
             self._running = False
 
+    async def _rollover_job(self):
+        try:
+            from src.modules.portfolio.futures_rollover import run_rollover_check
+
+            result = await run_rollover_check()
+            logger.info("[期货转仓提醒] 扫描完成: %s", result)
+        except Exception as e:
+            logger.exception(f"[期货转仓提醒] 扫描异常: {e}")
+
     async def trigger_once(self, *, dry_run: bool = False, rule_id: int | None = None) -> dict:
         return await ENGINE.scan_once(
             dry_run=dry_run, only_rule_id=rule_id, bypass_market_hours=True
         )
 
-    def start(self):
+    def register_jobs(self):
         self.scheduler.add_job(
             self._scan_job,
             "interval",
@@ -56,6 +67,26 @@ class PriceAlertScheduler:
             coalesce=True,
             max_instances=1,
         )
+        taipei = ZoneInfo("Asia/Taipei")
+        self.scheduler.add_job(
+            self._rollover_job,
+            CronTrigger(day_of_week="mon-fri", hour=8, minute=45, timezone=taipei),
+            id="futures_rollover_morning",
+            replace_existing=True,
+            coalesce=True,
+            max_instances=1,
+        )
+        self.scheduler.add_job(
+            self._rollover_job,
+            CronTrigger(day_of_week="mon-fri", hour=12, minute=30, timezone=taipei),
+            id="futures_rollover_noon",
+            replace_existing=True,
+            coalesce=True,
+            max_instances=1,
+        )
+
+    def start(self):
+        self.register_jobs()
         self.scheduler.start()
         from src.platform.scheduling.scheduler_registry import register
         register("price_alert", self.scheduler)

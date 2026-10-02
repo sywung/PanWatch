@@ -175,7 +175,8 @@ def test_kline_daily_request_and_parse():
     _answer_later(a, 1, 99, "GetKLine", result)
     bars = c.kline("TSE", "2330", "1d", date(2026, 10, 1), date(2026, 10, 2), timeout=2)
     sent = next(x for x in a.calls if x[0] == "GetKLine")
-    assert sent[1][:6] == ("S98875005091", "KT:11", "MKT:TWSE", "2330", "2026/10/01", "2026/10/02")
+    # 實測元大的開始日期不含當天(查 9/01 起第一筆是 9/02),所以往前送一天
+    assert sent[1][:6] == ("S98875005091", "KT:11", "MKT:TWSE", "2330", "2026/09/30", "2026/10/02")
     assert bars[0] == {"time": "2026-10-01 00:00:00", "open": 2500.0, "high": 2530.0,
                        "low": 2490.0, "close": 2520.0, "volume": 30000}
 
@@ -208,3 +209,16 @@ def test_client_exposes_no_order_methods():
     forbidden = ("order", "Order", "earmark", "Earmark", "prefund", "Prefund", "strategy", "Strategy")
     names = [n for n in dir(yc.YuantaClient) if not n.startswith("_")]
     assert not [n for n in names if any(f in n for f in forbidden)]
+
+
+def test_kline_drops_bars_before_requested_start():
+    """往前多送一天後,回應中早於開始日的資料要篩掉。"""
+    c, a, _ = _logged_in_client()
+    result = SimpleNamespace(MarketNo=1, StockCode="2330", KLineList=NetList([
+        _kbar("2026/09/30 00:00:00", 1, 1, 1, 1, 1),
+        _kbar("2026/10/01 00:00:00", 2, 2, 2, 2, 2),
+        _kbar("2026/10/01 13:25:00", 3, 3, 3, 3, 3),
+    ]))
+    _answer_later(a, 1, 99, "GetKLine", result)
+    bars = c.kline("TSE", "2330", "5m", date(2026, 10, 1), date(2026, 10, 1), timeout=2)
+    assert [b["time"] for b in bars] == ["2026-10-01 00:00:00", "2026-10-01 13:25:00"]

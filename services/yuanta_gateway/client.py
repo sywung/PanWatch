@@ -7,7 +7,7 @@ import re
 import threading
 import time
 from collections import defaultdict, deque
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 
@@ -263,7 +263,8 @@ class YuantaClient:
                 self._adapter.kline_type(KLINE_PERIOD[period]),
                 self._adapter.market(MARKET_ENUM[market]),
                 str(code),
-                _sdk_date(start),
+                # 實測元大開始日期不含當天,往前送一天再篩回來
+                _sdk_date(start - timedelta(days=1)),
                 _sdk_date(end),
             ),
             timeout,
@@ -271,7 +272,7 @@ class YuantaClient:
         rows = getattr(response, "KLineList", None)
         if rows is None:
             raise RuntimeError("K 線回應格式錯誤")
-        return [
+        bars = [
             {
                 "time": _kline_time(rows[i].TimeStamp),
                 "open": float(rows[i].OpenPrice),
@@ -282,6 +283,8 @@ class YuantaClient:
             }
             for i in range(int(rows.Count))
         ]
+        start_text = start.strftime("%Y-%m-%d")
+        return [bar for bar in bars if bar["time"][:10] >= start_text]
 
     def _require_login(self):
         with self._state_lock:

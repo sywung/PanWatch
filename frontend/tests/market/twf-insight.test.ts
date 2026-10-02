@@ -22,7 +22,12 @@ describe('futures underlying for news', () => {
 
   it('stock futures look up news by the underlying stock', () => {
     expect(futuresNewsTarget({ kind: 'stock', underlying_code: '2330', name: '小型台積電期貨' }))
-      .toEqual({ symbol: '2330', name: '台積電' })
+      .toEqual({ symbol: '2330', name: '台積電', market: 'TW' })
+  })
+
+  it('news target carries the underlying market so the backend routes to TW news sources', () => {
+    // 2026-10-02:不带市场时后端按 A 股查,详情页出现东财的大陆车市新闻
+    expect(futuresNewsTarget({ kind: 'stock', underlying_code: '2330', name: '台積電期貨' })?.market).toBe('TW')
   })
 
   it('index futures and unknown info have no symbol news target (no unrelated fallback)', () => {

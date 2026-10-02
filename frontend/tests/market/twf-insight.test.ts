@@ -4,6 +4,7 @@ import {
   canEvaluateAddPosition,
   formatCompactAmount,
   formatMarketCapLabel,
+  formatSpotTime,
   futuresBasisLabel,
   futuresNewsTarget,
   futuresUnderlyingName,
@@ -86,5 +87,20 @@ describe('market cap label (input is in 億 units)', () => {
   it('keeps Simplified in zh-CN', () => {
     expect(formatMarketCapLabel(12.345, 'TW', 'zh-CN')).toBe('12.35亿新台币')
     expect(formatMarketCapLabel(5, 'CN', 'zh-CN')).toBe('5.00亿元（人民币）')
+  })
+})
+
+describe('futures spot time', () => {
+  // 2026-10-02:后端 spot_time 是 "13:30:00" 纯时间字串,new Date() 解析失败,卡片上时间一直空白
+  it('shows HH:MM for a bare time string from the backend', () => {
+    expect(formatSpotTime('13:30:00')).toBe('13:30')
+    expect(formatSpotTime('09:05:07')).toBe('09:05')
+  })
+
+  it('returns empty for missing or unparseable values', () => {
+    expect(formatSpotTime(null)).toBe('')
+    expect(formatSpotTime(undefined)).toBe('')
+    expect(formatSpotTime('')).toBe('')
+    expect(formatSpotTime('abc')).toBe('')
   })
 })

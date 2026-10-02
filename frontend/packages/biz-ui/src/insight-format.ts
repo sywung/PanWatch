@@ -25,6 +25,12 @@ export function futuresNewsTarget(info?: FuturesNewsInfo | null): { symbol: stri
   }
 }
 
+// 后端 spot_time 为期交所 MIS 的 "HH:MM:SS"(当日行情时间),不是 ISO 时间戳
+export function formatSpotTime(value?: string | null): string {
+  const match = /^(\d{2}):(\d{2}):\d{2}$/.exec(String(value || '').trim())
+  return match ? `${match[1]}:${match[2]}` : ''
+}
+
 export function canEvaluateAddPosition(market?: string): boolean {
   return !isFuturesMarket(market)
 }

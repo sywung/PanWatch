@@ -15,6 +15,7 @@ import {
   formatCompactAmount,
   formatMarketCapLabel,
   futuresBasisLabel,
+  formatSpotTime,
   futuresNewsTarget,
   getMarketBadge,
   isFuturesMarket,
@@ -1555,7 +1556,7 @@ export default function StockInsightModal(props: {
                         <div className="rounded bg-accent/15 px-2 py-1.5">
                           <div className="text-[10px] text-muted-foreground">{tr('futures.spot')}</div>
                           <div className="font-mono">{formatNumber(futuresInfo.spot)}</div>
-                          <div className="text-[10px] text-muted-foreground">{formatTime(futuresInfo.spot_time || undefined, locale)}</div>
+                          <div className="text-[10px] text-muted-foreground">{formatSpotTime(futuresInfo.spot_time)}</div>
                           {futuresInfo.session === 'night' && <div className="text-[10px] text-muted-foreground">{tr('futures.spotDaySessionClose')}</div>}
                         </div>
                         <div className="rounded bg-accent/15 px-2 py-1.5">

@@ -35,7 +35,7 @@ export function FuturesPositionsSection({ accountId, positions, formatMoney, for
     if (urgency === 'expired') return tr('settlementExpired')
     if (urgency === 'today') return tr('settlementToday')
     if (urgency === 'soon') return tr('settlementInDays', { count: position.days_to_settlement })
-    return position.settlement_date || '—'
+    return position.days_to_settlement == null ? '' : tr('settlementDaysLeft', { count: position.days_to_settlement })
   }
   const urgencyClass = (position: FuturesPosition) => {
     const urgency = settlementUrgency(position.days_to_settlement)
@@ -81,7 +81,7 @@ export function FuturesPositionsSection({ accountId, positions, formatMoney, for
                 </thead>
                 <tbody>
                   {positions.map(position => (
-                    <tr key={position.id} className="border-b border-border/20 last:border-0">
+                    <tr key={position.id} className="border-b border-border/20 last:border-0 text-[12px]">
                       <td className="px-2 py-2.5">
                         <div className="font-medium text-[12px]">{position.product_name} <span className="font-mono text-muted-foreground">{position.contract_symbol}</span></div>
                         {position.margin_call && <Badge variant="destructive" className="mt-1 text-[9px]">{tr('marginCall')}</Badge>}

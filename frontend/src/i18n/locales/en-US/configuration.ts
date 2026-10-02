@@ -305,7 +305,7 @@ export const configuration = {
       product: 'Futures product', productSearchPlaceholder: 'Search futures products by code or name', contractMonth: 'Contract month', selectContractMonth: 'Select a contract month',
       direction: 'Direction', long: 'Long', short: 'Short', lots: 'Lots', lotsUnit: 'lots', entryPrice: 'Entry price', currentPrice: 'Current price',
       unrealizedPnl: 'Futures P&L', marginUsed: 'Margin used', equity: 'Equity', settlement: 'Settlement', settlementExpired: 'Settlement passed',
-      settlementToday: 'Settles today', settlementInDays: 'Settles in {{count}} days', marginCall: 'Margin call', actions: 'Actions', edit: 'Edit', delete: 'Delete',
+      settlementToday: 'Settles today', settlementInDays: 'Settles in {{count}} days', settlementDaysLeft: '{{count}} days left', marginCall: 'Margin call', actions: 'Actions', edit: 'Edit', delete: 'Delete',
       deleteTitle: 'Delete futures position', deleteDescription: 'Delete {{product}} {{contract}}?', cancel: 'Cancel', deleting: 'Deleting…',
       multiplier: 'Contract multiplier', multiplierHint: 'Default value; adjust it manually for adjusted contracts.', note: 'Note', save: 'Save', saving: 'Saving…',
       created: 'Futures position added', updated: 'Futures position updated', deleted: 'Futures position deleted', saveFailed: 'Failed to save futures position',

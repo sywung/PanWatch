@@ -302,7 +302,7 @@ export const configuration = {
       product: '期货商品', productSearchPlaceholder: '搜索期货商品代码或名称', contractMonth: '合约月份', selectContractMonth: '选择合约月份',
       direction: '方向', long: '多', short: '空', lots: '口数', lotsUnit: '口', entryPrice: '成交价', currentPrice: '现价',
       unrealizedPnl: '期货损益', marginUsed: '保证金占用', equity: '权益数', settlement: '结算日', settlementExpired: '已过结算',
-      settlementToday: '今日结算', settlementInDays: '{{count}} 天后结算', marginCall: '追缴警示', actions: '操作', edit: '编辑', delete: '删除',
+      settlementToday: '今日结算', settlementInDays: '{{count}} 天后结算', settlementDaysLeft: '剩 {{count}} 天', marginCall: '追缴警示', actions: '操作', edit: '编辑', delete: '删除',
       deleteTitle: '删除期货部位', deleteDescription: '确定删除 {{product}} {{contract}}？', cancel: '取消', deleting: '删除中…',
       multiplier: '契约乘数', multiplierHint: '预设值，调整型契约请自行修改', note: '备注', save: '保存', saving: '保存中…',
       created: '期货部位已新增', updated: '期货部位已更新', deleted: '期货部位已删除', saveFailed: '保存期货部位失败',

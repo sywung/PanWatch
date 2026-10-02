@@ -8,11 +8,17 @@ from sqlalchemy import and_, func, or_
 
 from src.platform.persistence.database import SessionLocal
 from src.platform.persistence.models import StockSuggestion
+from src.platform.language import localize_text, resolve_report_language
 from src.platform.scheduling.timezone import utc_now, to_iso_with_tz
 from src.platform.persistence.json_safe import to_jsonable
 from src.platform.marketdata.models import DEFAULT_MARKET
 
 logger = logging.getLogger(__name__)
+
+
+def _as_utc(dt: datetime) -> datetime:
+    """SQLite 读回的时间不带时区(实际存 UTC);与 utc_now() 比较前补上,否则会抛 TypeError。"""
+    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
 
 
 def _norm_text(s: str) -> str:
@@ -81,6 +87,12 @@ def save_suggestion(
     try:
         market = (stock_market or DEFAULT_MARKET.value).strip().upper() or DEFAULT_MARKET.value
 
+        # AI 有时回简体:依介面语言统一转换后再去重与落库
+        language = resolve_report_language(db)
+        action_label = localize_text(action_label, language) or action_label
+        signal = localize_text(signal, language) or signal
+        reason = localize_text(reason, language) or reason
+
         # 计算过期时间（使用 UTC）
         if expires_hours is None:
             expires_hours = AGENT_EXPIRY_HOURS.get(agent_name, 8)
@@ -120,7 +132,7 @@ def save_suggestion(
 
                 if same_key and (now - latest_created) <= window:
                     # Extend expiry (keep the first message to avoid churn).
-                    if not latest.expires_at or latest.expires_at < expires_at:
+                    if not latest.expires_at or _as_utc(latest.expires_at) < expires_at:
                         latest.expires_at = expires_at
                     if not (latest.stock_name or "") and stock_name:
                         latest.stock_name = stock_name
@@ -149,7 +161,7 @@ def save_suggestion(
                     )
                     if (now - latest_created) <= change_window and new_r < old_r:
                         # Keep the previous (more severe) action; extend expiry.
-                        if not latest.expires_at or latest.expires_at < expires_at:
+                        if not latest.expires_at or _as_utc(latest.expires_at) < expires_at:
                             latest.expires_at = expires_at
                         if not (latest.stock_name or "") and stock_name:
                             latest.stock_name = stock_name
@@ -232,7 +244,8 @@ def get_suggestions_for_stock(
             query.order_by(StockSuggestion.created_at.desc()).limit(limit).all()
         )
 
-        return [_to_dict(s, now) for s in suggestions]
+        language = resolve_report_language(db)
+        return [_to_dict(s, now, language) for s in suggestions]
 
     finally:
         db.close()
@@ -307,19 +320,24 @@ def get_latest_suggestions(
             )
 
         suggestions = query.all()
+        language = resolve_report_language(db)
 
         result: dict[str, dict] = {}
         for s in suggestions:
             key = f"{(s.stock_market or DEFAULT_MARKET.value).upper()}:{s.stock_symbol}"
-            result[key] = _to_dict(s, now)
+            result[key] = _to_dict(s, now, language)
         return result
 
     finally:
         db.close()
 
 
-def _to_dict(suggestion: StockSuggestion, now: Optional[datetime] = None) -> dict:
-    """将 StockSuggestion 转换为字典（时间使用 ISO 格式带时区）"""
+def _to_dict(
+    suggestion: StockSuggestion,
+    now: Optional[datetime] = None,
+    language: str | None = None,
+) -> dict:
+    """将 StockSuggestion 转换为字典（时间使用 ISO 格式带时区）;文字依 language 转换(旧资料可能是简体)"""
     if now is None:
         now = utc_now()
 
@@ -358,11 +376,11 @@ def _to_dict(suggestion: StockSuggestion, now: Optional[datetime] = None) -> dic
         "stock_market": suggestion.stock_market or DEFAULT_MARKET.value,
         "stock_name": suggestion.stock_name,
         "action": suggestion.action,
-        "action_label": suggestion.action_label,
-        "signal": suggestion.signal,
-        "reason": suggestion.reason,
+        "action_label": localize_text(suggestion.action_label, language),
+        "signal": localize_text(suggestion.signal, language),
+        "reason": localize_text(suggestion.reason, language),
         "agent_name": suggestion.agent_name,
-        "agent_label": suggestion.agent_label,
+        "agent_label": localize_text(suggestion.agent_label, language),
         "created_at": created_at_str,
         "expires_at": expires_at_str,
         "is_expired": is_expired,

@@ -769,7 +769,11 @@ class TestAgentCollect(unittest.IsolatedAsyncioTestCase):
         fake_md.capital_flow = MagicMock(return_value=fake_flow)
         fake_md.events = MagicMock(return_value=[fake_event])
 
-        with patch.object(agent_module, "get_market_data", lambda: fake_md):
+        from src.modules.automation.tradingagents import data_context
+
+        # A 股财报走 akshare 连新浪(无 timeout),测试里一律假掉
+        with patch.object(agent_module, "get_market_data", lambda: fake_md), \
+                patch.object(data_context, "fetch_financial_abstract", lambda symbol: None):
             data = await agent.collect(context)
 
         self.assertEqual(data["stock"], stock)

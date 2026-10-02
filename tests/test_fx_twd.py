@@ -113,7 +113,8 @@ def test_failure_backs_off_five_minutes(monkeypatch, _reset_fx):
     assert len(calls) == 2
 
 
-def test_exchange_rates_snapshot_keys():
+def test_exchange_rates_snapshot_keys(monkeypatch):
+    _install_fetch(monkeypatch, {})  # 只验键名,不打 Yahoo
     snap = fx.exchange_rates_snapshot()
     assert set(snap) == {"USD_TWD", "HKD_TWD", "CNY_TWD"}
 

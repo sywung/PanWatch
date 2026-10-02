@@ -89,6 +89,58 @@ def _ensure_db_schema():
     yield
 
 
+_LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1", ""}
+
+
+def _is_local(addr) -> bool:
+    host = addr[0] if isinstance(addr, tuple) else addr
+    return host is None or not isinstance(host, str) or host in _LOCAL_HOSTS or host.startswith("/")
+
+
+@pytest.fixture(autouse=True)
+def _block_external_network(request, monkeypatch):
+    """单测禁止连外网:被测代码多半会吞掉连线错误,测试照样绿,但慢线时会把整套拖到 10 分钟。
+
+    拦截 DNS 解析与 connect,记录目标;只要用例里出现过外连就判失败并列出主机。
+    传入 --notify(集成测试)时放行。
+    """
+    if request.config.getoption("--notify"):
+        yield
+        return
+
+    import socket
+
+    hits: list[str] = []
+    real_getaddrinfo = socket.getaddrinfo
+    real_connect = socket.socket.connect
+    real_connect_ex = socket.socket.connect_ex
+
+    def guarded_getaddrinfo(host, *args, **kwargs):
+        if not _is_local(host):
+            hits.append(str(host))
+            raise socket.gaierror(f"测试禁止连外网: {host}")
+        return real_getaddrinfo(host, *args, **kwargs)
+
+    def guarded_connect(self, addr):
+        if not _is_local(addr):
+            hits.append(str(addr))
+            raise OSError(f"测试禁止连外网: {addr}")
+        return real_connect(self, addr)
+
+    def guarded_connect_ex(self, addr):
+        if not _is_local(addr):
+            hits.append(str(addr))
+            return 111  # ECONNREFUSED
+        return real_connect_ex(self, addr)
+
+    monkeypatch.setattr(socket, "getaddrinfo", guarded_getaddrinfo)
+    monkeypatch.setattr(socket.socket, "connect", guarded_connect)
+    monkeypatch.setattr(socket.socket, "connect_ex", guarded_connect_ex)
+    yield
+    if hits:
+        pytest.fail("用例连了外网(请 mock 掉):" + ", ".join(sorted(set(hits))), pytrace=False)
+
+
 # ---------------------------------------------------------------------------
 # 共用工厂 fixtures
 # ---------------------------------------------------------------------------

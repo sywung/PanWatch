@@ -395,6 +395,9 @@ def test_empty_required_market_source_is_visible_as_error(monkeypatch):
         market_data.events.return_value = []
         monkeypatch.setattr(agent_module, "PanWatchProgressHandler", _Handler)
         monkeypatch.setattr(agent_module, "get_market_data", lambda: market_data)
+        # A 股财报走 akshare 连新浪(无 timeout),测试里一律假掉
+        from src.modules.automation.tradingagents import data_context
+        monkeypatch.setattr(data_context, "fetch_financial_abstract", lambda symbol: None)
         monkeypatch.setattr(
             "src.platform.marketdata.collectors.kline_collector.KlineCollector.get_technical_indicators",
             lambda self, symbol, klines=None: {},

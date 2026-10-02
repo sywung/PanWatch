@@ -24,6 +24,12 @@ _TPEX_ROWS = [  # tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes
 ]
 
 
+@pytest.fixture(autouse=True)
+def _no_esb_network(monkeypatch):
+    """兴柜清单默认给空,避免测试真的连到 tpex.org.tw(慢线时会拖住整个测试集)。"""
+    monkeypatch.setattr(sl, "_fetch_esb_raw", lambda: [])
+
+
 @pytest.fixture
 def fake_sources(monkeypatch):
     monkeypatch.setattr(sl, "_fetch_twse_raw", lambda: _TWSE_ROWS)

@@ -444,7 +444,8 @@ DATA_SOURCE_SEEDS: list[dict] = [
             "config": {
                 "base_url": "http://host.containers.internal:2885",
                 "token": "",
-                "description": "需依 services/yuanta_gateway/README 架設轉接服務並在元大開通 API；啟用後報價作證交所 mis 備援、K 線（含分 K）優先使用。",
+                "intraday": False,
+                "description": "需依 services/yuanta_gateway/README 架設轉接服務並在元大開通 API；啟用後台股日 K 優先使用。分 K 需另將 intraday 設為 true（多日 30 分／1 分 K 實測會逾時，待查）。",
             },
             "enabled": False,
             "priority": 18,

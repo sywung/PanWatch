@@ -174,7 +174,8 @@ class MarketData:
             from marketdata.vendors.yuanta import YuantaKlineVendor
 
             for source in self.config.sources_for("kline", "TW"):
-                if not source.enabled or source.vendor != "yuanta":
+                # 分 K 需在资料源设定 intraday=true 才启用(元大多日 30 分/1 分 K 实测会逾时,待查)
+                if not source.enabled or source.vendor != "yuanta" or not (source.config or {}).get("intraday"):
                     continue
                 try:
                     bars = YuantaKlineVendor().fetch_intraday(symbol, interval, source.config or {})

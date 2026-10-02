@@ -171,9 +171,10 @@ def test_intraday_unsupported_interval_returns_empty(gw):
 
 # ---------- MarketData.intraday_klines 走元大(啟用時) ----------
 
-def _md(enabled=True):
+def _md(enabled=True, intraday=True):
     return MarketData(config=StaticConfigProvider({
-        "kline": [SourceConfig(vendor="yuanta", priority=18, enabled=enabled, config={"base_url": BASE})],
+        "kline": [SourceConfig(vendor="yuanta", priority=18, enabled=enabled,
+                               config={"base_url": BASE, "intraday": intraday})],
     }))
 
 
@@ -210,4 +211,13 @@ def test_intraday_klines_ignores_disabled_yuanta(gw, monkeypatch):
 
     monkeypatch.setattr(kv, "market_get", lambda *a, **k: None)
     _md(enabled=False).intraday_klines("2330", market="TW", interval="30m")
+    assert gw["gets"] == []
+
+
+def test_intraday_klines_requires_intraday_flag(gw, monkeypatch):
+    """2026-10-02 實測多日 30 分 K／1 分 K 會讓轉接服務逾時 15 秒;分 K 需明確開啟 intraday。"""
+    import marketdata.vendors.kline as kv
+
+    monkeypatch.setattr(kv, "market_get", lambda *a, **k: None)
+    _md(intraday=False).intraday_klines("2330", market="TW", interval="30m")
     assert gw["gets"] == []

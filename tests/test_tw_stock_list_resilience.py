@@ -116,7 +116,7 @@ def mis(monkeypatch):
         return _Resp({"msgArray": [{"c": "", "z": "-"}, {"c": "", "z": "-"}]})
 
     monkeypatch.setattr(sl.httpx, "get", fake_get)
-    monkeypatch.setattr(sl, "get_stock_list", lambda: [{"symbol": "2330", "name": "台積電",
+    monkeypatch.setattr(sl, "get_stock_list", lambda *a, **k: [{"symbol": "2330", "name": "台積電",
                                                         "market": "TW", "board": "TSE"}])
     monkeypatch.setattr(sl, "_realtime_search", lambda *a, **k: [])
     return calls

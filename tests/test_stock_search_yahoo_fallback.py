@@ -51,7 +51,7 @@ def net(monkeypatch):
     monkeypatch.setattr(sl.httpx, "get", fake_get)
     monkeypatch.setattr(sl.httpx, "Client", _Client)
     monkeypatch.setattr(sl, "_eastmoney_skip_until", 0.0)
-    monkeypatch.setattr(sl, "get_stock_list", lambda: [{"symbol": "2330", "name": "台積電", "market": "TW",
+    monkeypatch.setattr(sl, "get_stock_list", lambda *a, **k: [{"symbol": "2330", "name": "台積電", "market": "TW",
                                                         "board": "TSE"}])
     return calls
 

@@ -111,7 +111,7 @@ def tw_cache(monkeypatch):
         {"symbol": "6488", "name": "環球晶", "market": "TW"},
         {"symbol": "600519", "name": "贵州茅台", "market": "CN"},
     ]
-    monkeypatch.setattr(sl, "get_stock_list", lambda: stocks)
+    monkeypatch.setattr(sl, "get_stock_list", lambda *a, **k: stocks)
     return stocks
 
 

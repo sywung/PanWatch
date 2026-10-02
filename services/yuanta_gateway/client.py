@@ -15,8 +15,8 @@ MARKET_ENUM = {"TSE": "TWSE", "OTC": "TWOTC", "ESB": "TWEMERGING", "TAIFEX": "TA
 KLINE_PERIOD = {"1m": 0, "5m": 1, "15m": 2, "30m": 3, "60m": 4, "1d": 11, "1w": 12, "1M": 13}
 
 
-# 證券 S+11 碼、期貨 F+17 碼(例 FF021000P001234567);全 0 或「請填」為範例佔位字
-_ACCOUNT_RE = re.compile(r"^(S\d{11}|F[0-9A-Z]{17})$")
+# 證券 S+11 碼、期貨 F+17 碼,可含英文字母(元大範例 S981r1691656、FF021000P001234567);全 0 或「請填」為範例佔位字
+_ACCOUNT_RE = re.compile(r"^(S[0-9A-Za-z]{11}|F[0-9A-Za-z]{17})$")
 
 
 def _credentials_look_valid(account: str, password: str, pfx_path: str, pfx_password: str) -> bool:

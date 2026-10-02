@@ -103,3 +103,11 @@ def test_futures_account_format_is_accepted():
     _answer_later(a, login_ok("FF021000P001234567"))
     c.connect_and_login(timeout=2)
     assert len(_logins(a)) == 1
+
+
+def test_branch_code_with_letters_is_accepted():
+    """元大分公司代號可含英文字母(官方範例 S981r1691656)。"""
+    c, a = _client(account="S981r1691656")
+    _answer_later(a, login_ok("S981r1691656"))
+    c.connect_and_login(timeout=2)
+    assert len(_logins(a)) == 1

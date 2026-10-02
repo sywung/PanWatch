@@ -64,6 +64,7 @@ export function FuturesPositionDialog({ open, onOpenChange, accountId, position,
     }
     return rows
   }, [contractMonth, options, position])
+  const selectedMonth = months.find(month => month.contract_month === contractMonth)
 
   useEffect(() => {
     if (!open) return
@@ -201,7 +202,12 @@ export function FuturesPositionDialog({ open, onOpenChange, accountId, position,
             <div className="space-y-2">
               <Label>{tr('contractMonth')}</Label>
               <Select value={contractMonth} onValueChange={setContractMonth} disabled={!options || months.length === 0}>
-                <SelectTrigger><SelectValue placeholder={tr('selectContractMonth')} /></SelectTrigger>
+                <SelectTrigger>
+                  {/* 编辑时值先于选项设定,Radix 不会回填文字;自行渲染已选月份的标签 */}
+                  <SelectValue placeholder={tr('selectContractMonth')}>
+                    {selectedMonth ? monthLabel(selectedMonth, locale) : undefined}
+                  </SelectValue>
+                </SelectTrigger>
                 <SelectContent>
                   {months.map(month => <SelectItem key={month.contract_month} value={month.contract_month}>{monthLabel(month, locale)}</SelectItem>)}
                 </SelectContent>

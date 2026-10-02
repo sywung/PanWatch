@@ -250,3 +250,11 @@ def test_message_context_passes_known_market(monkeypatch):
     asyncio.run(insights._fetch_message_context(DB(), "2330", "TW"))
 
     assert seen["markets"] == {"2330": "TW"}
+
+
+def test_api_labels_yahoo_tw_source(monkeypatch):
+    """台股新闻来源显示为「Yahoo 奇摩」,不是原始代号 yahoo_tw。"""
+    result, _ = _call_get_news(monkeypatch, stocks=[], symbols="2330", market="TW",
+                               items=[_tw_item()])
+
+    assert result[0].source_label == "Yahoo 奇摩"

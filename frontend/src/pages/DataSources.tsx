@@ -120,6 +120,9 @@ const PROVIDER_CREDENTIAL_FIELDS: Record<string, CredentialFieldDef[]> = {
   finmind: [
     { key: 'token', labelKey: 'dataSources.credentials.finmindLabel', placeholderKey: 'dataSources.credentials.finmindPlaceholder', secret: true, helpKey: 'dataSources.credentials.finmindHelp' },
   ],
+  yuanta: [
+    { key: 'token', labelKey: 'dataSources.credentials.yuantaLabel', placeholderKey: 'dataSources.credentials.yuantaPlaceholder', secret: true, helpKey: 'dataSources.credentials.yuantaHelp' },
+  ],
 }
 
 const emptyForm: DataSourceForm = {

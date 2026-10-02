@@ -121,6 +121,9 @@ export const configuration = {
       finmindLabel: 'FinMind Token（選填）',
       finmindPlaceholder: '貼上 FinMind API Token',
       finmindHelp: '公開 API 可免 Token 使用；註冊免費帳號可提高請求額度。',
+      yuantaLabel: '元大 SparkAPI 转接服务 Token（选填）',
+      yuantaPlaceholder: '粘贴转接服务 Token；未设置时不发送 Authorization',
+      yuantaHelp: '请按 services/yuanta_gateway/README 架设本地转接服务，并在元大开通 API。',
     },
     messages: {
       loadFailed: '加载数据源失败',

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from datetime import datetime, timedelta
 from datetime import timezone
@@ -58,6 +59,8 @@ INDEX_TENCENT: dict[str, str] = {
 # Yahoo 只有加权指数(^TWII);柜买指数没有对应代码(实测 ^TWOII 等均 404),
 # 柜买指数仅提供 tw_index_quotes() 的实时报价,不提供日K
 INDEX_YAHOO: dict[str, str] = {"TWII": "^TWII"}
+
+logger = logging.getLogger(__name__)
 
 
 class MarketData:
@@ -156,7 +159,7 @@ class MarketData:
         return resp.data or []
 
     def intraday_klines(self, symbol: str, *, market: str, interval: str = "30m") -> list:
-        """从 Yahoo 取得近 60 天的分线数据。"""
+        """台股优先使用已启用的元大分 K，其余情况走 Yahoo 近 60 天分线数据。"""
         from marketdata.vendors.kline import (
             _YAHOO_CHART_URL,
             _TW_SUFFIX_HINT,
@@ -167,6 +170,18 @@ class MarketData:
         market = str(market).upper()
         if market == "CN":
             return []
+        if market == "TW":
+            from marketdata.vendors.yuanta import YuantaKlineVendor
+
+            for source in self.config.sources_for("kline", "TW"):
+                if not source.enabled or source.vendor != "yuanta":
+                    continue
+                try:
+                    bars = YuantaKlineVendor().fetch_intraday(symbol, interval, source.config or {})
+                    if bars:
+                        return bars
+                except Exception as exc:
+                    logger.warning("[marketdata/intraday] vendor=yuanta raised: %s", exc)
         suffixes = [""]
         if market == "TW":
             hint = _TW_SUFFIX_HINT.get(symbol)

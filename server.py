@@ -438,6 +438,20 @@ DATA_SOURCE_SEEDS: list[dict] = [
             "test_symbols": list(DEFAULT_TEST_SYMBOLS),
         },
         {
+            "name": "元大 SparkAPI K 線（需自架轉接服務）",
+            "type": "kline",
+            "provider": "yuanta",
+            "config": {
+                "base_url": "http://host.containers.internal:2885",
+                "token": "",
+                "description": "需依 services/yuanta_gateway/README 架設轉接服務並在元大開通 API；啟用後報價作證交所 mis 備援、K 線（含分 K）優先使用。",
+            },
+            "enabled": False,
+            "priority": 18,
+            "supports_batch": False,
+            "test_symbols": list(DEFAULT_TEST_SYMBOLS_BY_MARKET["TW"]),
+        },
+        {
             "name": "FinMind 台股日 K（備援）",
             "type": "kline",
             "provider": "finmind",
@@ -494,6 +508,20 @@ DATA_SOURCE_SEEDS: list[dict] = [
             "priority": 0,
             "supports_batch": True,
             "test_symbols": list(DEFAULT_TEST_SYMBOLS_BY_MARKET["TW"]),
+        },
+        {
+            "name": "元大 SparkAPI 報價（需自架轉接服務）",
+            "type": "quote",
+            "provider": "yuanta",
+            "config": {
+                "base_url": "http://host.containers.internal:2885",
+                "token": "",
+                "description": "需依 services/yuanta_gateway/README 架設轉接服務並在元大開通 API；啟用後報價作證交所 mis 備援、K 線（含分 K）優先使用。",
+            },
+            "enabled": False,
+            "priority": 1,
+            "supports_batch": True,
+            "test_symbols": ["2330", "6488"],
         },
         {
             "name": "期交所 MIS 期貨行情",

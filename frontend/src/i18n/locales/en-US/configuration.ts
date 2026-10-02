@@ -124,6 +124,9 @@ export const configuration = {
       finmindLabel: 'FinMind Token (optional)',
       finmindPlaceholder: 'Paste your FinMind API token',
       finmindHelp: 'The public API works without a token; create a free account for a higher request quota.',
+      yuantaLabel: 'Yuanta SparkAPI gateway token (optional)',
+      yuantaPlaceholder: 'Paste the gateway token; Authorization is omitted when blank',
+      yuantaHelp: 'Set up the local gateway using services/yuanta_gateway/README and enable the API with Yuanta.',
     },
     messages: {
       loadFailed: 'Failed to load data sources',

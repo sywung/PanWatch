@@ -216,6 +216,21 @@ class TradingAgentsAgent(BaseAgent):
             except Exception as e:
                 logger.debug(f"[TA] 财报模块不可用,跳过: {e}")
 
+        # 台股新闻(Yahoo 奇摩):重大讯息常为空(ETF 尤其),新闻分析师需要个股新闻。
+        # A 股不收:从台湾连东财新闻常逾时,且 A 股已有公告。
+        news_list: list = []
+        if stock.market.value == "TW":
+            from src.platform.marketdata import marketdata_client
+
+            news_list = await _source(
+                "news",
+                lambda: marketdata_client.md_news(
+                    [stock.symbol], 168, {stock.symbol: stock.name},
+                    markets={stock.symbol: "TW"},
+                ),
+                [],
+            ) or []
+
         # 预算技术指标(MA/MACD/RSI/KDJ/BOLL),给 get_indicators 工具用
         technical = None
         try:
@@ -238,6 +253,7 @@ class TradingAgentsAgent(BaseAgent):
             "klines": klines_list,
             "capital_flow": capital_list,
             "events": events_list,
+            "news": news_list,
             "financial": financial,
             "technical": technical,
             "fetched_at": datetime.now(timezone.utc).isoformat(),

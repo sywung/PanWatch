@@ -25,6 +25,7 @@ import contextvars
 import logging
 import re
 import threading
+from datetime import datetime
 from src.platform.marketdata.models import DEFAULT_MARKET, MarketCode
 from contextlib import contextmanager
 from typing import Any
@@ -920,8 +921,14 @@ def _serve_from_panwatch(method_name: str, symbol: str, kwargs: dict, args: tupl
     # 2) 公告/事件/新闻:get_finnhub_news / get_news / get_events / get_global_news / get_insider_*
     if any(k in method for k in ("news", "event", "announce", "insider")):
         events = _cache().get("events") or []
+        news = _cache().get("news") or []
+        sections = []
         if events:
-            return f"{header}\n\n{_events_to_text(events, limit=20)}"
+            sections.append(_events_to_text(events, limit=20))
+        if news:
+            sections.append(_news_to_text(news, limit=20))
+        if sections:
+            return f"{header}\n\n" + "\n\n".join(sections)
         return (
             f"{header}\n\n[No company-specific news/events available for {symbol}. "
             "DO NOT pull unrelated global news as a substitute — focus the analysis "
@@ -1142,6 +1149,17 @@ def _events_to_text(events, limit: int = 20) -> str:
             ev.get("publish_time") if isinstance(ev, dict) else ""
         )
         out.append(f"- [{ts}] {title}")
+    return "\n".join(out)
+
+
+def _news_to_text(news, limit: int = 20) -> str:
+    """个股新闻(NewsItem)→ 按时间倒序的标题列表。"""
+    items = sorted(news, key=lambda n: getattr(n, "publish_time", None) or datetime.min, reverse=True)
+    out = [f"近期个股新闻(共 {len(items)} 条):"]
+    for n in items[:limit]:
+        ts = getattr(n, "publish_time", None)
+        ts_text = ts.strftime("%Y-%m-%d %H:%M") if hasattr(ts, "strftime") else str(ts or "")
+        out.append(f"- [{ts_text}] {getattr(n, 'title', '')}")
     return "\n".join(out)
 
 

@@ -64,7 +64,6 @@ export function FuturesPositionDialog({ open, onOpenChange, accountId, position,
     }
     return rows
   }, [contractMonth, options, position])
-  const selectedMonth = months.find(month => month.contract_month === contractMonth)
 
   useEffect(() => {
     if (!open) return
@@ -74,7 +73,8 @@ export function FuturesPositionDialog({ open, onOpenChange, accountId, position,
     if (position) {
       setProduct({ symbol: position.product_code, name: position.product_name, market: 'TWF' })
       setQuery(`${position.product_code} ${position.product_name}`)
-      setContractMonth(position.contract_month)
+      // Radix Select 在值先于选项设定时不会回填文字;等选项载入后同一次更新再设月份
+      setContractMonth('')
       setDirection(position.direction)
       setLots(String(position.lots))
       setEntryPrice(String(position.entry_price))
@@ -83,6 +83,7 @@ export function FuturesPositionDialog({ open, onOpenChange, accountId, position,
       futuresPositionsApi.options(position.product_code).then(data => {
         if (cancelled) return
         setOptions(data)
+        setContractMonth(position.contract_month)
         if (!position.multiplier) setMultiplier(String(data.multiplier))
       }).catch(() => undefined)
     } else {
@@ -202,12 +203,7 @@ export function FuturesPositionDialog({ open, onOpenChange, accountId, position,
             <div className="space-y-2">
               <Label>{tr('contractMonth')}</Label>
               <Select value={contractMonth} onValueChange={setContractMonth} disabled={!options || months.length === 0}>
-                <SelectTrigger>
-                  {/* 编辑时值先于选项设定,Radix 不会回填文字;自行渲染已选月份的标签 */}
-                  <SelectValue placeholder={tr('selectContractMonth')}>
-                    {selectedMonth ? monthLabel(selectedMonth, locale) : undefined}
-                  </SelectValue>
-                </SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={tr('selectContractMonth')} /></SelectTrigger>
                 <SelectContent>
                   {months.map(month => <SelectItem key={month.contract_month} value={month.contract_month}>{monthLabel(month, locale)}</SelectItem>)}
                 </SelectContent>

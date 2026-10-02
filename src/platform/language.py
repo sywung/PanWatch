@@ -35,6 +35,20 @@ def resolve_report_language(db: Session) -> str:
     return interface_language if interface_language in SUPPORTED_LANGUAGES else DEFAULT_LANGUAGE
 
 
+PROMPT_LANGUAGE_MODES = frozenset({"auto", "zh-TW", "original"})
+
+
+def prompt_language_mode() -> str:
+    """提示词(prompts/*.txt)语言:环境变数 PROMPT_LANGUAGE。
+
+    auto(预设):介面为繁中时转繁体;zh-TW:一律转繁体;original:维持原档。
+    """
+    import os
+
+    mode = os.environ.get("PROMPT_LANGUAGE", "auto").strip()
+    return mode if mode in PROMPT_LANGUAGE_MODES else "auto"
+
+
 def localize_text(text: str | None, language: str | None) -> str | None:
     """Convert Simplified Chinese to Taiwan Traditional Chinese when requested."""
     global _opencc, _opencc_warned

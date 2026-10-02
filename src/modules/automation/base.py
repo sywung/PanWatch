@@ -10,7 +10,7 @@ from src.platform.marketdata.models import MarketCode
 from src.platform.notifications.notify_dedupe import build_notify_dedupe_key, check_and_mark_notify
 from src.platform.notifications.notify_policy import NotifyPolicy
 from src.platform.observability.log_context import log_context
-from src.platform.language import DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES, localize_text
+from src.platform.language import DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES, localize_text, prompt_language_mode
 
 logger = logging.getLogger(__name__)
 
@@ -178,6 +178,10 @@ class BaseAgent(ABC):
 
     def apply_report_language(self, context: AgentContext, system_prompt: str) -> str:
         """Keep generated prose aligned with the user's report language preference."""
+        # 提示词本体(含 JSON 示例)是简体时,模型常照抄示例回简体;依 PROMPT_LANGUAGE 转换
+        mode = prompt_language_mode()
+        if mode == "zh-TW" or (mode == "auto" and context.report_language == "zh-TW"):
+            system_prompt = localize_text(system_prompt, "zh-TW") or system_prompt
         if context.report_language == "zh-TW":
             instruction = (
                 "\n\n輸出語言為繁體中文（台灣用語）。保留股票名稱、代碼、數字、JSON key 原樣，"

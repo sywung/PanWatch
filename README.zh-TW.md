@@ -90,6 +90,7 @@ docker compose up -d --build
 | `TZ` | 時區，影響 Agent 排程觸發時間與畫面上的時間 | `Asia/Taipei` |
 | `PLAYWRIGHT_SKIP_BROWSER_INSTALL` | 跳過第一次啟動時安裝 Chromium | 未設定 |
 | `LOG_LEVEL` | 主控台日誌等級，除錯時可設 `DEBUG` | `INFO` |
+| `PROMPT_LANGUAGE` | AI 提示詞（`prompts/*.txt`）語言：`auto` 跟著介面語言（繁中時轉繁體）、`zh-TW` 一律轉繁體、`original` 維持原檔 | `auto` |
 | `HTTP_PROXY` / `HTTPS_PROXY` | 對外 HTTP 代理（也可在「設定 → 全域 HTTP 代理」設定） | 未設定 |
 
 </details>

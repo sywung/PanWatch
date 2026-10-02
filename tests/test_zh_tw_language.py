@@ -106,8 +106,25 @@ class _Ctx:
 
 def test_apply_report_language_zh_tw_adds_traditional_instruction():
     out = _agent().apply_report_language(_Ctx("zh-TW"), "你是分析师。")
-    assert out.startswith("你是分析师。")
+    assert out.startswith("你是分析師。")      # 2026-10-02 起提示词本体也转繁体
     assert "繁體中文" in out and "台灣" in out
+
+
+def test_zh_tw_converts_prompt_examples_models_copy():
+    """2026-10-02:intraday_monitor.txt 的 JSON 示例写着「减仓」「RSI超买回落」,
+    模型照抄,建议池出现简中。zh-TW 时提示词整份转繁体(JSON key 不动)。"""
+    from pathlib import Path
+
+    raw = (Path(__file__).resolve().parents[1] / "prompts" / "intraday_monitor.txt").read_text(encoding="utf-8")
+    out = _agent().apply_report_language(_Ctx("zh-TW"), raw)
+    assert "减仓" not in out and "RSI超买" not in out
+    assert '"action_label":"減倉"' in out
+    assert '"action":"reduce"' in out and '"invalidations"' in out
+
+
+def test_zh_tw_prompt_conversion_keeps_codes_and_numbers():
+    out = _agent().apply_report_language(_Ctx("zh-TW"), "台积电(2330)涨幅 3.5%，MACD 金叉")
+    assert out.startswith("台積電(2330)漲幅 3.5%，MACD 金叉")
 
 
 def test_apply_report_language_zh_cn_unchanged():
@@ -158,3 +175,35 @@ def test_server_agent_notifier_passes_report_language(monkeypatch):
     notifier = server._build_notifier([])
     assert notifier.language == "zh-TW"
     assert notifier.localize("账户") == "帳戶"
+
+
+# ---------------------------------------------------------------- PROMPT_LANGUAGE 变数
+
+
+def test_prompt_language_original_keeps_template(monkeypatch):
+    """PROMPT_LANGUAGE=original:提示词维持原档(简体),但输出语言指示照介面语言附加。"""
+    monkeypatch.setenv("PROMPT_LANGUAGE", "original")
+    out = _agent().apply_report_language(_Ctx("zh-TW"), "你是分析师。")
+    assert out.startswith("你是分析师。")
+    assert "繁體中文" in out
+
+
+def test_prompt_language_zh_tw_forces_conversion_even_for_zh_cn(monkeypatch):
+    monkeypatch.setenv("PROMPT_LANGUAGE", "zh-TW")
+    out = _agent().apply_report_language(_Ctx("zh-CN"), "你是分析师。")
+    assert out == "你是分析師。"
+
+
+def test_prompt_language_auto_is_default(monkeypatch):
+    monkeypatch.delenv("PROMPT_LANGUAGE", raising=False)
+    from src.platform.language import prompt_language_mode
+
+    assert prompt_language_mode() == "auto"
+    assert _agent().apply_report_language(_Ctx("zh-CN"), "你是分析师。") == "你是分析师。"
+
+
+def test_prompt_language_invalid_value_falls_back_to_auto(monkeypatch):
+    monkeypatch.setenv("PROMPT_LANGUAGE", "klingon")
+    from src.platform.language import prompt_language_mode
+
+    assert prompt_language_mode() == "auto"

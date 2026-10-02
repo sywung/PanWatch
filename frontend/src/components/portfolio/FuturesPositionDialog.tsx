@@ -98,7 +98,9 @@ export function FuturesPositionDialog({ open, onOpenChange, accountId, position,
       setNote('')
     }
     return () => { cancelled = true }
-  }, [open, position])
+    // 只在开启或换编辑对象时初始化:父层每次重绘都会产生新的 position 物件,
+    // 依赖整个物件会让自动刷新把使用者正在编辑的表单重设
+  }, [open, position?.id])
 
   useEffect(() => {
     if (!open || position || product || query.trim().length < 1) {

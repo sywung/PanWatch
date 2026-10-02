@@ -74,10 +74,10 @@ def test_status_masks_account():
 
 
 def test_login_retry_waits_at_least_4_seconds():
-    """登入失败后不得频繁重试(元大安控:每 4 秒 1 次)。"""
+    """登入失败后不得频繁重试(元大安控:每 4 秒 1 次)。
+    帐密错误会直接封锁不再重试(见 test_login_safety),这里用可重试的逾时情境。"""
     c, a, clock = _client()
-    _answer_later(a, 1, 0, "Login", login_fail())
-    c.connect_and_login(timeout=2)
+    c.connect_and_login(timeout=0.2)
     _answer_later(a, 1, 0, "Login", login_ok())
     c.connect_and_login(timeout=2)
     assert any(s >= 4 for s in clock.slept)

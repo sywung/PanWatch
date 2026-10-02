@@ -18,7 +18,7 @@ class FakeClient:
 
     def status(self):
         return {"connected": self.logged_in, "logged_in": self.logged_in, "account": "S9887****091",
-                "last_error": "", "env": "PROD"}
+                "last_error": "", "env": "PROD", "retry_allowed": True}
 
     def quotes(self, items, timeout=10):
         self.calls.append(("quotes", items))

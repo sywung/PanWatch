@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 import marketdata.vendors.news as news_mod
 from marketdata.client import MarketData
@@ -16,6 +17,8 @@ from marketdata.http import capture_errors
 from marketdata.ports import SourceConfig
 from marketdata.symbol import Symbol
 from marketdata.types import NewsArticle
+
+_SH = ZoneInfo("Asia/Shanghai")
 
 
 def _jsonp(payload: dict) -> str:
@@ -140,7 +143,9 @@ def test_eastmoney_news_parses_and_uses_names(monkeypatch):
     assert a.external_id == "202607170001"
     assert a.title == "赛力斯发布新车型亮点"  # 高亮标签被清理
     assert a.content == "详细内容"
-    assert a.publish_time == datetime(2026, 7, 17, 9, 30, 0, tzinfo=timezone.utc)
+    # 东财字符串是北京时间,必须标成 Asia/Shanghai(之前标成 UTC,真实时刻早了 8 小时)
+    assert a.publish_time == datetime(2026, 7, 17, 9, 30, 0, tzinfo=_SH)
+    assert a.publish_time == datetime(2026, 7, 17, 1, 30, 0, tzinfo=timezone.utc)
     assert a.symbols == ["601127"]
     assert a.url == "https://finance.eastmoney.com/a/202607170001.html"
 
@@ -239,7 +244,7 @@ def test_eastmoney_ann_parses(monkeypatch):
     assert a.external_id == "AN202607170001"
     assert a.title == "贵州茅台关于分红派息的公告"
     assert a.content == ""  # 公告只有标题
-    assert a.publish_time == datetime(2026, 7, 17, 8, 0, 0, tzinfo=timezone.utc)
+    assert a.publish_time == datetime(2026, 7, 17, 8, 0, 0, tzinfo=_SH)
     assert a.symbols == ["600519"]
     assert a.importance == 2  # 命中"分红"
     assert a.url == "https://data.eastmoney.com/notices/detail/600519/AN202607170001.html"
@@ -343,7 +348,7 @@ def test_news_since_filter_with_now_uses_wider_announcement_window(monkeypatch):
     """
     monkeypatch.setattr(news_mod, "market_get", _fake_agg_market_get)
 
-    now = datetime(2026, 7, 17, 12, 30, tzinfo=timezone.utc)
+    now = datetime(2026, 7, 17, 12, 30, tzinfo=_SH)
     out = _agg_md().news(["600519"], since_hours=2, now=now)
 
     assert [a.external_id for a in out] == ["AN1", "AN2"]

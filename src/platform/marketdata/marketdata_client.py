@@ -164,13 +164,19 @@ def _article_to_newsitem(a):
     在模块级 import 本模块的 md_news)。
     """
     from src.platform.marketdata.collectors.news_collector import NewsItem
+    from src.platform.scheduling.timezone import to_beijing
+
+    # 包内 publish_time 为 aware;host 消费方直接 strftime 显示,统一转成应用时区的 naive 时间
+    publish_time = a.publish_time
+    if publish_time.tzinfo is not None:
+        publish_time = to_beijing(publish_time).replace(tzinfo=None)
 
     return NewsItem(
         source=a.source,
         external_id=a.external_id,
         title=a.title,
         content=a.content,
-        publish_time=a.publish_time,
+        publish_time=publish_time,
         symbols=a.symbols,
         importance=a.importance,
         url=a.url,

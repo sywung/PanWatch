@@ -12,6 +12,14 @@ export interface FuturesNewsInfo {
   name?: string | null
 }
 
+export function settlementUrgency(days?: number | null): 'expired' | 'today' | 'soon' | 'none' {
+  if (days == null || !Number.isFinite(days)) return 'none'
+  if (days < 0) return 'expired'
+  if (days === 0) return 'today'
+  if (days <= 5) return 'soon'
+  return 'none'
+}
+
 export function futuresUnderlyingName(name: string): string {
   return String(name || '').replace(/^小型/, '').replace(/期貨$/, '')
 }

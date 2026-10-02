@@ -297,6 +297,22 @@ export const configuration = {
     esb: '兴柜',
     markets: { all: '全部', tw: '台股', twf: '期货', cn: 'A股', cnShort: 'A股', hk: '港股', hkShort: '港', us: '美股', usShort: '美' },
     futures: { night: '夜盘', untraded: '未成交', contractMonth: '{{month}} 月' },
+    futuresPositions: {
+      title: '期货部位', add: '新增期货部位', editTitle: '编辑期货部位', addTitle: '新增期货部位', description: '记录账户中的期货合约与持仓参数。',
+      product: '期货商品', productSearchPlaceholder: '搜索期货商品代码或名称', contractMonth: '合约月份', selectContractMonth: '选择合约月份',
+      direction: '方向', long: '多', short: '空', lots: '口数', lotsUnit: '口', entryPrice: '成交价', currentPrice: '现价',
+      unrealizedPnl: '期货损益', marginUsed: '保证金占用', equity: '权益数', settlement: '结算日', settlementExpired: '已过结算',
+      settlementToday: '今日结算', settlementInDays: '{{count}} 天后结算', marginCall: '追缴警示', actions: '操作', edit: '编辑', delete: '删除',
+      deleteTitle: '删除期货部位', deleteDescription: '确定删除 {{product}} {{contract}}？', cancel: '取消', deleting: '删除中…',
+      multiplier: '契约乘数', multiplierHint: '预设值，调整型契约请自行修改', note: '备注', save: '保存', saving: '保存中…',
+      created: '期货部位已新增', updated: '期货部位已更新', deleted: '期货部位已删除', saveFailed: '保存期货部位失败',
+      deleteFailed: '删除期货部位失败', loadOptionsFailed: '读取期货合约选项失败',
+      errors: {
+        futures_product_not_found: '找不到期货商品。', invalid_direction: '方向必须选择多或空。', invalid_lots: '口数必须大于零。',
+        invalid_entry_price: '成交价必须大于零。', invalid_multiplier: '契约乘数必须大于零。', invalid_contract_month: '合约月份格式无效。',
+        contract_expired: '所选合约已过结算日。', account_not_found: '找不到交易账户。',
+      },
+    },
     marketStatus: { trading: '交易中', pre_market: '盘前', break: '午间休市', after_hours: '已收盘', closed: '休市', unknown: '未知' },
     messages: {
       agent: 'Agent',

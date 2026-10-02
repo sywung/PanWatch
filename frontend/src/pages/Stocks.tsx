@@ -2,8 +2,10 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Plus, Trash2, Pencil, Search, X, TrendingUp, Bot, Play, RefreshCw, Wallet, PiggyBank, ArrowUpRight, ArrowDownRight, Building2, ChevronDown, ChevronRight, Cpu, Bell, Clock, Newspaper, ExternalLink, BarChart3, Brain } from 'lucide-react'
 import { fetchAPI, stocksApi, type AIService, type NotifyChannel } from '@panwatch/api'
+import { futuresPositionsApi, type FuturesPosition } from '@panwatch/api/futures-positions'
 import { klinesApi } from '@panwatch/api/klines'
 import { useLocalStorage } from '@/lib/utils'
+import { mergePortfolioQuotes, type PortfolioPosition as Position, type PortfolioSummary } from '@/lib/portfolio-merge'
 import {
   buildPortfolioStockKeys,
   loadPortfolioPageBackgroundData,
@@ -25,6 +27,7 @@ import { useToast } from '@panwatch/base-ui/components/ui/toast'
 import StockInsightModal from '@panwatch/biz-ui/components/stock-insight-modal'
 import { DeepAnalysisModal } from '@panwatch/biz-ui/components/deep-analysis-modal'
 import StockPriceAlertPanel from '@panwatch/biz-ui/components/stock-price-alert-panel'
+import { FuturesPositionsSection } from '@/components/portfolio/FuturesPositionsSection'
 import { useTranslation } from 'react-i18next'
 import { localizeAgentDescription, localizeAgentName } from '@/i18n/agent-labels'
 import { getCurrentLocale } from '@/i18n'
@@ -64,61 +67,6 @@ interface Account {
   name: string
   available_funds: number
   enabled: boolean
-}
-
-interface Position {
-  id: number
-  stock_id: number
-  sort_order?: number
-  symbol: string
-  name: string
-  market: string
-  cost_price: number
-  quantity: number
-  invested_amount: number | null
-  trading_style: string  // short: 短线, swing: 波段, long: 长线
-  current_price: number | null
-  current_price_cny: number | null  // 人民币价格（港股换算后）
-  change_pct: number | null
-  market_value: number | null
-  market_value_cny: number | null  // 人民币市值
-  pnl: number | null
-  pnl_pct: number | null
-  daily_pnl: number | null
-  daily_pnl_pct: number | null
-  exchange_rate: number | null  // 汇率（仅港股）
-}
-
-interface AccountSummary {
-  id: number
-  name: string
-  available_funds: number
-  total_market_value: number
-  total_cost: number
-  total_pnl: number
-  total_pnl_pct: number
-  total_daily_pnl: number
-  total_assets: number
-  positions: Position[]
-}
-
-interface PortfolioSummary {
-  accounts: AccountSummary[]
-  total: {
-    total_market_value: number
-    total_cost: number
-    total_pnl: number
-    total_pnl_pct: number
-    total_daily_pnl: number
-    available_funds: number
-    total_assets: number
-  }
-  exchange_rates?: {
-    USD_TWD?: number | null
-    HKD_TWD?: number | null
-    CNY_TWD?: number | null
-  }
-  quotes?: Record<string, { current_price: number | null; change_pct: number | null }>
 }
 
 interface AgentConfig {
@@ -291,115 +239,6 @@ const toPriceAlertSummaryMap = (rows: PriceAlertRuleSummary[]): Record<string, {
   return map
 }
 
-const round2 = (value: number) => Math.round(value * 100) / 100
-
-const mergePortfolioQuotes = (
-  portfolio: PortfolioSummary | null,
-  quotes: Record<string, { current_price: number | null; change_pct: number | null }>
-): PortfolioSummary | null => {
-  if (!portfolio) return null
-
-  const rates = portfolio.exchange_rates
-
-  let grandMarketValue = 0
-  let grandCost = 0
-  let grandAvailable = 0
-  let grandDailyPnl = 0
-
-  const accounts = portfolio.accounts.map(account => {
-    let accMarketValue = 0
-    let accCost = 0
-    let accDailyPnl = 0
-
-    const positions = account.positions.map(pos => {
-      const quote = quotes[`${pos.market}:${pos.symbol}`]
-      const current_price = quote?.current_price ?? pos.current_price ?? null
-      const change_pct = quote?.change_pct ?? pos.change_pct ?? null
-      const currency = marketCurrency(pos.market)
-      const rate = currency === BASE_CURRENCY ? 1 : rates?.[`${currency}_${BASE_CURRENCY}` as 'USD_TWD' | 'HKD_TWD' | 'CNY_TWD'] ?? null
-
-      const cost = rate == null ? 0 : pos.cost_price * pos.quantity * rate
-      accCost += cost
-
-      let market_value: number | null = null
-      let market_value_cny: number | null = null
-      let pnl: number | null = null
-      let pnl_pct: number | null = null
-      let daily_pnl: number | null = null
-      let daily_pnl_pct: number | null = null
-
-      if (current_price != null && rate != null) {
-        market_value = current_price * pos.quantity
-        market_value_cny = market_value * rate
-        accMarketValue += market_value_cny
-        pnl = market_value_cny - cost
-        pnl_pct = cost > 0 ? (pnl / cost * 100) : 0
-      }
-
-      if (current_price != null && rate != null && change_pct != null && change_pct !== -100) {
-        const prev = current_price / (1 + change_pct / 100)
-        if (isFinite(prev) && prev > 0) {
-          daily_pnl = round2((current_price - prev) * pos.quantity * rate)
-          daily_pnl_pct = round2(change_pct)
-          accDailyPnl += daily_pnl
-        }
-      }
-
-      return {
-        ...pos,
-        current_price,
-        current_price_cny: current_price != null && rate != null ? current_price * rate : null,
-        change_pct,
-        market_value,
-        market_value_cny,
-        pnl,
-        pnl_pct,
-        daily_pnl,
-        daily_pnl_pct,
-        exchange_rate: currency === BASE_CURRENCY ? null : rate,
-      }
-    })
-
-    const accPnl = accMarketValue - accCost
-    const accPnlPct = accCost > 0 ? (accPnl / accCost * 100) : 0
-    const accTotalAssets = accMarketValue + account.available_funds
-
-    grandMarketValue += accMarketValue
-    grandCost += accCost
-    grandAvailable += account.available_funds
-    grandDailyPnl += accDailyPnl
-
-    return {
-      ...account,
-      total_market_value: round2(accMarketValue),
-      total_cost: round2(accCost),
-      total_pnl: round2(accPnl),
-      total_pnl_pct: round2(accPnlPct),
-      total_daily_pnl: round2(accDailyPnl),
-      total_assets: round2(accTotalAssets),
-      positions,
-    }
-  })
-
-  const grandPnl = grandMarketValue - grandCost
-  const grandPnlPct = grandCost > 0 ? (grandPnl / grandCost * 100) : 0
-  const grandTotalAssets = grandMarketValue + grandAvailable
-
-  return {
-    ...portfolio,
-    accounts,
-    total: {
-      total_market_value: round2(grandMarketValue),
-      total_cost: round2(grandCost),
-      total_pnl: round2(grandPnl),
-      total_pnl_pct: round2(grandPnlPct),
-      total_daily_pnl: round2(grandDailyPnl),
-      available_funds: round2(grandAvailable),
-      total_assets: round2(grandTotalAssets),
-    },
-  }
-}
-
 export default function StocksPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { t } = useTranslation('configuration')
@@ -417,6 +256,7 @@ export default function StocksPage() {
   // Portfolio
   const [portfolio, setPortfolio] = useState<PortfolioSummary | null>(null)
   const [portfolioRaw, setPortfolioRaw] = useState<PortfolioSummary | null>(null)
+  const [futuresPositions, setFuturesPositions] = useState<FuturesPosition[]>([])
   const [portfolioLoading, setPortfolioLoading] = useState(false)
   const [expandedAccounts, setExpandedAccounts] = useState<Set<number>>(new Set())
 
@@ -675,13 +515,44 @@ export default function StocksPage() {
     }
   }, [])
 
+  const refreshFuturesPositions = useCallback(async () => {
+    try {
+      setFuturesPositions(await futuresPositionsApi.list())
+    } catch (error) {
+      console.warn('Failed to refresh futures positions:', error)
+    }
+  }, [])
+
+  const refreshPortfolioSummary = useCallback(async () => {
+    try {
+      const summary = await fetchAPI<PortfolioSummary>('/portfolio/summary?include_quotes=false')
+      setPortfolioRaw(summary)
+      setPortfolio(mergePortfolioQuotes(summary, quotes))
+      setAccounts(summary.accounts.map(account => ({
+        id: account.id,
+        name: account.name,
+        available_funds: account.available_funds,
+        enabled: true,
+      })))
+    } catch (error) {
+      console.warn('Failed to refresh portfolio summary:', error)
+    }
+  }, [quotes])
+
   const refreshQuotes = useCallback(async () => {
     const items = buildQuoteItems()
-    if (items.length === 0) return
+    if (items.length === 0) {
+      await Promise.all([refreshFuturesPositions(), refreshPortfolioSummary()])
+      return
+    }
 
     setQuotesLoading(true)
     try {
-      const data = await requestQuotes(items)
+      const [data] = await Promise.all([
+        requestQuotes(items),
+        refreshFuturesPositions(),
+        refreshPortfolioSummary(),
+      ])
       if (data.length > 0) {
         setQuotes(toQuoteMap(data))
         setLastRefreshTime(new Date())
@@ -689,7 +560,7 @@ export default function StocksPage() {
     } finally {
       setQuotesLoading(false)
     }
-  }, [buildQuoteItems, requestQuotes])
+  }, [buildQuoteItems, refreshFuturesPositions, refreshPortfolioSummary, requestQuotes])
 
   useEffect(() => {
     if (!portfolioRaw) return
@@ -784,12 +655,17 @@ export default function StocksPage() {
       setQuotes(prev => ({ ...prev, ...quoteMap }))
       setKlineSummaries(prev => ({ ...prev, ...klineMap }))
       setPortfolio(mergePortfolioQuotes(portfolioData, { ...quotes, ...quoteMap }))
+      void refreshFuturesPositions()
     } catch (e) {
       console.error(e)
     } finally {
       setPortfolioLoading(false)
     }
-  }, [requestKlineSummaries, requestQuotes, quotes, stocks])
+  }, [refreshFuturesPositions, requestKlineSummaries, requestQuotes, quotes, stocks])
+
+  const reloadPortfolioAndFutures = useCallback(async () => {
+    await Promise.all([loadPortfolio(), refreshFuturesPositions()])
+  }, [loadPortfolio, refreshFuturesPositions])
 
   const loadInitialData = useCallback((signal: AbortSignal): Promise<void> => {
     if (initialLoadPromiseRef.current) return initialLoadPromiseRef.current
@@ -831,6 +707,9 @@ export default function StocksPage() {
       setLoading(false)
       setPortfolioLoading(false)
 
+      // Futures metrics are ancillary to the stock portfolio, so load them in the background.
+      void refreshFuturesPositions()
+
       void loadPortfolioPageBackgroundData({
         loadMarketStatus: async requestSignal => {
           try {
@@ -861,7 +740,7 @@ export default function StocksPage() {
 
     initialLoadPromiseRef.current = run
     return run
-  }, [requestKlineSummaries, requestPriceAlerts, requestQuotes, requestSuggestions])
+  }, [refreshFuturesPositions, requestKlineSummaries, requestPriceAlerts, requestQuotes, requestSuggestions])
 
   // Load news for specific stock or all watchlist
   const loadNews = useCallback(async (stockName?: string) => {
@@ -2001,7 +1880,7 @@ export default function StocksPage() {
                   </span>
                 </div>
                 <div className="flex items-center justify-between md:justify-end gap-2 md:gap-6 pl-6 md:pl-0">
-                  <div className="flex items-center gap-2.5 md:gap-6 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2.5 md:gap-6 min-w-0">
                     <div className="text-left md:text-right">
                       <div className="text-[10px] md:text-[11px] text-muted-foreground">{stockT('stocksPage.messages.marketValue')}</div>
                       <div className="text-[12px] md:text-[13px] font-mono font-medium whitespace-nowrap">{formatMoney(account.total_market_value)}</div>
@@ -2023,6 +1902,21 @@ export default function StocksPage() {
                       <div className="text-[10px] md:text-[11px] text-muted-foreground">{stockT('stocksPage.messages.availableFundsShort')}</div>
                       <div className="text-[12px] md:text-[13px] font-mono whitespace-nowrap">{formatMoney(account.available_funds)}</div>
                     </div>
+                    {((account.futures_unrealized_pnl ?? 0) !== 0 || (account.futures_margin_used ?? 0) !== 0) && (
+                      <div className="flex items-center gap-2 md:gap-4">
+                        <div className="text-left md:text-right">
+                          <div className="text-[10px] md:text-[11px] text-muted-foreground">{stockT('stocksPage.futuresPositions.unrealizedPnl')}</div>
+                          <div className={`text-[11px] md:text-[12px] font-mono whitespace-nowrap ${marketSignTextClass(account.futures_unrealized_pnl)}`}>
+                            {(account.futures_unrealized_pnl ?? 0) >= 0 ? '+' : ''}{formatMoney(account.futures_unrealized_pnl ?? 0)}
+                          </div>
+                        </div>
+                        <div className="text-left md:text-right">
+                          <div className="text-[10px] md:text-[11px] text-muted-foreground">{stockT('stocksPage.futuresPositions.marginUsed')}</div>
+                          <div className="text-[11px] md:text-[12px] font-mono whitespace-nowrap">{formatMoney(account.futures_margin_used ?? 0)}</div>
+                        </div>
+                      </div>
+                    )}
+                    {account.futures_margin_call && <Badge variant="destructive" className="text-[9px]">{stockT('stocksPage.futuresPositions.marginCall')}</Badge>}
                   </div>
                   <div className="flex items-center gap-0 md:gap-1 shrink-0" onClick={e => e.stopPropagation()}>
                     <Button variant="ghost" size="icon" className="h-7 w-7 md:h-8 md:w-8" onClick={() => openPositionDialog(account.id)}>
@@ -2391,6 +2285,13 @@ export default function StocksPage() {
                       </div>
                     </>
                   )}
+                  <FuturesPositionsSection
+                    accountId={account.id}
+                    positions={futuresPositions.filter(position => position.account_id === account.id)}
+                    formatMoney={formatMoney}
+                    formatPrice={formatPrice}
+                    onChanged={reloadPortfolioAndFutures}
+                  />
                 </div>
               )}
             </div>

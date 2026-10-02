@@ -298,6 +298,22 @@ export const configuration = {
     esb: '興櫃',
     markets: { all: '全部', tw: '台股', twf: '期貨', cn: 'A股', cnShort: 'A股', hk: '港股', hkShort: '港', us: '美股', usShort: '美' },
     futures: { night: '夜盤', untraded: '未成交', contractMonth: '{{month}} 月' },
+    futuresPositions: {
+      title: '期貨部位', add: '新增期貨部位', editTitle: '編輯期貨部位', addTitle: '新增期貨部位', description: '記錄帳戶中的期貨合約與持倉參數。',
+      product: '期貨商品', productSearchPlaceholder: '搜尋期貨商品代碼或名稱', contractMonth: '合約月份', selectContractMonth: '選擇合約月份',
+      direction: '方向', long: '多', short: '空', lots: '口數', lotsUnit: '口', entryPrice: '成交價', currentPrice: '現價',
+      unrealizedPnl: '期貨損益', marginUsed: '保證金佔用', equity: '權益數', settlement: '結算日', settlementExpired: '已過結算',
+      settlementToday: '今日結算', settlementInDays: '{{count}} 天后結算', marginCall: '追繳警示', actions: '操作', edit: '編輯', delete: '刪除',
+      deleteTitle: '刪除期貨部位', deleteDescription: '確定刪除 {{product}} {{contract}}？', cancel: '取消', deleting: '刪除中…',
+      multiplier: '契約乘數', multiplierHint: '預設值，調整型契約請自行修改', note: '備註', save: '儲存', saving: '儲存中…',
+      created: '期貨部位已新增', updated: '期貨部位已更新', deleted: '期貨部位已刪除', saveFailed: '儲存期貨部位失敗',
+      deleteFailed: '刪除期貨部位失敗', loadOptionsFailed: '讀取期貨合約選項失敗',
+      errors: {
+        futures_product_not_found: '找不到期貨商品。', invalid_direction: '方向必須選擇多或空。', invalid_lots: '口數必須大於零。',
+        invalid_entry_price: '成交價必須大於零。', invalid_multiplier: '契約乘數必須大於零。', invalid_contract_month: '合約月份格式無效。',
+        contract_expired: '所選合約已過結算日。', account_not_found: '找不到交易帳戶。',
+      },
+    },
     marketStatus: { trading: '交易中', pre_market: '盤前', break: '午間休市', after_hours: '已收盤', closed: '休市', unknown: '未知' },
     messages: {
       agent: 'Agent',

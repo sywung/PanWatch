@@ -300,6 +300,22 @@ export const configuration = {
     esb: 'ESB',
     markets: { all: 'All', tw: 'Taiwan', twf: 'Futures', cn: 'Mainland China', cnShort: 'CN', hk: 'Hong Kong', hkShort: 'HK', us: 'US', usShort: 'US' },
     futures: { night: 'Night', untraded: 'No trade', contractMonth: 'M{{month}}' },
+    futuresPositions: {
+      title: 'Futures positions', add: 'Add futures position', editTitle: 'Edit futures position', addTitle: 'Add futures position', description: 'Record a futures contract and its position details for this account.',
+      product: 'Futures product', productSearchPlaceholder: 'Search futures products by code or name', contractMonth: 'Contract month', selectContractMonth: 'Select a contract month',
+      direction: 'Direction', long: 'Long', short: 'Short', lots: 'Lots', lotsUnit: 'lots', entryPrice: 'Entry price', currentPrice: 'Current price',
+      unrealizedPnl: 'Futures P&L', marginUsed: 'Margin used', equity: 'Equity', settlement: 'Settlement', settlementExpired: 'Settlement passed',
+      settlementToday: 'Settles today', settlementInDays: 'Settles in {{count}} days', marginCall: 'Margin call', actions: 'Actions', edit: 'Edit', delete: 'Delete',
+      deleteTitle: 'Delete futures position', deleteDescription: 'Delete {{product}} {{contract}}?', cancel: 'Cancel', deleting: 'Deleting…',
+      multiplier: 'Contract multiplier', multiplierHint: 'Default value; adjust it manually for adjusted contracts.', note: 'Note', save: 'Save', saving: 'Saving…',
+      created: 'Futures position added', updated: 'Futures position updated', deleted: 'Futures position deleted', saveFailed: 'Failed to save futures position',
+      deleteFailed: 'Failed to delete futures position', loadOptionsFailed: 'Failed to load futures contract options',
+      errors: {
+        futures_product_not_found: 'The futures product could not be found.', invalid_direction: 'Choose long or short.', invalid_lots: 'Lots must be greater than zero.',
+        invalid_entry_price: 'Entry price must be greater than zero.', invalid_multiplier: 'Contract multiplier must be greater than zero.', invalid_contract_month: 'The contract month is invalid.',
+        contract_expired: 'The selected contract has passed its settlement date.', account_not_found: 'The trading account could not be found.',
+      },
+    },
     marketStatus: { trading: 'Open', pre_market: 'Pre-market', break: 'Midday break', after_hours: 'Closed', closed: 'Closed', unknown: 'Unknown' },
     messages: {
       agent: 'Agent',

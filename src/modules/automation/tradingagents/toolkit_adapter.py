@@ -25,7 +25,7 @@ import contextvars
 import logging
 import re
 import threading
-from src.platform.marketdata.models import DEFAULT_MARKET
+from src.platform.marketdata.models import DEFAULT_MARKET, MarketCode
 from contextlib import contextmanager
 from typing import Any
 
@@ -132,8 +132,11 @@ def is_hk_share(symbol: str) -> bool:
 
 
 def is_tw_share(symbol: str) -> bool:
-    """台股代码判定:4 位纯数字(含 ETF 0050 等)。"""
-    return bool(symbol) and len(symbol) == 4 and symbol.isdigit()
+    """台股代码判定:4 位纯数字或 4/5 位数字加字母后缀。"""
+    return bool(symbol) and (
+        (len(symbol) == 4 and symbol.isdigit())
+        or bool(re.fullmatch(r"\d{4,5}[A-Z]", symbol))
+    )
 
 
 def is_panwatch_routable(symbol: str) -> bool:
@@ -142,6 +145,8 @@ def is_panwatch_routable(symbol: str) -> bool:
     A 股(6 位数字)yfinance 拉不到,港股(5 位数字)yfinance 也要 .HK 后缀,
     都需要 PanWatch 兜底。美股(字母 ticker)继续走 yfinance。
     """
+    if symbol and symbol == _cached_symbol() and _cached_market() in {"CN", "HK", "TW"}:
+        return True
     return is_a_share(symbol) or is_hk_share(symbol) or is_tw_share(symbol)
 
 
@@ -167,9 +172,12 @@ def hk_symbol_to_yfinance(symbol: str) -> str:
     return s.zfill(4) + ".HK"
 
 
-def tw_symbol_to_yfinance(symbol: str) -> str:
-    """台股上市代码转换为 yfinance 格式；上柜 .TWO 由调用方提示时使用。"""
-    return f"{symbol.strip().upper()}.TW" if is_tw_share(symbol) else symbol
+def tw_symbol_to_yfinance(symbol: str, board: str | None = None) -> str:
+    """台股代码转换为 yfinance 格式；上柜/兴柜代码使用 .TWO。"""
+    if not is_tw_share(symbol) and not board:
+        return symbol
+    suffix = "TWO" if str(board or "").upper() in {"OTC", "ESB"} else "TW"
+    return f"{symbol.strip().upper()}.{suffix}"
 
 
 def _yfinance_response_has_data(text: str) -> bool:
@@ -243,6 +251,33 @@ def _cached_symbol() -> str:
     return str(getattr(stock, "symbol", "") or "").strip()
 
 
+def _cached_market() -> str | None:
+    """读取当前快照标的的市场代码。"""
+    stock = _cache().get("stock")
+    market = getattr(stock, "market", None)
+    if market is None:
+        return None
+    return str(getattr(market, "value", market))
+
+
+def _tw_board(symbol: str) -> str | None:
+    """从股票清单读取台股板别；清单不可用时由上游默认按上市市场处理。"""
+    try:
+        from src.platform.marketdata.stock_list import get_stock_list
+
+        for item in get_stock_list(block=False):
+            if not isinstance(item, dict):
+                continue
+            market = item.get("market")
+            market = getattr(market, "value", market)
+            if market == "TW" and str(item.get("symbol") or "") == symbol:
+                board = item.get("board")
+                return str(getattr(board, "value", board)) if board else None
+    except Exception:
+        return None
+    return None
+
+
 def _patched_route_to_vendor(method_name: str, *args, **kwargs):
     """模块级无状态 patch:A 股走 PanWatch(读 _cache()),港股先试上游再兜底,其余放行。
 
@@ -277,7 +312,7 @@ def _patched_route_to_vendor(method_name: str, *args, **kwargs):
         and symbol != cached_symbol
         and _cache()
     )
-    if snapshot_symbol_mismatch and is_a_share(symbol):
+    if snapshot_symbol_mismatch and _market_for_symbol(symbol) == MarketCode.CN:
         message = _data_unavailable_message(
             method_name,
             symbol,
@@ -294,7 +329,7 @@ def _patched_route_to_vendor(method_name: str, *args, **kwargs):
         return message
 
     # A 股:yfinance/finnhub 拉不到,直接走 PanWatch
-    if is_a_share(symbol) and _cache():
+    if _market_for_symbol(symbol) == MarketCode.CN and _cache():
         try:
             result = _serve_from_panwatch(method_name, symbol, kwargs, args=args)
             _emit_toolkit_log(
@@ -314,9 +349,59 @@ def _patched_route_to_vendor(method_name: str, *args, **kwargs):
             _emit_toolkit_log("warning", "ERROR", method_name, symbol, error=str(e)[:200])
             return f"[PanWatch error: {e}]"
 
+    # 台股:当前标的优先用本次收集的数据；其它情况按股票板别转成 yfinance ticker。
+    if _market_for_symbol(symbol) == MarketCode.TW:
+        if symbol == cached_symbol and _cache():
+            try:
+                result = _serve_from_panwatch(method_name, symbol, kwargs, args=args)
+                _emit_toolkit_log(
+                    "info", "HIT", method_name, symbol,
+                    chars=len(result),
+                    snippet=str(result)[:4000],
+                    source="panwatch",
+                    extra_args=_args_summary(args),
+                )
+                return result
+            except NotImplementedError:
+                _emit_toolkit_log(
+                    "info", "MISS", method_name, symbol,
+                    reason="PanWatch 未实现该 method,放行到上游",
+                )
+            except Exception as e:
+                _emit_toolkit_log("warning", "ERROR", method_name, symbol, error=str(e)[:200])
+                return f"[PanWatch error: {e}]"
+
+        yf_symbol = tw_symbol_to_yfinance(symbol, _tw_board(symbol))
+        new_args = list(args)
+        for i, arg in enumerate(new_args):
+            if isinstance(arg, str) and arg == symbol:
+                new_args[i] = yf_symbol
+                break
+        try:
+            upstream_result = _real_route_to_vendor(method_name, *new_args, **kwargs)
+        except Exception as e:
+            if not _is_market_data_failure(e):
+                raise
+            result = _data_unavailable_message(method_name, symbol, e)
+            _emit_toolkit_log(
+                "warning", "DEGRADE", method_name, symbol,
+                source=f"upstream TW(→{yf_symbol})", error=str(e)[:200],
+                extra_args=_args_summary(args),
+            )
+            return result
+        upstream_str = str(upstream_result) if upstream_result is not None else ""
+        _emit_toolkit_log(
+            "info", "PASSTHROUGH", method_name, symbol,
+            chars=len(upstream_str),
+            snippet=upstream_str[:4000],
+            source=f"upstream TW(→{yf_symbol})",
+            extra_args=_args_summary(args),
+        )
+        return upstream_result
+
     # 港股:先把 ticker 转成 yfinance 格式(00241 → 0241.HK)试上游,
     # yfinance 返回有数据就用,无数据(No data found / 极短返回)fallback 到 PanWatch。
-    if is_hk_share(symbol):
+    if _market_for_symbol(symbol) == MarketCode.HK:
         yf_symbol = hk_symbol_to_yfinance(symbol)
         new_args = list(args)
         # 替换第一个 positional ticker(如果它就是当前 symbol)
@@ -502,7 +587,10 @@ _MARKET_SNAPSHOT_IMPORT_SITES = (
 
 def _market_for_symbol(symbol: str):
     """将 TradingAgents 的 ticker 映射到 PanWatch 市场。"""
-    from src.platform.marketdata.models import MarketCode
+    if symbol and symbol == _cached_symbol():
+        cached_market = _cached_market()
+        if cached_market:
+            return MarketCode(cached_market)
 
     if is_a_share(symbol):
         return MarketCode.CN

@@ -450,9 +450,29 @@ def _refresh_stock_list() -> list[dict]:
     except Exception as e:
         logger.warning(f"东方财富获取北交所失败: {e}")
 
+    stocks = _carry_over_missing_markets(stocks)
     if stocks:
         _save_cache(stocks, partial=bool(tw_failed), failed=tw_failed)
     return stocks
+
+
+# 从台湾连东方财富清单接口常失败;某市场整批没抓到时沿用上一份缓存,不能把它从清单里清空
+_CARRY_OVER_MARKETS = ("CN", "HK", "US")
+
+
+def _carry_over_missing_markets(stocks: list[dict]) -> list[dict]:
+    old = _read_cache_file()
+    if not old:
+        return stocks
+    have = {s.get("market") for s in stocks}
+    missing = [m for m in _CARRY_OVER_MARKETS if m not in have]
+    kept = [
+        item for item in old["stocks"]
+        if isinstance(item, dict) and item.get("market") in missing
+    ]
+    if kept:
+        logger.info(f"{','.join(missing)} 清单获取失败,沿用上一份缓存 {len(kept)} 只")
+    return stocks + kept
 
 
 def refresh_in_background() -> threading.Thread | None:

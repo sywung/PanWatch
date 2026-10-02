@@ -250,3 +250,83 @@ def test_eastmoney_success_resets_backoff(monkeypatch, em_down):
     sl._realtime_search("TSLA")
 
     assert sl._eastmoney_skip_until - em_down["t"] == 600
+
+
+# ---------- 来源失败不能清空其他市场 ----------
+# 2026-10-02 实测:从台湾连东方财富 A/港/美股清单全失败(akshare 也逾时),
+# 重抓后缓存只剩台股 2692 只,原本 3 万多只 A/港/美股被覆盖掉。
+
+def _old_full_cache(path):
+    _write_cache(path, [
+        TW_2330,
+        {"symbol": "600519", "name": "贵州茅台", "market": "CN"},
+        {"symbol": "00700", "name": "腾讯控股", "market": "HK"},
+        {"symbol": "AAPL", "name": "苹果", "market": "US"},
+    ], sl.CACHE_TTL + 60)
+
+
+def _sources(monkeypatch, *, cn=None, hk=None, us=None, bj=None):
+    def make(value):
+        if isinstance(value, Exception):
+            def boom():
+                raise value
+            return boom
+        return lambda: list(value or [])
+
+    monkeypatch.setattr(sl, "_fetch_tw_stock_list_with_status",
+                        lambda: ([dict(TW_2330), {"symbol": "2317", "name": "鴻海", "market": "TW",
+                                                  "board": "TSE"}], []))
+    monkeypatch.setattr(sl, "_fetch_from_eastmoney", make(cn))
+    monkeypatch.setattr(sl, "_fetch_from_akshare", make(RuntimeError("akshare down")))
+    monkeypatch.setattr(sl, "_fetch_hk_from_eastmoney", make(hk))
+    monkeypatch.setattr(sl, "_fetch_us_from_eastmoney", make(us))
+    monkeypatch.setattr(sl, "_fetch_bj_from_eastmoney", make(bj))
+
+
+def _markets(stocks):
+    return sorted({s["market"] for s in stocks})
+
+
+def test_failed_markets_carry_over_previous_cache(monkeypatch, cache_file):
+    """A/港/美股来源全失败:沿用上一份缓存的这些市场,台股照常更新。"""
+    _old_full_cache(cache_file)
+    err = ValueError("Expecting value: line 1 column 1 (char 0)")
+    _sources(monkeypatch, cn=err, hk=err, us=err, bj=err)
+
+    stocks = sl.refresh_stock_list()
+
+    assert _markets(stocks) == ["CN", "HK", "TW", "US"]
+    assert {s["symbol"] for s in stocks if s["market"] == "TW"} == {"2330", "2317"}
+    saved = json.loads(cache_file.read_text(encoding="utf-8"))["stocks"]
+    assert _markets(saved) == ["CN", "HK", "TW", "US"]
+
+
+def test_empty_market_result_also_carries_over(monkeypatch, cache_file):
+    """来源回空清单视同失败,同样沿用旧资料。"""
+    _old_full_cache(cache_file)
+    _sources(monkeypatch, cn=[], hk=[], us=[], bj=[])
+
+    stocks = sl.refresh_stock_list()
+
+    assert {s["symbol"] for s in stocks if s["market"] == "HK"} == {"00700"}
+
+
+def test_successful_market_replaces_previous(monkeypatch, cache_file):
+    """来源成功时用新资料,不混入旧的同市场资料。"""
+    _old_full_cache(cache_file)
+    _sources(monkeypatch, cn=[], hk=[], bj=[],
+             us=[{"symbol": "TSLA", "name": "特斯拉", "market": "US"}])
+
+    stocks = sl.refresh_stock_list()
+
+    assert {s["symbol"] for s in stocks if s["market"] == "US"} == {"TSLA"}
+
+
+def test_non_tw_failure_does_not_mark_cache_partial(monkeypatch, cache_file):
+    """非台股来源失败不标 partial(否则从台湾每 30 分钟就重抓一次必失败的来源)。"""
+    _old_full_cache(cache_file)
+    _sources(monkeypatch, cn=[], hk=[], us=[], bj=[])
+
+    sl.refresh_stock_list()
+
+    assert json.loads(cache_file.read_text(encoding="utf-8"))["partial"] is False

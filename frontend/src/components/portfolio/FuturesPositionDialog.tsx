@@ -64,6 +64,7 @@ export function FuturesPositionDialog({ open, onOpenChange, accountId, position,
     }
     return rows
   }, [contractMonth, options, position])
+  const selectedMonth = months.find(month => month.contract_month === contractMonth)
 
   useEffect(() => {
     if (!open) return
@@ -203,7 +204,12 @@ export function FuturesPositionDialog({ open, onOpenChange, accountId, position,
             <div className="space-y-2">
               <Label>{tr('contractMonth')}</Label>
               <Select value={contractMonth} onValueChange={setContractMonth} disabled={!options || months.length === 0}>
-                <SelectTrigger><SelectValue placeholder={tr('selectContractMonth')} /></SelectTrigger>
+                <SelectTrigger>
+                  {/* 程序设值时 Radix 不回填选中文字;有值就自己显示,不能往 SelectValue 塞 children(会与其 portal 冲突) */}
+                  {selectedMonth
+                    ? <span className="truncate">{monthLabel(selectedMonth, locale)}</span>
+                    : <SelectValue placeholder={tr('selectContractMonth')} />}
+                </SelectTrigger>
                 <SelectContent>
                   {months.map(month => <SelectItem key={month.contract_month} value={month.contract_month}>{monthLabel(month, locale)}</SelectItem>)}
                 </SelectContent>

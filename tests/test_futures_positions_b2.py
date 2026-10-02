@@ -53,6 +53,10 @@ def db(monkeypatch):
     monkeypatch.setattr(fm, "get_margin", lambda code: MARGINS.get(code))
     monkeypatch.setattr(trading_calendar, "futures_settlement_date", _third_wednesday)
     monkeypatch.setattr(api, "_now", lambda: NOW)
+    # 账户汇总会取汇率快照;测试里不连 Yahoo
+    from src.platform.marketdata import fx
+    fx.reset_cache()
+    monkeypatch.setattr(fx, "_fetch_yahoo_rate", lambda symbol: 30.0)
     quote_calls = []
 
     def fake_quotes(symbols):

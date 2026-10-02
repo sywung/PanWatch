@@ -14,6 +14,7 @@ from src.platform.marketdata.collectors.market_http import TTLCache
 from src.platform.marketdata.models import DEFAULT_MARKET, FUTURES_MARKETS, MarketCode
 from src.platform.marketdata.models import BASE_CURRENCY
 from src.platform.marketdata import fx
+from src.modules.portfolio.api import futures_positions as futures_positions_api
 from src.web.errors import ai_api_error, api_error
 
 logger = logging.getLogger(__name__)
@@ -347,6 +348,8 @@ def get_portfolio_summary(
                 "total_pnl_pct": 0,
                 "available_funds": 0,
                 "total_assets": 0,
+                "futures_unrealized_pnl": 0,
+                "futures_margin_used": 0,
             }
         }
 
@@ -362,18 +365,47 @@ def get_portfolio_summary(
     # 获取实时行情（可选）
     quotes = _fetch_quotes_for_stocks(stocks) if include_quotes else {}
 
+    # 所有账户的期货合约共用一次批次报价，列数据复用期货持仓 API 的组装逻辑。
+    all_futures_positions = [
+        position
+        for acc in accounts
+        for position in (acc.futures_positions or [])
+    ]
+    futures_rows = (
+        futures_positions_api._build_position_rows(all_futures_positions)
+        if include_quotes and all_futures_positions
+        else []
+    )
+    futures_rows_by_account: dict[int, list[dict]] = {}
+    for row in futures_rows:
+        futures_rows_by_account.setdefault(row["account_id"], []).append(row)
+
     # 计算各账户持仓
     account_summaries = []
     grand_total_market_value = 0
     grand_total_cost = 0
     grand_available_funds = 0
     grand_daily_pnl = 0
+    grand_futures_unrealized_pnl = 0
+    grand_futures_margin_used = 0
 
     for acc in accounts:
         positions_data = []
         acc_market_value = 0
         acc_cost = 0
         acc_daily_pnl = 0
+        acc_futures_unrealized_pnl = sum(
+            row["unrealized_pnl"] or 0
+            for row in futures_rows_by_account.get(acc.id, [])
+        )
+        acc_futures_margin_used = sum(
+            row["margin_used"] or 0
+            for row in futures_rows_by_account.get(acc.id, [])
+        )
+        acc_futures_margin_call = any(
+            row["margin_call"] is True
+            for row in futures_rows_by_account.get(acc.id, [])
+        )
 
         positions_sorted = sorted(
             list(acc.positions or []),
@@ -443,7 +475,9 @@ def get_portfolio_summary(
         if include_quotes:
             acc_pnl = acc_market_value - acc_cost
             acc_pnl_pct = (acc_pnl / acc_cost * 100) if acc_cost > 0 else 0
-            acc_total_assets = acc_market_value + acc.available_funds
+            acc_total_assets = (
+                acc_market_value + acc.available_funds + acc_futures_unrealized_pnl
+            )
         else:
             acc_pnl = 0
             acc_pnl_pct = 0
@@ -459,6 +493,9 @@ def get_portfolio_summary(
             "total_pnl_pct": round(acc_pnl_pct, 2),
             "total_daily_pnl": round(acc_daily_pnl, 2),
             "total_assets": round(acc_total_assets, 2),
+            "futures_unrealized_pnl": round(acc_futures_unrealized_pnl, 2),
+            "futures_margin_used": round(acc_futures_margin_used, 2),
+            "futures_margin_call": acc_futures_margin_call,
             "positions": positions_data,
         })
 
@@ -466,11 +503,17 @@ def get_portfolio_summary(
         grand_total_cost += acc_cost
         grand_available_funds += acc.available_funds
         grand_daily_pnl += acc_daily_pnl
+        grand_futures_unrealized_pnl += acc_futures_unrealized_pnl
+        grand_futures_margin_used += acc_futures_margin_used
 
     if include_quotes:
         grand_pnl = grand_total_market_value - grand_total_cost
         grand_pnl_pct = (grand_pnl / grand_total_cost * 100) if grand_total_cost > 0 else 0
-        grand_total_assets = grand_total_market_value + grand_available_funds
+        grand_total_assets = (
+            grand_total_market_value
+            + grand_available_funds
+            + grand_futures_unrealized_pnl
+        )
     else:
         grand_pnl = 0
         grand_pnl_pct = 0
@@ -496,6 +539,8 @@ def get_portfolio_summary(
             "total_daily_pnl": round(grand_daily_pnl, 2),
             "available_funds": round(grand_available_funds, 2),
             "total_assets": round(grand_total_assets, 2),
+            "futures_unrealized_pnl": round(grand_futures_unrealized_pnl, 2),
+            "futures_margin_used": round(grand_futures_margin_used, 2),
         },
         "exchange_rates": fx.exchange_rates_snapshot(),
         "quotes": quotes_dict,  # 可选：返回行情数据

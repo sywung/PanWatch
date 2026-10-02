@@ -35,7 +35,7 @@ from src.modules.market.api import (
     stocks,
 )
 from src.modules.paper_trading.api import paper_trading
-from src.modules.portfolio.api import accounts, dashboard, history
+from src.modules.portfolio.api import accounts, dashboard, futures_positions, history
 from src.modules.research.api import (
     context,
     evaluations,
@@ -85,6 +85,12 @@ app.include_router(
 )
 app.include_router(
     accounts.router, prefix="/api", tags=["accounts"], dependencies=protected
+)
+app.include_router(
+    futures_positions.router,
+    prefix="/api/futures-positions",
+    tags=["futures-positions"],
+    dependencies=protected,
 )
 app.include_router(
     agents.router, prefix="/api/agents", tags=["agents"], dependencies=protected

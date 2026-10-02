@@ -1,0 +1,22 @@
+[
+ {
+  "Contract": "NYF",
+  "UnderlyingSecurityCode": "0050",
+  "ContractName": "元大台灣50ETF期貨",
+  "UnderlyingOfSingleStockFutures": "元大台灣卓越50證券投資信託基金",
+  "ClearingMargin": "64000",
+  "MaintenanceMargin": "67000",
+  "InitialMargin": "87000",
+  "Date": "20261001"
+ },
+ {
+  "Contract": "SRF",
+  "UnderlyingSecurityCode": "0050",
+  "ContractName": "小型元大台灣50ETF期貨",
+  "UnderlyingOfSingleStockFutures": "元大台灣卓越50證券投資信託基金",
+  "ClearingMargin": "6400",
+  "MaintenanceMargin": "6700",
+  "InitialMargin": "8700",
+  "Date": "20261001"
+ }
+]

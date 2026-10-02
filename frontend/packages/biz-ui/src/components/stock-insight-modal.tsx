@@ -497,7 +497,7 @@ export default function StockInsightModal(props: {
 
   const loadNews = useCallback(async () => {
     if (!symbol) return
-    let target: { symbol: string; name: string } | null = { symbol, name: resolvedName }
+    let target: { symbol: string; name: string; market: string } | null = { symbol, name: resolvedName, market }
     if (isFuturesMarket(market)) {
       const state = futuresStateRef.current
       if (!state || state.symbol !== symbol || !state.loaded) return
@@ -513,6 +513,7 @@ export default function StockInsightModal(props: {
       const params = new URLSearchParams()
       params.set('hours', newsHours)
       params.set('limit', '50')
+      params.set('market', target.market)
       if (!opts.filterRelated) params.set('filter_related', 'false')
       if (opts.useName && targetName && targetName !== targetSymbol) params.set('names', targetName)
       else params.set('symbols', targetSymbol)
@@ -552,7 +553,7 @@ export default function StockInsightModal(props: {
 
   const loadAnnouncements = useCallback(async () => {
     if (!symbol) return
-    let target: { symbol: string; name: string } | null = { symbol, name: resolvedName }
+    let target: { symbol: string; name: string; market: string } | null = { symbol, name: resolvedName, market }
     if (isFuturesMarket(market)) {
       const state = futuresStateRef.current
       if (!state || state.symbol !== symbol || !state.loaded) return
@@ -569,6 +570,7 @@ export default function StockInsightModal(props: {
         const params = new URLSearchParams()
         params.set('hours', announcementHours)
         params.set('limit', '50')
+        params.set('market', target.market)
         if (!opts.filterRelated) params.set('filter_related', 'false')
         params.set('source', 'eastmoney')
         if (opts.useName && targetName && targetName !== targetSymbol) params.set('names', targetName)

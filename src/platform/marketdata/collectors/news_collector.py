@@ -5,8 +5,11 @@
 一个转发到包的 NewsCollector shim，对消费方零改动。
 """
 import asyncio
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -22,6 +25,31 @@ class NewsItem:
     url: str = ""         # 原文链接
 
 
+def _lookup_markets(symbols: list[str]) -> dict[str, str]:
+    """从自选股表查询代码对应市场。"""
+    if not symbols:
+        return {}
+
+    db = None
+    try:
+        from src.platform.persistence.database import SessionLocal
+        from src.platform.persistence.models import Stock
+
+        db = SessionLocal()
+        rows = (
+            db.query(Stock.symbol, Stock.market)
+            .filter(Stock.symbol.in_(symbols))
+            .all()
+        )
+        return {symbol: market for symbol, market in rows if symbol and market}
+    except Exception:
+        logger.exception("新闻市场查询失败，代码: %s", symbols)
+        return {}
+    finally:
+        if db is not None:
+            db.close()
+
+
 class NewsCollector:
     """聚合新闻采集器 —— 薄 shim，实际抓取/聚合/去重逻辑已收口进 marketdata 包。"""
 
@@ -35,6 +63,7 @@ class NewsCollector:
         symbols: list[str] | None = None,
         since_hours: int = 2,
         symbol_names: dict[str, str] | None = None,
+        markets: dict[str, str] | None = None,
     ) -> list[NewsItem]:
         """
         聚合所有已启用新闻数据源的新闻（聚合/去重/排序均在 marketdata 包内完成）。
@@ -49,4 +78,11 @@ class NewsCollector:
         """
         from src.platform.marketdata.marketdata_client import md_news
 
-        return await asyncio.to_thread(md_news, symbols or [], since_hours, symbol_names)
+        resolved_markets = markets if markets is not None else _lookup_markets(symbols or [])
+        return await asyncio.to_thread(
+            md_news,
+            symbols or [],
+            since_hours,
+            symbol_names,
+            markets=resolved_markets,
+        )

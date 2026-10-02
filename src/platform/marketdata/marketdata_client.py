@@ -178,7 +178,8 @@ def _article_to_newsitem(a):
 
 
 def md_news(
-    symbols: list[str], since_hours: int = 2, names: dict[str, str] | None = None
+    symbols: list[str], since_hours: int = 2, names: dict[str, str] | None = None,
+    markets: dict[str, str] | None = None,
 ) -> list:
     """聚合新闻(个股新闻 + 公告),返回 list[NewsItem](与旧 NewsCollector.fetch_all 同形)。
 
@@ -191,11 +192,45 @@ def md_news(
 
     # 包内 news vendor 的 publish_time 是 aware(UTC);这里的 now 也必须 aware,
     # 否则 since 过滤会 "can't compare offset-naive and offset-aware datetimes"。
-    arts = get_market_data().news(
-        list(symbols or []), since_hours=since_hours, names=names,
-        now=datetime.now(timezone.utc),
-    )
-    return [_article_to_newsitem(a) for a in arts]
+    md = get_market_data()
+    symbol_list = list(symbols or [])
+    now = datetime.now(timezone.utc)
+    if markets is None:
+        arts = md.news(
+            symbol_list, since_hours=since_hours, names=names, now=now,
+        )
+        return [_article_to_newsitem(a) for a in arts]
+
+    # 查不到市场的代码归入 None 组:不传 market,沿用包内默认(与旧调用方一致)
+    symbols_by_market: dict[str | None, list[str]] = {}
+    for symbol in symbol_list:
+        symbols_by_market.setdefault(markets.get(symbol) or None, []).append(symbol)
+
+    articles = []
+    for market, market_symbols in symbols_by_market.items():
+        market_names = {
+            symbol: names[symbol]
+            for symbol in market_symbols
+            if names and symbol in names
+        }
+        market_kwargs = {"market": market} if market else {}
+        articles.extend(md.news(
+            market_symbols,
+            since_hours=since_hours,
+            names=market_names or None,
+            now=now,
+            **market_kwargs,
+        ))
+
+    seen = set()
+    unique_articles = []
+    for article in articles:
+        if article.external_id in seen:
+            continue
+        seen.add(article.external_id)
+        unique_articles.append(article)
+    unique_articles.sort(key=lambda article: article.publish_time, reverse=True)
+    return [_article_to_newsitem(a) for a in unique_articles]
 
 
 def md_news_by_keyword(keyword: str) -> list:

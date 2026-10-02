@@ -16,11 +16,12 @@ export function futuresUnderlyingName(name: string): string {
   return String(name || '').replace(/^小型/, '').replace(/期貨$/, '')
 }
 
-export function futuresNewsTarget(info?: FuturesNewsInfo | null): { symbol: string; name: string } | null {
+export function futuresNewsTarget(info?: FuturesNewsInfo | null): { symbol: string; name: string; market: 'TW' } | null {
   if (info?.kind !== 'stock' || !info.underlying_code) return null
   return {
     symbol: info.underlying_code,
     name: futuresUnderlyingName(info.name || ''),
+    market: 'TW',
   }
 }
 

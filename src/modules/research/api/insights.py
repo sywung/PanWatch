@@ -179,7 +179,8 @@ async def _fetch_message_context(db: Session, symbol: str, market: str) -> str:
         name = stock.name if stock else symbol
         collector = NewsCollector.from_database()
         items = await collector.fetch_all(
-            symbols=[symbol], since_hours=72, symbol_names={symbol: name}
+            symbols=[symbol], since_hours=72, symbol_names={symbol: name},
+            markets={symbol: market},
         )
         items = sorted(items, key=lambda x: x.publish_time, reverse=True)[:5]
         if items:

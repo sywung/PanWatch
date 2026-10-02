@@ -39,6 +39,7 @@ async def get_news(
     limit: int = Query(default=50, ge=1, le=200, description="返回数量"),
     filter_related: bool = Query(default=True, description="只显示相关新闻"),
     source: str = Query(default="", description="来源过滤，逗号分隔：xueqiu/eastmoney_news/eastmoney"),
+    market: str = Query(default="", description="市场代码"),
     db: Session = Depends(get_db),
 ):
     """
@@ -53,6 +54,7 @@ async def get_news(
     # 获取所有自选股（用于匹配）
     all_stocks = db.query(Stock).all()
     stock_map = {s.symbol: s.name for s in all_stocks}
+    stock_markets = {s.symbol: s.market for s in all_stocks}
     name_to_symbol = {s.name: s.symbol for s in all_stocks}
 
     # 解析股票 - 优先使用 names 参数
@@ -63,12 +65,21 @@ async def get_news(
         symbol_list = [name_to_symbol.get(n) for n in name_list if name_to_symbol.get(n)]
         # 直接使用传入的名称构建 symbol_names
         passed_symbol_names = {name_to_symbol.get(n, ""): n for n in name_list if name_to_symbol.get(n)}
+        if not symbol_list and symbols:
+            symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
+            passed_symbol_names = {s: stock_map.get(s, s) for s in symbol_list}
     elif symbols:
         symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
         passed_symbol_names = {s: stock_map.get(s, s) for s in symbol_list}
     else:
         symbol_list = list(stock_map.keys())
         passed_symbol_names = stock_map
+
+    markets = (
+        {symbol: market for symbol in symbol_list}
+        if market
+        else {symbol: stock_markets[symbol] for symbol in symbol_list if symbol in stock_markets}
+    )
 
     if not symbol_list:
         return []
@@ -87,6 +98,7 @@ async def get_news(
         symbols=symbol_list,
         since_hours=hours,
         symbol_names=passed_symbol_names,  # 直接传递已有的股票名称映射
+        markets=markets,
     )
 
     def is_related(item: NewsItem) -> bool:

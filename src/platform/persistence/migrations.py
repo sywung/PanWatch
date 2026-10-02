@@ -2053,6 +2053,29 @@ def _m9001_ai_model_extra_params(conn: Connection) -> None:
     )
 
 
+def _m9002_futures_positions(conn: Connection) -> None:
+    conn.execute(text("""
+CREATE TABLE IF NOT EXISTS futures_positions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  product_code TEXT NOT NULL,
+  contract_month TEXT NOT NULL,
+  direction TEXT NOT NULL,
+  lots INTEGER NOT NULL,
+  entry_price FLOAT NOT NULL,
+  multiplier FLOAT NOT NULL,
+  note TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)
+"""))
+    _create_index_if_missing(
+        conn,
+        "ix_futures_positions_account_id",
+        "CREATE INDEX ix_futures_positions_account_id ON futures_positions(account_id)",
+    )
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(101, "agent_config_kind_and_visibility", _m101_agent_config_kind),
     Migration(102, "backfill_agent_kind_data", _m102_backfill_agent_kind),
@@ -2083,6 +2106,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(127, "assistant_trace_metrics", _m127_assistant_trace_metrics),
     Migration(128, "assistant_trusted_results", _m128_assistant_trusted_results),
     Migration(9001, "ai_model_extra_params", _m9001_ai_model_extra_params),
+    Migration(9002, "futures_positions", _m9002_futures_positions),
 )
 
 

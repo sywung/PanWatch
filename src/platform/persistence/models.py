@@ -80,6 +80,9 @@ class Account(Base):
     positions = relationship(
         "Position", back_populates="account", cascade="all, delete-orphan"
     )
+    futures_positions = relationship(
+        "FuturesPosition", back_populates="account", cascade="all, delete-orphan"
+    )
 
 
 class Stock(Base):
@@ -132,6 +135,29 @@ class Position(Base):
 
     account = relationship("Account", back_populates="positions")
     stock = relationship("Stock", back_populates="positions")
+
+
+class FuturesPosition(Base):
+    """期货持仓记录。"""
+
+    __tablename__ = "futures_positions"
+    __table_args__ = (Index("ix_futures_positions_account_id", "account_id"),)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    account_id = Column(
+        Integer, ForeignKey("accounts.id", ondelete="CASCADE"), nullable=False
+    )
+    product_code = Column(String, nullable=False)
+    contract_month = Column(String, nullable=False)
+    direction = Column(String, nullable=False)
+    lots = Column(Integer, nullable=False)
+    entry_price = Column(Float, nullable=False)
+    multiplier = Column(Float, nullable=False)
+    note = Column(String, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    account = relationship("Account", back_populates="futures_positions")
 
 
 class StockAgent(Base):

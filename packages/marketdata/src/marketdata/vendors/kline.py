@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from datetime import datetime, timezone
 
 from marketdata.http import market_get
@@ -22,7 +23,7 @@ def fetch_yahoo_kline_raw(ysym: str, days: int) -> list[Bar]:
     """按 Yahoo 原始代码取 K 线，供指数等不应套用股票后缀的场景使用。"""
     payload = market_get(
         _YAHOO_CHART_URL.format(sym=ysym), host_key="query2.finance.yahoo.com",
-        params={"interval": "1d", "range": _yahoo_range(days)},
+        params=_yahoo_daily_params(days),
         headers={"User-Agent": "Mozilla/5.0"}, timeout=10, retries=2,
         parse="json", log_label="Yahoo指数K线", symbol=ysym,
     )
@@ -224,6 +225,19 @@ class EastmoneyKlineVendor(KlineVendor):
         return fetch_eastmoney_kline(_em_secid(sym), days)
 
 
+_YAHOO_RANGE_MAX_DAYS = 1300
+_CALENDAR_DAYS_PER_TRADING_DAY = 1.5
+
+
+def _yahoo_daily_params(days: int, now: float | None = None) -> dict:
+    """日 K 請求參數。超過 5 年改用 period1/period2：range=max 會被 Yahoo 降成月 K（dataGranularity=1mo）。"""
+    if days <= _YAHOO_RANGE_MAX_DAYS:
+        return {"interval": "1d", "range": _yahoo_range(days)}
+    end = int(time.time() if now is None else now)
+    span = int(days * _CALENDAR_DAYS_PER_TRADING_DAY * 86400)
+    return {"interval": "1d", "period1": end - span, "period2": end + 86400}
+
+
 def _yahoo_range(days: int) -> str:
     """days → Yahoo chart v8 的 range 枚举(不用 period1/period2,避免依赖当前时间)。"""
     if days <= 5:
@@ -271,7 +285,7 @@ class YahooKlineVendor(KlineVendor):
             ysym = f"{sym.code}{suffix}" if suffix else sym.to_yfinance()
             payload = market_get(
                 _YAHOO_CHART_URL.format(sym=ysym), host_key="query2.finance.yahoo.com",
-                params={"interval": "1d", "range": _yahoo_range(days)},
+                params=_yahoo_daily_params(days),
                 headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"},
                 timeout=10, retries=2, parse="json", proxy=proxy,
                 log_label="Yahoo K线", symbol=ysym,

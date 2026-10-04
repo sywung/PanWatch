@@ -39,6 +39,8 @@ _CHAN_CACHE: dict[str, tuple[float, dict | None, int]] = {}
 # 复活的批量消费者(entry_candidates/strategy_engine/backtest/组合归因)会并发地
 # 对同一批标的取数,空结果若不缓存则每个消费者每轮都重复打爆数据源。
 _FAIL_UNTIL: dict[str, float] = {}
+# 冷卻時記下當次要求的根數：冷卻只擋「不比上次大」的請求，更大的請求（如圖表往左載入更多）仍要聯網
+_FAIL_NEED: dict[str, int] = {}
 _FAIL_COOLDOWN_S = 60.0  # 交易时段:短冷却,便于尽快重试
 _FAIL_COOLDOWN_CLOSED_S = 900.0  # 收盘后:数据已定稿,失败/不足时长冷却,避免批量任务反复刷屏
 
@@ -83,6 +85,7 @@ def clear_kline_cache() -> None:
     """清空 K线内存缓存与失败冷却标记(测试隔离用)。"""
     _KLINE_CACHE.clear()
     _FAIL_UNTIL.clear()
+    _FAIL_NEED.clear()
 
 
 def get_index_klines(index_code: str, market: MarketCode, days: int = 120) -> list[KlineData]:
@@ -424,7 +427,7 @@ class KlineCollector:
 
             now = time.time()
             # 3) 负缓存:刚失败过的标的,冷却窗口内返回陈旧/空,不再联网
-            if now < _FAIL_UNTIL.get(cache_key, 0.0):
+            if now < _FAIL_UNTIL.get(cache_key, 0.0) and need <= _FAIL_NEED.get(cache_key, need):
                 stale = _KLINE_CACHE.get(cache_key)
                 bars = stale[2] if stale else []
                 return bars[-need:] if len(bars) > need else bars
@@ -434,6 +437,7 @@ class KlineCollector:
                 # 成功且条数足够:固化正缓存并清除冷却标记
                 _KLINE_CACHE[cache_key] = (now, len(klines), list(klines))
                 _FAIL_UNTIL.pop(cache_key, None)
+                _FAIL_NEED.pop(cache_key, None)
             else:
                 # 空 或 拿到部分但不足 need(常见:HK 腾讯不足 + eastmoney 补全失败,
                 # 正缓存因 count<need 永不命中 → 每轮重打补全源刷屏)→ 固化冷却。
@@ -441,6 +445,7 @@ class KlineCollector:
                 if klines:
                     _KLINE_CACHE[cache_key] = (now, len(klines), list(klines))
                 _FAIL_UNTIL[cache_key] = now + _fail_cooldown(self.market)
+                _FAIL_NEED[cache_key] = need
             return klines[-need:] if len(klines) > need else klines
 
     def _cache_hit(self, cache_key: str, need: int) -> list[KlineData] | None:

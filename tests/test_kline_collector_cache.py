@@ -108,3 +108,32 @@ def test_fetch_source_is_visible_to_marketdata_package(monkeypatch):
 
     with fetch_source("outcome_eval"):
         assert source_suffix() == " [src=outcome_eval]"
+
+
+class _ShortHistoryMarketData:
+    """來源每次只給要求根數的 97%（Yahoo range=2y 對 500 根只回 485 根的情況）。"""
+
+    def __init__(self):
+        self.requests = []
+
+    def klines(self, symbol, *, market, days, min_count=1):
+        self.requests.append(days)
+        return _mk_bars(int(days * 0.97))
+
+
+def test_cooldown_does_not_block_larger_request(monkeypatch):
+    """部分結果觸發冷卻後，同樣大小的請求走冷卻；但更大的請求（圖表往左載入更多）必須重新聯網。"""
+    fake = _ShortHistoryMarketData()
+    monkeypatch.setattr(kline_collector, "get_market_data", lambda: fake)
+
+    c = kline_collector.KlineCollector(MarketCode.TW)
+    assert len(c.get_klines("2330", days=500)) == 485
+    assert len(c.get_klines("2330", days=500)) == 485
+    assert fake.requests == [500], "同大小請求在冷卻內不應重複聯網"
+
+    longer = c.get_klines("2330", days=1000)
+    assert fake.requests == [500, 1000], "更大的請求不可被冷卻擋下而回傳舊的短序列"
+    assert len(longer) == 970
+
+    assert len(c.get_klines("2330", days=800)) == 800
+    assert fake.requests == [500, 1000], "比上次嘗試小的請求仍由冷卻／快取供應"

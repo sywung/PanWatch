@@ -40,6 +40,12 @@ OVERRIDES: dict[str, str] = {
     "dataSources.credentials.finmindLabel": "FinMind Token（選填）",
     "dataSources.credentials.finmindPlaceholder": "貼上 FinMind API Token",
     "dataSources.credentials.finmindHelp": "公開 API 可免 Token 使用；註冊免費帳號可提高請求額度。",
+    "dataSources.credentials.yuantadataBaseUrlLabel": "yuantaData 服務網址",
+    "dataSources.credentials.yuantadataBaseUrlPlaceholder": "http://192.168.221.194:8090",
+    "dataSources.credentials.yuantadataBaseUrlHelp": "填入可連線的 yuantaData API 根網址（不含路徑）。",
+    "dataSources.credentials.yuantadataLabel": "yuantaData API Token（選填）",
+    "dataSources.credentials.yuantadataPlaceholder": "貼上 yuantaData Token；未設定時不傳送 Authorization",
+    "dataSources.credentials.yuantadataHelp": "請自架 yuantaData FastAPI 服務，並填入服務的 base_url。",
 }
 
 _STRING = re.compile(r"(?P<quote>['\"])(?P<body>(?:\\.|(?!\1).)*)(?P=quote)")

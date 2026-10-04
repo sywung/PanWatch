@@ -172,17 +172,23 @@ class MarketData:
             return []
         if market == "TW":
             from marketdata.vendors.yuanta import YuantaKlineVendor
+            from marketdata.vendors.yuantadata import YuantaDataKlineVendor
+
+            intraday_vendors = {
+                "yuantadata": YuantaDataKlineVendor,
+                "yuanta": YuantaKlineVendor,
+            }
 
             for source in self.config.sources_for("kline", "TW"):
-                # 分 K 需在资料源设定 intraday=true 才启用(元大多日 30 分/1 分 K 实测会逾时,待查)
-                if not source.enabled or source.vendor != "yuanta" or not (source.config or {}).get("intraday"):
+                vendor_class = intraday_vendors.get(source.vendor)
+                if not source.enabled or vendor_class is None or not (source.config or {}).get("intraday"):
                     continue
                 try:
-                    bars = YuantaKlineVendor().fetch_intraday(symbol, interval, source.config or {})
+                    bars = vendor_class().fetch_intraday(symbol, interval, source.config or {})
                     if bars:
                         return bars
                 except Exception as exc:
-                    logger.warning("[marketdata/intraday] vendor=yuanta raised: %s", exc)
+                    logger.warning("[marketdata/intraday] vendor=%s raised: %s", source.vendor, exc)
         suffixes = [""]
         if market == "TW":
             hint = _TW_SUFFIX_HINT.get(symbol)

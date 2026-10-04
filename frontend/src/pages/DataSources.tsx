@@ -123,6 +123,10 @@ const PROVIDER_CREDENTIAL_FIELDS: Record<string, CredentialFieldDef[]> = {
   yuanta: [
     { key: 'token', labelKey: 'dataSources.credentials.yuantaLabel', placeholderKey: 'dataSources.credentials.yuantaPlaceholder', secret: true, helpKey: 'dataSources.credentials.yuantaHelp' },
   ],
+  yuantadata: [
+    { key: 'base_url', labelKey: 'dataSources.credentials.yuantadataBaseUrlLabel', placeholderKey: 'dataSources.credentials.yuantadataBaseUrlPlaceholder', helpKey: 'dataSources.credentials.yuantadataBaseUrlHelp' },
+    { key: 'token', labelKey: 'dataSources.credentials.yuantadataLabel', placeholderKey: 'dataSources.credentials.yuantadataPlaceholder', secret: true, helpKey: 'dataSources.credentials.yuantadataHelp' },
+  ],
 }
 
 const emptyForm: DataSourceForm = {

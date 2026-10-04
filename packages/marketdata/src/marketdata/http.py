@@ -86,7 +86,7 @@ def market_get(
     retries: int = 2,
     backoff: float = 0.4,
     jitter: float = 0.25,
-    parse: str = "text",   # "text" | "json" | "content"
+    parse: str = "text",   # "text" | "json" | "content" | "response"
     encoding: str | None = None,
     symbol: str = "",
     log_label: str = "",
@@ -97,6 +97,8 @@ def market_get(
     proxy: str | None = None,
 ) -> Any | None:
     """走系统代理(env)+ 按 host 节流 + 退避重试。成功返回解析结果,失败返回 None 并打带来源日志。
+
+    parse="response" 会返回原始 HTTP response,供需要区分状态码的业务调用方使用。
 
     proxy: 显式代理,仅在给了值时传给 httpx.Client 覆盖 env 代理;不传则遵循 trust_env(env)。
     """
@@ -186,6 +188,8 @@ def _market_request(
                     resp = client.get(url, params=params)
                 if raise_for_status:
                     resp.raise_for_status()
+                if parse == "response":
+                    return resp
                 if parse == "json":
                     return resp.json()
                 if parse == "content":

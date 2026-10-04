@@ -124,6 +124,12 @@ export const configuration = {
       yuantaLabel: '元大 SparkAPI 转接服务 Token（选填）',
       yuantaPlaceholder: '粘贴转接服务 Token；未设置时不发送 Authorization',
       yuantaHelp: '请按 services/yuanta_gateway/README 架设本地转接服务，并在元大开通 API。',
+      yuantadataBaseUrlLabel: 'yuantaData 服务网址',
+      yuantadataBaseUrlPlaceholder: 'http://192.168.221.194:8090',
+      yuantadataBaseUrlHelp: '填写可连接的 yuantaData API 根网址（不含路径）。',
+      yuantadataLabel: 'yuantaData API Token（选填）',
+      yuantadataPlaceholder: '粘贴 yuantaData Token；未设置时不发送 Authorization',
+      yuantadataHelp: '请自建 yuantaData FastAPI 服务，并填写服务的 base_url。',
     },
     messages: {
       loadFailed: '加载数据源失败',

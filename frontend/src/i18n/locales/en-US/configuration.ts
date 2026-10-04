@@ -127,6 +127,12 @@ export const configuration = {
       yuantaLabel: 'Yuanta SparkAPI gateway token (optional)',
       yuantaPlaceholder: 'Paste the gateway token; Authorization is omitted when blank',
       yuantaHelp: 'Set up the local gateway using services/yuanta_gateway/README and enable the API with Yuanta.',
+      yuantadataBaseUrlLabel: 'yuantaData service URL',
+      yuantadataBaseUrlPlaceholder: 'http://192.168.221.194:8090',
+      yuantadataBaseUrlHelp: 'Enter the reachable yuantaData API root URL without a path.',
+      yuantadataLabel: 'yuantaData API token (optional)',
+      yuantadataPlaceholder: 'Paste a yuantaData token; Authorization is omitted when blank',
+      yuantadataHelp: 'Run the yuantaData FastAPI service and enter its base_url.',
     },
     messages: {
       loadFailed: 'Failed to load data sources',

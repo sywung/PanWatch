@@ -99,4 +99,16 @@ describe('K-line indicators', () => {
     expect(readKlineIndicatorSettings(storage)).toEqual(DEFAULT_KLINE_INDICATOR_SETTINGS)
     expect(KLINE_INDICATOR_STORAGE_KEY).toBe('panwatch.kline.indicators')
   })
+
+  it('restores saved toggles and falls back per key for missing or invalid values', () => {
+    const saved = JSON.stringify({ kd: true, macd: false, boll: 'yes' })
+    const storage = {
+      getItem: (key: string) => (key === KLINE_INDICATOR_STORAGE_KEY ? saved : null),
+    }
+    expect(readKlineIndicatorSettings(storage)).toEqual({
+      ...DEFAULT_KLINE_INDICATOR_SETTINGS,
+      kd: true,
+      macd: false,
+    })
+  })
 })

@@ -5,6 +5,16 @@ import { Button } from '@panwatch/base-ui/components/ui/button'
 import { useTranslation } from 'react-i18next'
 import { useMarketColors } from '@/hooks/use-market-colors'
 import { marketColorWithAlpha, marketSignTextClass } from '@/lib/market-colors'
+import {
+  calculateBollinger,
+  calculateKd,
+  calculateObv,
+  calculateSma,
+  calculateVwap,
+  KLINE_INDICATOR_STORAGE_KEY,
+  readKlineIndicatorSettings,
+  type KlineIndicatorSettings,
+} from '../lib/indicators'
 import { applySeriesMarkers, buildChanOverlay, chanPointLabel, densifyLine, type ChanLevel } from '@panwatch/biz-ui/chan-overlay'
 import {
   crosshairDateKey,
@@ -47,6 +57,16 @@ type HoverTipRow = {
   ma5: number | null
   ma10: number | null
   ma20: number | null
+  ma60: number | null
+  ma120: number | null
+  ma240: number | null
+  bollUpper: number | null
+  bollMiddle: number | null
+  bollLower: number | null
+  vwap: number | null
+  kdK: number | null
+  kdD: number | null
+  obv: number | null
   macd: number | null
   signal: number | null
   rsi6: number | null
@@ -171,7 +191,7 @@ export default function InteractiveKline(props: {
   const [loadingEarlier, setLoadingEarlier] = useState(false)
   const [error, setError] = useState<string>('')
   const [data, setData] = useState<KlineItem[]>([])
-  const [showRsi, setShowRsi] = useState(true)
+  const [indicators, setIndicators] = useState<KlineIndicatorSettings>(readKlineIndicatorSettings)
   const [showChan, setShowChan] = useState(false)
   const [chanByKey, setChanByKey] = useState<Record<string, ChanResponse>>({})
   const [hoverTip, setHoverTip] = useState<HoverTip>({ visible: false, x: 0, y: 0, row: null })
@@ -188,13 +208,25 @@ export default function InteractiveKline(props: {
   }, [props.initialDays, interval])
 
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const macdRef = useRef<HTMLDivElement | null>(null)
+  const panesRef = useRef<HTMLDivElement | null>(null)
   const chanCacheRef = useRef<Record<string, ChanResponse>>({})
   const loadGenerationRef = useRef(0)
   const loadingRef = useRef(false)
   const expansionRef = useRef({ requestedDays: fixedDays, loading: false, canLoad: false, reachedEarliest: false })
   const pendingRangeRef = useRef<LogicalRange | null>(null)
   const pendingRangeShiftRef = useRef(0)
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(KLINE_INDICATOR_STORAGE_KEY, JSON.stringify(indicators))
+    } catch {
+      // Indicator preferences remain usable for this session when storage is unavailable.
+    }
+  }, [indicators])
+
+  const setIndicator = (key: keyof KlineIndicatorSettings, value: boolean) => {
+    setIndicators(previous => ({ ...previous, [key]: value }))
+  }
 
   const chanKey = `${props.market}:${props.symbol}`
   const chanLevel = showChan && interval === '1d' ? chanByKey[chanKey] || null : null
@@ -315,7 +347,14 @@ export default function InteractiveKline(props: {
     const volMa10 = sma(volRaw, 10)
     const macd = computeMacd(closes)
     const rsi6 = computeRsi(closes, 6)
-    return { klines, candles, volumes, ma5, ma10, ma20, volMa5, volMa10, macd, rsi6 }
+    const ma60 = calculateSma(closes, 60)
+    const ma120 = calculateSma(closes, 120)
+    const ma240 = calculateSma(closes, 240)
+    const boll = calculateBollinger(klines)
+    const kd = calculateKd(klines)
+    const obv = calculateObv(klines)
+    const vwap = calculateVwap(klines)
+    return { klines, candles, volumes, ma5, ma10, ma20, ma60, ma120, ma240, boll, kd, obv, vwap, volMa5, volMa10, macd, rsi6 }
   }, [data, interval, palette])
 
   const latestMetrics = useMemo(() => {
@@ -346,10 +385,10 @@ export default function InteractiveKline(props: {
     if (!series.candles.length) return
 
     const container = containerRef.current
-    const macdEl = macdRef.current
+    const panesEl = panesRef.current
 
     container.innerHTML = ''
-    if (macdEl) macdEl.innerHTML = ''
+    if (panesEl) panesEl.innerHTML = ''
 
     const rootStyle = getComputedStyle(document.documentElement)
     const bg = rootStyle.getPropertyValue('--card').trim()
@@ -403,10 +442,6 @@ export default function InteractiveKline(props: {
     const volMa5Series = addLine(chart, LW, { priceScaleId: 'vol', color: 'rgba(245, 158, 11, 0.9)', lineWidth: 1 })
     const volMa10Series = addLine(chart, LW, { priceScaleId: 'vol', color: 'rgba(14, 165, 233, 0.9)', lineWidth: 1 })
 
-    const ma5Series = addLine(chart, LW, { color: 'rgba(99, 102, 241, 0.85)', lineWidth: 2 })
-    const ma10Series = addLine(chart, LW, { color: 'rgba(245, 158, 11, 0.85)', lineWidth: 2 })
-    const ma20Series = addLine(chart, LW, { color: 'rgba(14, 165, 233, 0.85)', lineWidth: 2 })
-
     const mapLine = (arr: Array<number | null>) =>
       series.klines
         .map((k, i) => {
@@ -415,9 +450,22 @@ export default function InteractiveKline(props: {
         })
         .filter(Boolean)
 
-    ma5Series.setData(mapLine(series.ma5) as any)
-    ma10Series.setData(mapLine(series.ma10) as any)
-    ma20Series.setData(mapLine(series.ma20) as any)
+    if (indicators.ma) {
+      addLine(chart, LW, { color: 'rgba(99, 102, 241, 0.9)', lineWidth: 2 }).setData(mapLine(series.ma5) as any)
+      addLine(chart, LW, { color: marketColorWithAlpha(palette.up.bright, 0.95), lineWidth: 2 }).setData(mapLine(series.ma10) as any)
+      addLine(chart, LW, { color: 'rgba(14, 165, 233, 0.95)', lineWidth: 2 }).setData(mapLine(series.ma20) as any)
+    }
+    if (indicators.ma60) addLine(chart, LW, { color: marketColorWithAlpha(palette.down.bright, 0.98), lineWidth: 2 }).setData(mapLine(series.ma60) as any)
+    if (indicators.ma120) addLine(chart, LW, { color: 'rgba(168, 85, 247, 0.98)', lineWidth: 2 }).setData(mapLine(series.ma120) as any)
+    if (indicators.ma240) addLine(chart, LW, { color: 'rgba(245, 158, 11, 0.98)', lineWidth: 2 }).setData(mapLine(series.ma240) as any)
+    if (indicators.boll) {
+      addLine(chart, LW, { color: marketColorWithAlpha(palette.down.bright, 0.9), lineWidth: 1 }).setData(mapLine(series.boll.upper) as any)
+      addLine(chart, LW, { color: 'rgba(148, 163, 184, 0.95)', lineWidth: 1 }).setData(mapLine(series.boll.middle) as any)
+      addLine(chart, LW, { color: marketColorWithAlpha(palette.up.bright, 0.9), lineWidth: 1 }).setData(mapLine(series.boll.lower) as any)
+    }
+    if (indicators.vwap && isIntradayInterval(interval)) {
+      addLine(chart, LW, { color: 'rgba(217, 70, 239, 0.98)', lineWidth: 2 }).setData(mapLine(series.vwap) as any)
+    }
     volMa5Series.setData(mapLine(series.volMa5) as any)
     volMa10Series.setData(mapLine(series.volMa10) as any)
 
@@ -455,43 +503,49 @@ export default function InteractiveKline(props: {
       applySeriesMarkers(candleSeries, LW, overlay.markers)
     }
 
-    // MACD chart
-    let macdChart: any = null
-    let rsiChart: any = null
-    if (macdEl) {
-      macdChart = LW.createChart(macdEl, {
-        width: macdEl.clientWidth,
-        height: 150,
+    const subCharts: any[] = []
+    const createPane = (title: string, height: number, margins?: { top: number; bottom: number }) => {
+      if (!panesEl) return null
+      const pane = document.createElement('section')
+      pane.className = 'overflow-hidden rounded-xl border border-border/50'
+      const heading = document.createElement('div')
+      heading.className = 'border-b border-border/40 bg-accent/15 px-2.5 py-1 text-[11px] text-muted-foreground'
+      heading.textContent = title
+      const plot = document.createElement('div')
+      plot.className = 'w-full'
+      plot.style.height = `${height}px`
+      pane.append(heading, plot)
+      panesEl.appendChild(pane)
+      const subChart = LW.createChart(plot, {
+        width: plot.clientWidth,
+        height,
         layout: {
           background: { color: `hsl(${bg})` },
           textColor: `hsl(${fg} / 0.75)`,
         },
-        rightPriceScale: { borderVisible: false },
+        rightPriceScale: { borderVisible: false, ...(margins ? { scaleMargins: margins } : {}) },
         timeScale: { borderVisible: false, visible: false },
         grid: {
-          vertLines: { color: 'rgba(148, 163, 184, 0.06)' },
-          horzLines: { color: 'rgba(148, 163, 184, 0.06)' },
+          vertLines: { color: 'rgba(148, 163, 184, 0.08)' },
+          horzLines: { color: 'rgba(148, 163, 184, 0.08)' },
         },
         crosshair: { mode: 0 },
       })
+      subCharts.push({ chart: subChart, plot })
+      return subChart
+    }
+    const lineData = (values: Array<number | null>) => series.klines
+      .map((k, i) => values[i] == null ? null : { time: parseKlineTime(k.date, interval) as any, value: values[i] as number })
+      .filter(Boolean)
+
+    if (indicators.macd) {
+      const macdChart = createPane(tr('macd'), 150)
+      if (macdChart) {
       const macdLine = addLine(macdChart, LW, { color: 'rgba(99, 102, 241, 0.85)', lineWidth: 2 })
       const sigLine = addLine(macdChart, LW, { color: 'rgba(14, 165, 233, 0.85)', lineWidth: 2 })
       const hist = addHistogram(macdChart, LW, {
         priceFormat: { type: 'price', precision: 3, minMove: 0.001 },
       })
-
-      const macdLineData = series.klines
-        .map((k, i) => {
-          const v = series.macd.macd[i]
-          return v == null ? null : { time: parseKlineTime(k.date, interval) as any, value: v }
-        })
-        .filter(Boolean)
-      const sigLineData = series.klines
-        .map((k, i) => {
-          const v = series.macd.signal[i]
-          return v == null ? null : { time: parseKlineTime(k.date, interval) as any, value: v }
-        })
-        .filter(Boolean)
       const histData = series.klines
         .map((k, i) => {
           const v = series.macd.hist[i]
@@ -504,48 +558,46 @@ export default function InteractiveKline(props: {
         })
         .filter(Boolean)
 
-      macdLine.setData(macdLineData as any)
-      sigLine.setData(sigLineData as any)
+      macdLine.setData(lineData(series.macd.macd) as any)
+      sigLine.setData(lineData(series.macd.signal) as any)
       hist.setData(histData as any)
+      }
     }
 
-    // RSI chart
-    if (showRsi && macdEl) {
-      const rsiRoot = document.createElement('div')
-      rsiRoot.className = 'mt-2'
-      macdEl.parentElement?.appendChild(rsiRoot)
-      rsiChart = LW.createChart(rsiRoot, {
-        width: macdEl.clientWidth,
-        height: 110,
-        layout: {
-          background: { color: `hsl(${bg})` },
-          textColor: `hsl(${fg} / 0.75)`,
-        },
-        rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.15, bottom: 0.1 } },
-        timeScale: { borderVisible: false, visible: false },
-        grid: {
-          vertLines: { color: 'rgba(148, 163, 184, 0.06)' },
-          horzLines: { color: 'rgba(148, 163, 184, 0.06)' },
-        },
-      })
+    if (indicators.rsi) {
+      const rsiChart = createPane(tr('rsi'), 110, { top: 0.15, bottom: 0.1 })
+      if (rsiChart) {
       const rsiLine = addLine(rsiChart, LW, { color: 'rgba(234, 88, 12, 0.9)', lineWidth: 2 })
-      const rsiData = series.klines
-        .map((k, i) => {
-          const v = series.rsi6[i]
-          return v == null ? null : { time: parseKlineTime(k.date, interval) as any, value: v }
-        })
-        .filter(Boolean)
-      rsiLine.setData(rsiData as any)
+      rsiLine.setData(lineData(series.rsi6) as any)
       rsiLine.createPriceLine?.({ price: 70, color: 'rgba(239,68,68,0.45)', lineWidth: 1, lineStyle: 2, title: '70' })
       rsiLine.createPriceLine?.({ price: 30, color: 'rgba(16,185,129,0.45)', lineWidth: 1, lineStyle: 2, title: '30' })
+      }
+    }
+
+    if (indicators.kd) {
+      const kdChart = createPane(tr('kd'), 110, { top: 0.15, bottom: 0.1 })
+      if (kdChart) {
+        const kLine = addLine(kdChart, LW, { color: 'rgba(99, 102, 241, 0.95)', lineWidth: 2 })
+        const dLine = addLine(kdChart, LW, { color: 'rgba(245, 158, 11, 0.95)', lineWidth: 2 })
+        kLine.setData(lineData(series.kd.k) as any)
+        dLine.setData(lineData(series.kd.d) as any)
+        kLine.createPriceLine?.({ price: 80, color: 'rgba(239,68,68,0.5)', lineWidth: 1, lineStyle: 2, title: '80' })
+        kLine.createPriceLine?.({ price: 20, color: 'rgba(16,185,129,0.5)', lineWidth: 1, lineStyle: 2, title: '20' })
+      }
+    }
+
+    if (indicators.obv) {
+      const obvChart = createPane(tr('obv'), 110)
+      if (obvChart) addLine(obvChart, LW, { color: 'rgba(14, 165, 233, 0.95)', lineWidth: 2 }).setData(lineData(series.obv) as any)
     }
 
     const sync = (range: any) => {
-      try {
-        macdChart?.timeScale().setVisibleRange(range)
-        rsiChart?.timeScale().setVisibleRange(range)
-      } catch {
-        // ignore
+      for (const item of subCharts) {
+        try {
+          item.chart.timeScale().setVisibleRange(range)
+        } catch {
+          // An empty indicator pane may not have a valid range yet.
+        }
       }
     }
     chart.timeScale().subscribeVisibleTimeRangeChange(sync)
@@ -628,8 +680,8 @@ export default function InteractiveKline(props: {
       }
 
       const k = series.klines[idx]
-      const tooltipWidth = 280
-      const tooltipHeight = 152
+      const tooltipWidth = 340
+      const tooltipHeight = 230
       let x = point.x + 12
       let y = point.y + 12
       if (x + tooltipWidth > container.clientWidth - 6) x = point.x - tooltipWidth - 12
@@ -650,6 +702,16 @@ export default function InteractiveKline(props: {
           ma5: series.ma5[idx],
           ma10: series.ma10[idx],
           ma20: series.ma20[idx],
+          ma60: series.ma60[idx],
+          ma120: series.ma120[idx],
+          ma240: series.ma240[idx],
+          bollUpper: series.boll.upper[idx],
+          bollMiddle: series.boll.middle[idx],
+          bollLower: series.boll.lower[idx],
+          vwap: isIntradayInterval(interval) ? series.vwap[idx] : null,
+          kdK: series.kd.k[idx],
+          kdD: series.kd.d[idx],
+          obv: series.obv[idx],
           macd: series.macd.macd[idx],
           signal: series.macd.signal[idx],
           rsi6: series.rsi6[idx],
@@ -659,11 +721,10 @@ export default function InteractiveKline(props: {
 
     const ro = new ResizeObserver(() => {
       chart.applyOptions({ width: container.clientWidth })
-      if (macdEl) macdChart?.applyOptions({ width: macdEl.clientWidth })
-      if (macdEl && rsiChart) rsiChart?.applyOptions({ width: macdEl.clientWidth })
+      for (const item of subCharts) item.chart.applyOptions({ width: item.plot.clientWidth })
     })
     ro.observe(container)
-    if (macdEl) ro.observe(macdEl)
+    if (panesEl) ro.observe(panesEl)
 
     const total = series.candles.length
     const pendingRange = pendingRangeRef.current
@@ -684,27 +745,40 @@ export default function InteractiveKline(props: {
       } catch {
         // ignore
       }
-      try {
-        macdChart?.remove()
-      } catch {
-        // ignore
-      }
-      try {
-        rsiChart?.remove()
-      } catch {
-        // ignore
+      for (const item of subCharts) {
+        try { item.chart.remove() } catch { /* ignore */ }
       }
     }
-  }, [series, lwReady, showRsi, indexByDate, interval, palette, chanLevel, props.symbol, props.market])
+  }, [series, lwReady, indicators, indexByDate, interval, palette, chanLevel, props.symbol, props.market, i18n.language, i18n.resolvedLanguage])
 
   return (
     <div className="card p-4 md:p-5">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-3">
         <div className="text-[13px] font-semibold text-foreground">{tr('title')}</div>
         <div className="flex items-center gap-2 flex-wrap">
-          <Button variant={showRsi ? 'default' : 'secondary'} size="sm" className="h-8 px-2.5" onClick={() => setShowRsi(v => !v)}>
-            {tr('rsi')}
-          </Button>
+          {([
+            { key: 'ma', label: 'ma', disabled: false },
+            { key: 'ma60', label: 'ma60', disabled: false },
+            { key: 'ma120', label: 'ma120', disabled: false },
+            { key: 'ma240', label: 'ma240', disabled: false },
+            { key: 'boll', label: 'boll', disabled: false },
+            { key: 'vwap', label: 'vwap', disabled: !isIntradayInterval(interval) },
+            { key: 'macd', label: 'macd', disabled: false },
+            { key: 'rsi', label: 'rsi', disabled: false },
+            { key: 'kd', label: 'kd', disabled: false },
+            { key: 'obv', label: 'obv', disabled: false },
+          ] as const).map(item => (
+            <Button
+              key={item.key}
+              variant={indicators[item.key] ? 'default' : 'secondary'}
+              size="sm"
+              className="h-8 px-2.5"
+              onClick={() => setIndicator(item.key, !indicators[item.key])}
+              disabled={item.disabled}
+            >
+              {tr(item.label)}
+            </Button>
+          ))}
           <Button
             variant={showChan ? 'default' : 'secondary'}
             size="sm"
@@ -792,7 +866,7 @@ export default function InteractiveKline(props: {
         ) : null}
         {hoverTip.visible && hoverTip.row ? (
           <div
-            className="pointer-events-none absolute z-10 w-[280px] rounded-lg border border-border/60 bg-card/95 px-3 py-2 shadow-lg backdrop-blur-[2px]"
+            className="pointer-events-none absolute z-10 w-[340px] rounded-lg border border-border/60 bg-card/95 px-3 py-2 shadow-lg backdrop-blur-[2px]"
             style={{ left: `${hoverTip.x}px`, top: `${hoverTip.y}px` }}
           >
             <div className="text-[11px] text-foreground font-medium mb-1.5">{hoverTip.row.date}</div>
@@ -801,31 +875,50 @@ export default function InteractiveKline(props: {
               <span>{tr('hover.close')} <span className="font-mono text-foreground">{hoverTip.row.close.toFixed(2)}</span></span>
               <span>{tr('hover.high')} <span className="font-mono text-foreground">{hoverTip.row.high.toFixed(2)}</span></span>
               <span>{tr('hover.low')} <span className="font-mono text-foreground">{hoverTip.row.low.toFixed(2)}</span></span>
-              <span>{tr('hover.ma5')} <span className="font-mono text-foreground">{hoverTip.row.ma5 != null ? hoverTip.row.ma5.toFixed(2) : '--'}</span></span>
-              <span>{tr('hover.ma10')} <span className="font-mono text-foreground">{hoverTip.row.ma10 != null ? hoverTip.row.ma10.toFixed(2) : '--'}</span></span>
-              <span>{tr('hover.ma20')} <span className="font-mono text-foreground">{hoverTip.row.ma20 != null ? hoverTip.row.ma20.toFixed(2) : '--'}</span></span>
-              <span>{tr('hover.macd')} <span className="font-mono text-foreground">{hoverTip.row.macd != null ? hoverTip.row.macd.toFixed(3) : '--'}</span></span>
-              <span>{tr('hover.signal')} <span className="font-mono text-foreground">{hoverTip.row.signal != null ? hoverTip.row.signal.toFixed(3) : '--'}</span></span>
-              <span>{tr('hover.rsi')} <span className="font-mono text-foreground">{hoverTip.row.rsi6 != null ? hoverTip.row.rsi6.toFixed(1) : '--'}</span></span>
+              {indicators.ma ? <>
+                <span>{tr('hover.ma5')} <span className="font-mono text-foreground">{hoverTip.row.ma5?.toFixed(2) ?? '--'}</span></span>
+                <span>{tr('hover.ma10')} <span className="font-mono text-foreground">{hoverTip.row.ma10?.toFixed(2) ?? '--'}</span></span>
+                <span>{tr('hover.ma20')} <span className="font-mono text-foreground">{hoverTip.row.ma20?.toFixed(2) ?? '--'}</span></span>
+              </> : null}
+              {indicators.ma60 ? <span>{tr('hover.ma60')} <span className="font-mono text-foreground">{hoverTip.row.ma60?.toFixed(2) ?? '--'}</span></span> : null}
+              {indicators.ma120 ? <span>{tr('hover.ma120')} <span className="font-mono text-foreground">{hoverTip.row.ma120?.toFixed(2) ?? '--'}</span></span> : null}
+              {indicators.ma240 ? <span>{tr('hover.ma240')} <span className="font-mono text-foreground">{hoverTip.row.ma240?.toFixed(2) ?? '--'}</span></span> : null}
+              {indicators.boll ? <>
+                <span>{tr('hover.bollUpper')} <span className="font-mono text-foreground">{hoverTip.row.bollUpper?.toFixed(2) ?? '--'}</span></span>
+                <span>{tr('hover.bollMiddle')} <span className="font-mono text-foreground">{hoverTip.row.bollMiddle?.toFixed(2) ?? '--'}</span></span>
+                <span>{tr('hover.bollLower')} <span className="font-mono text-foreground">{hoverTip.row.bollLower?.toFixed(2) ?? '--'}</span></span>
+              </> : null}
+              {indicators.vwap && isIntradayInterval(interval) ? <span>{tr('hover.vwap')} <span className="font-mono text-foreground">{hoverTip.row.vwap?.toFixed(2) ?? '--'}</span></span> : null}
+              {indicators.macd ? <>
+                <span>{tr('hover.macd')} <span className="font-mono text-foreground">{hoverTip.row.macd?.toFixed(3) ?? '--'}</span></span>
+                <span>{tr('hover.signal')} <span className="font-mono text-foreground">{hoverTip.row.signal?.toFixed(3) ?? '--'}</span></span>
+              </> : null}
+              {indicators.rsi ? <span>{tr('hover.rsi')} <span className="font-mono text-foreground">{hoverTip.row.rsi6?.toFixed(1) ?? '--'}</span></span> : null}
+              {indicators.kd ? <span>{tr('hover.kd')} <span className="font-mono text-foreground">{hoverTip.row.kdK?.toFixed(1) ?? '--'} / {hoverTip.row.kdD?.toFixed(1) ?? '--'}</span></span> : null}
+              {indicators.obv ? <span>{tr('hover.obv')} <span className="font-mono text-foreground">{hoverTip.row.obv?.toFixed(0) ?? '--'}</span></span> : null}
             </div>
           </div>
         ) : null}
       </div>
-      <div className="mt-3 grid grid-cols-1 gap-3">
-        <div>
-          <div className="text-[11px] text-muted-foreground mb-1">{tr('momentum', { rsi: showRsi ? tr('momentumRsi') : '' })}</div>
-          <div className="text-[11px] text-muted-foreground mb-2 rounded-lg bg-accent/15 border border-border/40 px-2.5 py-1.5">
-            {tr('help')}
-          </div>
-          {showSkeleton ? (
-            <div className="w-full h-[150px] rounded-xl overflow-hidden border border-border/50 animate-pulse">
-              <div className="h-full w-full bg-accent/20" />
+      {(indicators.macd || indicators.rsi || indicators.kd || indicators.obv) ? (
+        <div className="mt-3 grid grid-cols-1 gap-3">
+          <div>
+            <div className="text-[11px] text-muted-foreground mb-1">
+              {tr('momentum', { rsi: [indicators.macd && tr('macd'), indicators.rsi && tr('rsi'), indicators.kd && tr('kd'), indicators.obv && tr('obv')].filter(Boolean).join(' · ') })}
             </div>
-          ) : (
-            <div ref={macdRef} className="w-full h-[150px] rounded-xl overflow-hidden border border-border/50" />
-          )}
+            <div className="text-[11px] text-muted-foreground mb-2 rounded-lg bg-accent/15 border border-border/40 px-2.5 py-1.5">
+              {tr('help')}
+            </div>
+            {showSkeleton ? (
+              <div className="w-full h-[150px] rounded-xl overflow-hidden border border-border/50 animate-pulse">
+                <div className="h-full w-full bg-accent/20" />
+              </div>
+            ) : (
+              <div ref={panesRef} className="w-full grid grid-cols-1 gap-2" />
+            )}
+          </div>
         </div>
-      </div>
+      ) : null}
     </div>
   )
 }

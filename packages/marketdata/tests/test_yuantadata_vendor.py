@@ -120,7 +120,23 @@ def test_market_resolution_only_accepts_exact_symbol_and_caches_success(monkeypa
     assert counts == {"symbols": 1, "bars": 2}
 
 
-@pytest.mark.parametrize("rows", [[], [_market_row("23301", "TSE")]])
+_UNRESOLVABLE = [[], [_market_row("23301", "TSE")],
+                 [_market_row("2330", "TSE"), _market_row("2330", "OTC")]]
+
+
+@pytest.mark.parametrize("rows", _UNRESOLVABLE, ids=["missing", "prefix-only", "ambiguous"])
+def test_unresolved_symbol_never_requests_intraday_bars(monkeypatch, rows):
+    calls = install_http(monkeypatch, lambda url, kw: (
+        _symbols_response(*rows) if url.endswith("/symbols") else
+        pytest.fail("must never request bars without an exact market")
+    ))
+    vendor = yd.YuantaDataKlineVendor()
+    assert vendor.fetch_intraday("2330", "30m", CFG) == []
+    assert vendor.fetch_intraday("2330", "1m", CFG) == []
+    assert not any("/bars/" in call["url"] for call in calls)
+
+
+@pytest.mark.parametrize("rows", _UNRESOLVABLE, ids=["missing", "prefix-only", "ambiguous"])
 def test_unknown_symbol_never_requests_bars(monkeypatch, rows):
     calls = install_http(monkeypatch, lambda url, kw: (
         _symbols_response(*rows) if url.endswith("/symbols") else

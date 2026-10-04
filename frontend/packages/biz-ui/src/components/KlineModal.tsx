@@ -1,5 +1,6 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@panwatch/base-ui/components/ui/dialog'
 import InteractiveKline from '@panwatch/biz-ui/components/InteractiveKline'
+import type { KlineInterval } from './interactive-kline-utils'
 import { useTranslation } from 'react-i18next'
 import { DEFAULT_MARKET } from '../market'
 
@@ -10,8 +11,8 @@ export default function KlineModal(props: {
   market: string
   title?: string
   description?: string
-  initialInterval?: '1d' | '1w' | '1m'
-  initialDays?: '60' | '120' | '250'
+  initialInterval?: KlineInterval
+  initialDays?: number | string
 }) {
   const { t } = useTranslation('bizUi')
   const symbol = String(props.symbol || '').trim()

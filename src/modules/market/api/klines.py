@@ -1,14 +1,20 @@
 from concurrent.futures import ThreadPoolExecutor
 from fastapi import APIRouter
 from datetime import datetime
+import time
 
 from pydantic import BaseModel, Field
 
-from src.platform.marketdata.collectors.kline_collector import KlineCollector
-from src.platform.marketdata.models import DEFAULT_MARKET, MarketCode
+from src.platform.marketdata.collectors.kline_collector import KlineCollector, get_market_data
+from src.platform.marketdata.models import DEFAULT_MARKET, MARKETS, MarketCode
 from src.web.errors import api_error
 
 router = APIRouter()
+
+_INTRADAY_INTERVALS = frozenset({"5m", "15m", "30m", "60m"})
+_INTRADAY_CACHE: dict[str, tuple[float, list]] = {}
+_INTRADAY_TTL_TRADING_S = 60
+_INTRADAY_TTL_CLOSED_S = 600
 
 
 class KlineItem(BaseModel):
@@ -50,6 +56,37 @@ def _serialize_klines(klines) -> list[dict]:
         }
         for k in klines
     ]
+
+
+def _get_klines(symbol: str, market_code: MarketCode, days: int, interval: str) -> list:
+    """Get daily/aggregated bars or cached intraday bars for both API endpoints."""
+    normalized_interval = (interval or "1d").lower()
+    if normalized_interval in _INTRADAY_INTERVALS:
+        cache_key = f"{market_code.value}:{symbol}:{normalized_interval}"
+        now = time.monotonic()
+        cached = _INTRADAY_CACHE.get(cache_key)
+        if cached and cached[0] > now:
+            return cached[1]
+
+        bars = get_market_data().intraday_klines(
+            symbol,
+            market=market_code.value,
+            interval=normalized_interval,
+        )
+        if not bars:
+            # 空結果多半是來源暫時失敗，不快取，下次請求重新抓
+            return []
+        market_def = MARKETS.get(market_code)
+        ttl = (
+            _INTRADAY_TTL_TRADING_S
+            if market_def and market_def.is_trading_time()
+            else _INTRADAY_TTL_CLOSED_S
+        )
+        _INTRADAY_CACHE[cache_key] = (now + ttl, list(bars))
+        return bars
+
+    klines = KlineCollector(market_code).get_klines(symbol, days=days)
+    return _aggregate_klines(klines, normalized_interval)
 
 
 def _aggregate_klines(klines, interval: str) -> list:
@@ -124,9 +161,7 @@ def get_kline_chan(symbol: str, market: str = DEFAULT_MARKET.value, level: str =
 def get_klines(symbol: str, market: str = DEFAULT_MARKET.value, days: int = 60, interval: str = "1d"):
     """获取单只股票K线数据"""
     market_code = _parse_market(market)
-    collector = KlineCollector(market_code)
-    klines = collector.get_klines(symbol, days=days)
-    klines = _aggregate_klines(klines, interval)
+    klines = _get_klines(symbol, market_code, days, interval)
     return {
         "symbol": symbol,
         "market": market_code.value,
@@ -145,11 +180,9 @@ def get_klines_batch(payload: KlineBatchRequest):
     results = []
     for item in payload.items:
         market_code = _parse_market(item.market)
-        collector = KlineCollector(market_code)
         days = item.days or 60
         interval = item.interval or "1d"
-        klines = collector.get_klines(item.symbol, days=days)
-        klines = _aggregate_klines(klines, interval)
+        klines = _get_klines(item.symbol, market_code, days, interval)
         results.append(
             {
                 "symbol": item.symbol,

@@ -6,8 +6,18 @@ import { useTranslation } from 'react-i18next'
 import { useMarketColors } from '@/hooks/use-market-colors'
 import { marketColorWithAlpha, marketSignTextClass } from '@/lib/market-colors'
 import { applySeriesMarkers, buildChanOverlay, chanPointLabel, densifyLine, type ChanLevel } from '@panwatch/biz-ui/chan-overlay'
-
-type BusinessDay = { year: number; month: number; day: number }
+import {
+  crosshairDateKey,
+  decideKlineExpansion,
+  doubledKlineRequestDays,
+  isIntradayInterval,
+  klineRequestUrl,
+  MAX_KLINE_DAYS,
+  parseKlineTime,
+  shiftLogicalRange,
+  type KlineInterval,
+  type LogicalRange,
+} from './interactive-kline-utils'
 
 type KlineItem = {
   date: string
@@ -47,21 +57,6 @@ type HoverTip = {
   x: number
   y: number
   row: HoverTipRow | null
-}
-
-function parseBusinessDay(dateStr: string): BusinessDay | null {
-  const m = String(dateStr || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})$/)
-  if (!m) return null
-  return { year: Number(m[1]), month: Number(m[2]), day: Number(m[3]) }
-}
-
-function parseCrosshairDateKey(time: any): string | null {
-  if (!time || typeof time !== 'object') return null
-  const year = Number(time.year)
-  const month = Number(time.month)
-  const day = Number(time.day)
-  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null
-  return `${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`
 }
 
 function sma(values: number[], period: number): Array<number | null> {
@@ -161,8 +156,8 @@ function addHistogram(chart: any, LW: any, options: any) {
 export default function InteractiveKline(props: {
   symbol: string
   market: string
-  initialInterval?: '1d' | '1w' | '1m'
-  initialDays?: '60' | '120' | '250'
+  initialInterval?: KlineInterval
+  initialDays?: number | string
 }) {
   const { t, i18n } = useTranslation('bizUi')
   const { palette } = useMarketColors()
@@ -171,8 +166,9 @@ export default function InteractiveKline(props: {
   const english = (i18n.resolvedLanguage || i18n.language).toLowerCase().startsWith('en')
   const [lwReady, setLwReady] = useState(!!getLW())
   const [libError, setLibError] = useState(false)
-  const [interval, setIntervalValue] = useState<'1d' | '1w' | '1m'>(props.initialInterval || '1d')
+  const [interval, setIntervalValue] = useState<KlineInterval>(props.initialInterval || '1d')
   const [loading, setLoading] = useState(false)
+  const [loadingEarlier, setLoadingEarlier] = useState(false)
   const [error, setError] = useState<string>('')
   const [data, setData] = useState<KlineItem[]>([])
   const [showRsi, setShowRsi] = useState(true)
@@ -183,16 +179,22 @@ export default function InteractiveKline(props: {
   const fixedDays = useMemo(() => {
     const customDays = Number(props.initialDays)
     if (Number.isFinite(customDays) && customDays > 0) {
-      return Math.floor(customDays)
+      return Math.min(MAX_KLINE_DAYS, Math.floor(customDays))
     }
-    if (interval === '1m') return 360
-    if (interval === '1w') return 180
-    return 120
+    if (interval === '5m' || interval === '15m' || interval === '30m' || interval === '60m') return 500
+    if (interval === '1m') return 1300
+    if (interval === '1w') return 780
+    return 500
   }, [props.initialDays, interval])
 
   const containerRef = useRef<HTMLDivElement | null>(null)
   const macdRef = useRef<HTMLDivElement | null>(null)
   const chanCacheRef = useRef<Record<string, ChanResponse>>({})
+  const loadGenerationRef = useRef(0)
+  const loadingRef = useRef(false)
+  const expansionRef = useRef({ requestedDays: fixedDays, loading: false, canLoad: false, reachedEarliest: false })
+  const pendingRangeRef = useRef<LogicalRange | null>(null)
+  const pendingRangeShiftRef = useRef(0)
 
   const chanKey = `${props.market}:${props.symbol}`
   const chanLevel = showChan && interval === '1d' ? chanByKey[chanKey] || null : null
@@ -213,12 +215,17 @@ export default function InteractiveKline(props: {
 
   const load = async () => {
     if (!props.symbol) return
+    const requestGeneration = ++loadGenerationRef.current
+    expansionRef.current = { requestedDays: fixedDays, loading: false, canLoad: false, reachedEarliest: false }
+    pendingRangeRef.current = null
+    pendingRangeShiftRef.current = 0
+    setLoadingEarlier(false)
+    loadingRef.current = true
     setLoading(true)
     setError('')
     setHoverTip(prev => (prev.visible ? { visible: false, x: 0, y: 0, row: null } : prev))
     try {
-      const query = (days: number) =>
-        `/klines/${encodeURIComponent(props.symbol)}?market=${encodeURIComponent(props.market)}&days=${encodeURIComponent(String(days))}&interval=${encodeURIComponent(interval)}`
+      const query = (days: number) => klineRequestUrl(props.symbol, props.market, days, interval)
       const attempts = Array.from(new Set([fixedDays, Math.max(90, Math.floor(fixedDays * 0.75))]))
       let best: KlineItem[] = []
       let lastError: unknown = null
@@ -233,17 +240,29 @@ export default function InteractiveKline(props: {
         }
       }
       if (!best.length && lastError) throw lastError
+      if (requestGeneration !== loadGenerationRef.current) return
+      expansionRef.current = {
+        requestedDays: fixedDays,
+        loading: false,
+        canLoad: !isIntradayInterval(interval) && best.length > 0 && fixedDays < MAX_KLINE_DAYS,
+        reachedEarliest: false,
+      }
       setData(best)
     } catch (e) {
+      if (requestGeneration !== loadGenerationRef.current) return
       setError(e instanceof Error ? e.message : tr('loadFailed'))
       setData([])
     } finally {
-      setLoading(false)
+      if (requestGeneration === loadGenerationRef.current) {
+        loadingRef.current = false
+        setLoading(false)
+      }
     }
   }
 
   useEffect(() => {
     void load()
+    return () => { loadGenerationRef.current += 1 }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.symbol, props.market, interval, fixedDays])
 
@@ -274,16 +293,16 @@ export default function InteractiveKline(props: {
   }, [lwReady])
 
   const series = useMemo(() => {
-    const klines = (data || []).slice().filter(k => !!parseBusinessDay(k.date))
+    const klines = (data || []).slice().filter(k => parseKlineTime(k.date, interval) != null)
     const candles = klines.map(k => ({
-      time: parseBusinessDay(k.date) as BusinessDay,
+      time: parseKlineTime(k.date, interval) as any,
       open: k.open,
       high: k.high,
       low: k.low,
       close: k.close,
     }))
     const volumes = klines.map(k => ({
-      time: parseBusinessDay(k.date) as BusinessDay,
+      time: parseKlineTime(k.date, interval) as any,
       value: k.volume,
       color: marketColorWithAlpha(k.close > k.open ? palette.up.bright : k.close < k.open ? palette.down.bright : palette.flat, 0.35),
     }))
@@ -297,7 +316,7 @@ export default function InteractiveKline(props: {
     const macd = computeMacd(closes)
     const rsi6 = computeRsi(closes, 6)
     return { klines, candles, volumes, ma5, ma10, ma20, volMa5, volMa10, macd, rsi6 }
-  }, [data, palette])
+  }, [data, interval, palette])
 
   const latestMetrics = useMemo(() => {
     if (!series.klines.length) return null
@@ -336,8 +355,9 @@ export default function InteractiveKline(props: {
     const bg = rootStyle.getPropertyValue('--card').trim()
     const fg = rootStyle.getPropertyValue('--foreground').trim()
 
-    const defaultBars = interval === '1d' ? 100 : interval === '1w' ? 78 : 72
-    const defaultSpacing = interval === '1d' ? 8.5 : interval === '1w' ? 10 : 10
+    const intraday = isIntradayInterval(interval)
+    const defaultBars = intraday ? 120 : interval === '1d' ? 100 : interval === '1w' ? 78 : 72
+    const defaultSpacing = interval === '1d' ? 8.5 : 10
     const chart = LW.createChart(container, {
       width: container.clientWidth,
       height: 380,
@@ -353,6 +373,7 @@ export default function InteractiveKline(props: {
         barSpacing: defaultSpacing,
         minBarSpacing: 1,
         lockVisibleTimeRangeOnResize: true,
+        ...(intraday ? { timeVisible: true, secondsVisible: false } : {}),
       },
       handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
       handleScroll: { mouseWheel: false, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
@@ -390,7 +411,7 @@ export default function InteractiveKline(props: {
       series.klines
         .map((k, i) => {
           const v = arr[i]
-          return v == null ? null : { time: parseBusinessDay(k.date) as BusinessDay, value: v }
+          return v == null ? null : { time: parseKlineTime(k.date, interval) as any, value: v }
         })
         .filter(Boolean)
 
@@ -462,13 +483,13 @@ export default function InteractiveKline(props: {
       const macdLineData = series.klines
         .map((k, i) => {
           const v = series.macd.macd[i]
-          return v == null ? null : { time: parseBusinessDay(k.date) as BusinessDay, value: v }
+          return v == null ? null : { time: parseKlineTime(k.date, interval) as any, value: v }
         })
         .filter(Boolean)
       const sigLineData = series.klines
         .map((k, i) => {
           const v = series.macd.signal[i]
-          return v == null ? null : { time: parseBusinessDay(k.date) as BusinessDay, value: v }
+          return v == null ? null : { time: parseKlineTime(k.date, interval) as any, value: v }
         })
         .filter(Boolean)
       const histData = series.klines
@@ -476,7 +497,7 @@ export default function InteractiveKline(props: {
           const v = series.macd.hist[i]
           if (v == null) return null
           return {
-            time: parseBusinessDay(k.date) as BusinessDay,
+            time: parseKlineTime(k.date, interval) as any,
             value: v,
             color: marketColorWithAlpha(v > 0 ? palette.up.bright : v < 0 ? palette.down.bright : palette.flat, 0.35),
           }
@@ -511,7 +532,7 @@ export default function InteractiveKline(props: {
       const rsiData = series.klines
         .map((k, i) => {
           const v = series.rsi6[i]
-          return v == null ? null : { time: parseBusinessDay(k.date) as BusinessDay, value: v }
+          return v == null ? null : { time: parseKlineTime(k.date, interval) as any, value: v }
         })
         .filter(Boolean)
       rsiLine.setData(rsiData as any)
@@ -528,9 +549,65 @@ export default function InteractiveKline(props: {
       }
     }
     chart.timeScale().subscribeVisibleTimeRangeChange(sync)
+    const requestEarlier = async (range: any) => {
+      const pagination = expansionRef.current
+      if (
+        intraday ||
+        range?.from == null ||
+        range?.to == null ||
+        !Number.isFinite(range.from) ||
+        !Number.isFinite(range.to) ||
+        range.from >= 10 ||
+        loadingRef.current ||
+        pagination.loading ||
+        !pagination.canLoad ||
+        pagination.reachedEarliest
+      ) return
+
+      const nextDays = doubledKlineRequestDays(pagination.requestedDays)
+      if (nextDays <= pagination.requestedDays) {
+        pagination.reachedEarliest = true
+        pagination.canLoad = false
+        return
+      }
+      const requestGeneration = loadGenerationRef.current
+      const previousCount = series.klines.length
+      pagination.loading = true
+      pendingRangeRef.current = { from: range.from, to: range.to }
+      setLoadingEarlier(true)
+      try {
+        const response = await fetchAPI<KlinesResponse>(klineRequestUrl(props.symbol, props.market, nextDays, interval))
+        if (requestGeneration !== loadGenerationRef.current) return
+        const nextData = (response.klines || []).filter(k => parseKlineTime(k.date, interval) != null)
+        const decision = decideKlineExpansion(pagination.requestedDays, previousCount, nextData.length)
+        if (!decision.added) {
+          pagination.reachedEarliest = true
+          pagination.canLoad = false
+          pendingRangeRef.current = null
+          pendingRangeShiftRef.current = 0
+          return
+        }
+        pagination.requestedDays = nextDays
+        pagination.reachedEarliest = decision.reachedEarliest
+        pagination.canLoad = !decision.reachedEarliest
+        pendingRangeShiftRef.current = decision.added
+        setData(nextData)
+      } catch {
+        // Keep the current chart; reaching the old edge again can retry.
+        pendingRangeRef.current = null
+        pendingRangeShiftRef.current = 0
+      } finally {
+        if (requestGeneration === loadGenerationRef.current) {
+          pagination.loading = false
+          setLoadingEarlier(false)
+        }
+      }
+    }
+    const onLogicalRangeChange = (range: any) => { void requestEarlier(range) }
+    chart.timeScale().subscribeVisibleLogicalRangeChange?.(onLogicalRangeChange)
     chart.subscribeCrosshairMove?.((param: any) => {
       const point = param?.point
-      const dateKey = parseCrosshairDateKey(param?.time)
+      const dateKey = crosshairDateKey(param?.time, intraday)
       if (!point || !dateKey || !series.klines.length) {
         setHoverTip(prev => (prev.visible ? { visible: false, x: 0, y: 0, row: null } : prev))
         return
@@ -589,11 +666,19 @@ export default function InteractiveKline(props: {
     if (macdEl) ro.observe(macdEl)
 
     const total = series.candles.length
-    const from = Math.max(0, total - defaultBars)
-    const to = Math.max(total - 1, 0)
-    chart.timeScale().setVisibleLogicalRange({ from, to })
+    const pendingRange = pendingRangeRef.current
+    if (pendingRange) {
+      chart.timeScale().setVisibleLogicalRange(shiftLogicalRange(pendingRange, pendingRangeShiftRef.current))
+      pendingRangeRef.current = null
+      pendingRangeShiftRef.current = 0
+    } else {
+      const from = Math.max(0, total - defaultBars)
+      const to = Math.max(total - 1, 0)
+      chart.timeScale().setVisibleLogicalRange({ from, to })
+    }
     return () => {
       ro.disconnect()
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange?.(onLogicalRangeChange)
       try {
         chart.remove()
       } catch {
@@ -610,7 +695,7 @@ export default function InteractiveKline(props: {
         // ignore
       }
     }
-  }, [series, lwReady, showRsi, indexByDate, interval, palette, chanLevel])
+  }, [series, lwReady, showRsi, indexByDate, interval, palette, chanLevel, props.symbol, props.market])
 
   return (
     <div className="card p-4 md:p-5">
@@ -635,6 +720,10 @@ export default function InteractiveKline(props: {
               { value: '1d', label: tr('intervals.day') },
               { value: '1w', label: tr('intervals.week') },
               { value: '1m', label: tr('intervals.month') },
+              { value: '5m', label: tr('intervals.fiveMinutes') },
+              { value: '15m', label: tr('intervals.fifteenMinutes') },
+              { value: '30m', label: tr('intervals.thirtyMinutes') },
+              { value: '60m', label: tr('intervals.sixtyMinutes') },
             ] as const).map(item => (
               <button
                 key={item.value}
@@ -643,14 +732,15 @@ export default function InteractiveKline(props: {
                   interval === item.value
                     ? 'bg-primary text-primary-foreground'
                     : 'text-muted-foreground hover:text-foreground hover:bg-accent/60'
-                }`}
+                } ${props.market.toUpperCase() === 'CN' && isIntradayInterval(item.value) ? 'opacity-40 cursor-not-allowed' : ''}`}
+                disabled={props.market.toUpperCase() === 'CN' && isIntradayInterval(item.value)}
                 onClick={() => setIntervalValue(item.value)}
               >
                 {item.label}
               </button>
             ))}
           </div>
-          <Button variant="secondary" size="sm" className="h-8" onClick={() => void load()} disabled={loading}>
+          <Button variant="secondary" size="sm" className="h-8" onClick={() => void load()} disabled={loading || loadingEarlier}>
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline">{tr('refresh')}</span>
           </Button>
@@ -695,6 +785,11 @@ export default function InteractiveKline(props: {
         ) : (
           <div ref={containerRef} className="w-full h-[380px] rounded-xl overflow-hidden border border-border/50" />
         )}
+        {loadingEarlier ? (
+          <div className="pointer-events-none absolute left-3 top-3 z-20 rounded-md border border-border/60 bg-card/90 px-2.5 py-1 text-[11px] text-muted-foreground shadow-sm">
+            {tr('loadingEarlier')}
+          </div>
+        ) : null}
         {hoverTip.visible && hoverTip.row ? (
           <div
             className="pointer-events-none absolute z-10 w-[280px] rounded-lg border border-border/60 bg-card/95 px-3 py-2 shadow-lg backdrop-blur-[2px]"

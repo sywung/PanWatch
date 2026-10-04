@@ -35,6 +35,7 @@ OVERRIDES: dict[str, str] = {
     "language.simplifiedChinese": "简体中文",
     "language.quickSwitch": "简体中文",
     "normalVolatility": "正常波動",
+    "loadingEarlier": "載入更早資料…",
     "bollSqueeze": "波幅收斂",
     "bollExpansion": "波動擴大",
     "dataSources.credentials.finmindLabel": "FinMind Token（選填）",

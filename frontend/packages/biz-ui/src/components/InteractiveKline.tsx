@@ -4,7 +4,7 @@ import { fetchAPI } from '@panwatch/api'
 import { Button } from '@panwatch/base-ui/components/ui/button'
 import { useTranslation } from 'react-i18next'
 import { useMarketColors } from '@/hooks/use-market-colors'
-import { marketColorWithAlpha, marketSignTextClass } from '@/lib/market-colors'
+import { getMarketColorPalette, marketColorWithAlpha, marketSignTextClass } from '@/lib/market-colors'
 import {
   calculateBollinger,
   calculateKd,
@@ -28,6 +28,8 @@ import {
   type KlineInterval,
   type LogicalRange,
 } from './interactive-kline-utils'
+import KlineDrawingToolbar from './KlineDrawingToolbar'
+import { useKlineDrawingController } from './use-kline-drawing-controller'
 
 type KlineItem = {
   date: string
@@ -180,7 +182,8 @@ export default function InteractiveKline(props: {
   initialDays?: number | string
 }) {
   const { t, i18n } = useTranslation('bizUi')
-  const { palette } = useMarketColors()
+  const marketColors = useMarketColors()
+  const palette = useMemo(() => getMarketColorPalette(marketColors.effectiveScheme), [marketColors.effectiveScheme])
   const tr = (key: string, options?: Record<string, unknown>) =>
     (t as unknown as (key: string, options?: Record<string, unknown>) => string)(`interactiveKline.${key}`, options)
   const english = (i18n.resolvedLanguage || i18n.language).toLowerCase().startsWith('en')
@@ -195,6 +198,8 @@ export default function InteractiveKline(props: {
   const [showChan, setShowChan] = useState(false)
   const [chanByKey, setChanByKey] = useState<Record<string, ChanResponse>>({})
   const [hoverTip, setHoverTip] = useState<HoverTip>({ visible: false, x: 0, y: 0, row: null })
+  const drawingController = useKlineDrawingController(props.symbol, props.market)
+  const { drawings, error: drawingError, toolState: drawingToolState, capabilities: drawingCapabilities } = drawingController
 
   const fixedDays = useMemo(() => {
     const customDays = Number(props.initialDays)
@@ -433,6 +438,8 @@ export default function InteractiveKline(props: {
       wickDownColor: palette.down.bright,
     })
     candleSeries.setData(series.candles)
+    const drawingDates = series.klines.map(kline => kline.date)
+    const drawingChart = drawingController.bindChart(chart, candleSeries, () => drawingDates)
 
     const volSeries = addHistogram(chart, LW, {
       priceScaleId: 'vol',
@@ -659,8 +666,9 @@ export default function InteractiveKline(props: {
     }
     const onLogicalRangeChange = (range: any) => { void requestEarlier(range) }
     chart.timeScale().subscribeVisibleLogicalRangeChange?.(onLogicalRangeChange)
-    chart.subscribeCrosshairMove?.((param: any) => {
+    const onCrosshairMove = (param: any) => {
       const point = param?.point
+      drawingChart.onCrosshairMove(param)
       const dateKey = crosshairDateKey(param?.time, intraday)
       if (!point || !dateKey || !series.klines.length) {
         setHoverTip(prev => (prev.visible ? { visible: false, x: 0, y: 0, row: null } : prev))
@@ -719,7 +727,10 @@ export default function InteractiveKline(props: {
           rsi6: series.rsi6[idx],
         },
       })
-    })
+    }
+    chart.subscribeCrosshairMove?.(onCrosshairMove)
+    const onChartClick = drawingChart.onClick
+    chart.subscribeClick?.(onChartClick)
 
     const ro = new ResizeObserver(() => {
       chart.applyOptions({ width: container.clientWidth })
@@ -742,6 +753,9 @@ export default function InteractiveKline(props: {
     return () => {
       ro.disconnect()
       chart.timeScale().unsubscribeVisibleLogicalRangeChange?.(onLogicalRangeChange)
+      chart.unsubscribeCrosshairMove?.(onCrosshairMove)
+      chart.unsubscribeClick?.(onChartClick)
+      drawingChart.cleanup()
       try {
         chart.remove()
       } catch {
@@ -751,10 +765,10 @@ export default function InteractiveKline(props: {
         try { item.chart.remove() } catch { /* ignore */ }
       }
     }
-  }, [series, lwReady, indicators, indexByDate, interval, palette, chanLevel, props.symbol, props.market, i18n.language, i18n.resolvedLanguage])
+  }, [series, lwReady, indicators, indexByDate, interval, palette, chanLevel, props.symbol, props.market, i18n.language, i18n.resolvedLanguage, drawingController.bindChart])
 
   return (
-    <div className="card p-4 md:p-5">
+    <div className="card p-4 md:p-5" onKeyDown={drawingController.onKeyDown}>
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-3">
         <div className="text-[13px] font-semibold text-foreground">{tr('title')}</div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -791,6 +805,20 @@ export default function InteractiveKline(props: {
           >
             {tr('chan')}
           </Button>
+          <KlineDrawingToolbar
+            symbol={props.symbol}
+            market={props.market}
+            drawings={drawings}
+            error={drawingError}
+            state={drawingToolState}
+            capabilities={drawingCapabilities}
+            onSelectTool={tool => drawingController.dispatch({ type: 'selectTool', tool })}
+            onDeleteSelected={() => drawingController.dispatch({ type: 'deleteSelected' })}
+            onClear={() => {
+              drawingController.dispatch({ type: 'select', id: null })
+              void drawingController.clearDrawings()
+            }}
+          />
           <div className="inline-flex rounded-lg border border-border/60 bg-accent/20 p-0.5">
             {([
               { value: '1d', label: tr('intervals.day') },
@@ -853,13 +881,24 @@ export default function InteractiveKline(props: {
           <div className="rounded-lg bg-accent/20 px-2.5 py-2 text-[11px]"><span className="text-muted-foreground">{tr('metrics.averageVolume')}</span> <span className="font-mono ml-1">{english ? `${(latestMetrics.avgVol / 1000).toFixed(1)}K` : tr('tenThousand', { value: (latestMetrics.avgVol / 10000).toFixed(1) })}</span></div>
         </div>
       ) : null}
-      <div className="relative">
+      <div
+        ref={drawingController.chartFocusRef}
+        className="relative"
+        tabIndex={-1}
+        onMouseEnter={drawingController.onChartMouseEnter}
+        onMouseLeave={drawingController.onChartMouseLeave}
+        onMouseDown={event => drawingController.onChartMouseDown(event, containerRef.current)}
+      >
         {showSkeleton ? (
           <div className="w-full h-[380px] rounded-xl overflow-hidden border border-border/50 p-3 animate-pulse">
             <div className="h-full w-full rounded-lg bg-accent/20" />
           </div>
         ) : (
-          <div ref={containerRef} className="w-full h-[380px] rounded-xl overflow-hidden border border-border/50" />
+          <div
+            ref={containerRef}
+            className="w-full h-[380px] rounded-xl overflow-hidden border border-border/50"
+            style={{ cursor: drawingToolState.tool === 'idle' ? undefined : 'crosshair' }}
+          />
         )}
         {loadingEarlier ? (
           <div className="pointer-events-none absolute left-3 top-3 z-20 rounded-md border border-border/60 bg-card/90 px-2.5 py-1 text-[11px] text-muted-foreground shadow-sm">

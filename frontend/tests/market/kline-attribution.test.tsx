@@ -42,9 +42,9 @@ const KLINES = Array.from({ length: 60 }, (_, i) => {
 describe('lightweight-charts attribution', () => {
   beforeEach(() => {
     vi.mocked(fetchAPI).mockReset()
-    vi.mocked(fetchAPI).mockImplementation(async () => (
-      { symbol: '2330', market: 'TW', days: 120, klines: KLINES } as never
-    ))
+    vi.mocked(fetchAPI).mockImplementation(async (path: string) => path.startsWith('/chart-drawings?')
+      ? [] as never
+      : { symbol: '2330', market: 'TW', days: 120, klines: KLINES } as never)
   })
   afterEach(() => {
     delete (window as any).LightweightCharts

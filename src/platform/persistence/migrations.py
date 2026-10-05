@@ -2076,6 +2076,25 @@ CREATE TABLE IF NOT EXISTS futures_positions (
     )
 
 
+def _m9003_chart_drawings(conn: Connection) -> None:
+    conn.execute(text("""
+CREATE TABLE IF NOT EXISTS chart_drawings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  symbol TEXT NOT NULL,
+  market TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  data TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)
+"""))
+    _create_index_if_missing(
+        conn,
+        "ix_chart_drawings_market_symbol",
+        "CREATE INDEX ix_chart_drawings_market_symbol ON chart_drawings(market, symbol)",
+    )
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(101, "agent_config_kind_and_visibility", _m101_agent_config_kind),
     Migration(102, "backfill_agent_kind_data", _m102_backfill_agent_kind),
@@ -2107,6 +2126,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(128, "assistant_trusted_results", _m128_assistant_trusted_results),
     Migration(9001, "ai_model_extra_params", _m9001_ai_model_extra_params),
     Migration(9002, "futures_positions", _m9002_futures_positions),
+    Migration(9003, "chart_drawings", _m9003_chart_drawings),
 )
 
 

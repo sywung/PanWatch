@@ -160,6 +160,21 @@ class FuturesPosition(Base):
     account = relationship("Account", back_populates="futures_positions")
 
 
+class ChartDrawing(Base):
+    """使用者儲存的商品 K 線圖畫線。"""
+
+    __tablename__ = "chart_drawings"
+    __table_args__ = (Index("ix_chart_drawings_market_symbol", "market", "symbol"),)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    symbol = Column(String(32), nullable=False)
+    market = Column(String, nullable=False)
+    kind = Column(String, nullable=False)
+    data = Column(JSON, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
 class StockAgent(Base):
     """多对多: 每只股票可被多个 Agent 监控"""
 

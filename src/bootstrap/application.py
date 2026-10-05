@@ -27,6 +27,7 @@ from src.modules.automation.api import agents, suggestions, templates
 from src.modules.market.api import (
     discovery,
     futures,
+    chart_drawings,
     klines,
     market,
     news,
@@ -79,6 +80,12 @@ app.include_router(
 )
 app.include_router(
     klines.router, prefix="/api/klines", tags=["klines"], dependencies=protected
+)
+app.include_router(
+    chart_drawings.router,
+    prefix="/api/chart-drawings",
+    tags=["chart-drawings"],
+    dependencies=protected,
 )
 app.include_router(
     insights.router, prefix="/api/insights", tags=["insights"], dependencies=protected

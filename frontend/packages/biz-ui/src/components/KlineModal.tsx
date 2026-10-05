@@ -3,6 +3,7 @@ import InteractiveKline from '@panwatch/biz-ui/components/InteractiveKline'
 import type { KlineInterval } from './interactive-kline-utils'
 import { useTranslation } from 'react-i18next'
 import { DEFAULT_MARKET } from '../market'
+import KlineAttribution from './kline-attribution'
 
 export default function KlineModal(props: {
   open: boolean
@@ -37,6 +38,7 @@ export default function KlineModal(props: {
         ) : (
           <div className="text-[12px] text-muted-foreground py-8 text-center">{t('klineModal.noStock')}</div>
         )}
+        <KlineAttribution />
       </DialogContent>
     </Dialog>
   )

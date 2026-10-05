@@ -29,6 +29,7 @@ import { Switch } from '@panwatch/base-ui/components/ui/switch'
 import { SuggestionBadge, type KlineSummary, type SuggestionInfo } from '@panwatch/biz-ui/components/suggestion-badge'
 import { useToast } from '@panwatch/base-ui/components/ui/toast'
 import InteractiveKline from '@panwatch/biz-ui/components/InteractiveKline'
+import KlineAttribution from './kline-attribution'
 import { KlineIndicators, localizeTechnicalStatus } from '@panwatch/biz-ui/components/kline-indicators'
 import { buildKlineSuggestion } from '@/lib/kline-scorer'
 import StockPriceAlertPanel from '@panwatch/biz-ui/components/stock-price-alert-panel'
@@ -1973,6 +1974,7 @@ export default function StockInsightModal(props: {
 
 
           </div>
+          <KlineAttribution />
         </DialogContent>
       </Dialog>
 

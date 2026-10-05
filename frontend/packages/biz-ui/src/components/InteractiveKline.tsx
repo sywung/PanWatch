@@ -403,6 +403,7 @@ export default function InteractiveKline(props: {
       layout: {
         background: { color: `hsl(${bg})` },
         textColor: `hsl(${fg} / 0.85)`,
+        attributionLogo: false,
       },
       rightPriceScale: { borderVisible: false },
       timeScale: {
@@ -522,6 +523,7 @@ export default function InteractiveKline(props: {
         layout: {
           background: { color: `hsl(${bg})` },
           textColor: `hsl(${fg} / 0.75)`,
+          attributionLogo: false,
         },
         rightPriceScale: { borderVisible: false, ...(margins ? { scaleMargins: margins } : {}) },
         timeScale: { borderVisible: false, visible: false },

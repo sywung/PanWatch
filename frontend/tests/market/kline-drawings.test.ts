@@ -3,6 +3,8 @@ import {
   anchorToLogical,
   distanceToSegment,
   drawingReducer,
+  distanceToLine,
+  extendLineAcross,
   hitTestDrawings,
   initialDrawingToolState,
   logicalToAnchorTime,
@@ -65,12 +67,13 @@ describe('K 線畫線命中測試', () => {
     )).toBe(1)
   })
 
-  it('hits a sloped segment but rejects points outside its endpoints', () => {
+  it('hits a trend line anywhere along its extension in both directions', () => {
     const onlyTrend = drawings.slice(1)
     const project = () => ({ kind: 'trend' as const, x1: 10, y1: 20, x2: 30, y2: 40 })
     expect(hitTestDrawings({ x: 20, y: 30 }, onlyTrend, project)).toBe(2)
-    expect(hitTestDrawings({ x: 37, y: 47 }, onlyTrend, project)).toBeNull()
-    expect(hitTestDrawings({ x: 4, y: 14 }, onlyTrend, project)).toBeNull()
+    expect(hitTestDrawings({ x: 300, y: 310 }, onlyTrend, project)).toBe(2)
+    expect(hitTestDrawings({ x: -200, y: -190 }, onlyTrend, project)).toBe(2)
+    expect(hitTestDrawings({ x: 300, y: 320 }, onlyTrend, project)).toBeNull()
   })
 
   it('ignores clicks more than six pixels away from a horizontal line', () => {
@@ -122,6 +125,14 @@ describe('畫線工具狀態轉換', () => {
     expect(drawingReducer(afterFirst, { type: 'escape' }).state).toEqual(initialDrawingToolState)
   })
 
+  it('ignores a second trend click on the same candle instead of creating a vertical line', () => {
+    const placing = { tool: 'placingTrend' as const, selectedId: null }
+    const afterFirst = drawingReducer(placing, { type: 'chartClick', point: first }).state
+    const sameCandle = drawingReducer(afterFirst, { type: 'chartClick', point: { ...first, price: first.price + 50 } })
+    expect(sameCandle.action).toBeUndefined()
+    expect(sameCandle.state).toEqual(afterFirst)
+  })
+
   it('selects, deletes the selected drawing, and clears selection on a blank chart click', () => {
     const selected = drawingReducer(initialDrawingToolState, { type: 'select', id: 7 }).state
     expect(selected.selectedId).toBe(7)
@@ -143,5 +154,20 @@ describe('panePointFromClick', () => {
     expect(panePointFromClick(130, 400, rect, 900, 350)).toBeNull()
     expect(panePointFromClick(90, 90, rect, 900, 350)).toBeNull()
     expect(panePointFromClick(130, 90, rect, 0, 350)).toBeNull()
+  })
+})
+
+describe('趨勢線延伸', () => {
+  it('extends the line through both points to the left and right pane edges', () => {
+    expect(extendLineAcross(100, 50, 200, 100, 1000)).toEqual({ x1: 0, y1: 0, x2: 1000, y2: 500 })
+    expect(extendLineAcross(300, 80, 100, 80, 600)).toEqual({ x1: 0, y1: 80, x2: 600, y2: 80 })
+  })
+  it('returns null for a vertical line', () => {
+    expect(extendLineAcross(50, 10, 50, 90, 600)).toBeNull()
+  })
+  it('measures perpendicular distance to the infinite line', () => {
+    expect(distanceToLine(500, 0, 0, 0, 10, 0)).toBe(0)
+    expect(distanceToLine(-500, 3, 0, 0, 10, 0)).toBe(3)
+    expect(distanceToLine(3, 4, 0, 0, 0, 0)).toBe(5)
   })
 })

@@ -180,7 +180,25 @@ export function panePointFromClick(
   return { x, y }
 }
 
-/** Return the nearest projected line ID within six screen pixels. */
+/** Distance from a point to the infinite line through two points (a point when both coincide). */
+export function distanceToLine(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
+  const dx = x2 - x1
+  const dy = y2 - y1
+  const length = Math.hypot(dx, dy)
+  if (length === 0) return Math.hypot(px - x1, py - y1)
+  return Math.abs(dy * (px - x1) - dx * (py - y1)) / length
+}
+
+/** Extend the line through two points to x = 0 and x = width; null for a vertical line. */
+export function extendLineAcross(
+  x1: number, y1: number, x2: number, y2: number, width: number,
+): { x1: number; y1: number; x2: number; y2: number } | null {
+  if (x1 === x2) return null
+  const slope = (y2 - y1) / (x2 - x1)
+  return { x1: 0, y1: y1 - slope * x1, x2: width, y2: y1 + slope * (width - x1) }
+}
+
+/** Return the nearest projected line ID within six screen pixels (trend lines extend both ways). */
 export function hitTestDrawings(
   point: { x: number; y: number },
   drawings: KlineDrawing[],
@@ -195,8 +213,8 @@ export function hitTestDrawings(
     if (projected.kind === 'hline') {
       distance = Math.abs(point.y - projected.y)
     } else {
-      // distanceToSegment 已把投影夾在兩端點之間；不能再用 x 範圍過濾，否則陡峭的線幾乎點不到
-      distance = distanceToSegment(point.x, point.y, projected.x1, projected.y1, projected.x2, projected.y2)
+      // 趨勢線往左右無限延伸，命中範圍是整條直線
+      distance = distanceToLine(point.x, point.y, projected.x1, projected.y1, projected.x2, projected.y2)
     }
     if (distance <= nearestDistance) {
       nearestDistance = distance
@@ -245,6 +263,8 @@ export function drawingReducer(state: DrawingToolState, event: DrawingEvent): Dr
       }
       if (state.tool === 'placingTrend') {
         if (!state.firstPoint) return { state: { ...state, firstPoint: event.point } }
+        // 同一根 K 棒的兩點會變成垂直線，延伸後沒有意義；繼續等第二點
+        if (event.point.time === state.firstPoint.time) return { state }
         return {
           state: { tool: 'idle', selectedId: null },
           action: {

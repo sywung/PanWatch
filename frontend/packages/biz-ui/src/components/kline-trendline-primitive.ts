@@ -1,4 +1,4 @@
-import { anchorToLogical, type DrawingAnchor, type KlineDrawing, type TrendDrawing } from './kline-drawings'
+import { anchorToLogical, extendLineAcross, type DrawingAnchor, type KlineDrawing, type TrendDrawing } from './kline-drawings'
 
 type PrimitivePoint = { x: number; y: number }
 type RenderedLine = {
@@ -28,20 +28,22 @@ export function createKlineTrendlinePrimitive(
   let renderedLines: RenderedLine[] = []
 
   const draw = (target: any) => {
-    target.useBitmapCoordinateSpace(({ context, horizontalPixelRatio, verticalPixelRatio }: any) => {
+    target.useBitmapCoordinateSpace(({ context, bitmapSize, horizontalPixelRatio, verticalPixelRatio }: any) => {
       for (const line of renderedLines) {
         const x1 = line.x1 * horizontalPixelRatio
         const x2 = line.x2 * horizontalPixelRatio
         const y1 = line.y1 * verticalPixelRatio
         const y2 = line.y2 * verticalPixelRatio
+        const extended = extendLineAcross(x1, y1, x2, y2, bitmapSize.width)
+        if (!extended) continue
         const scale = (horizontalPixelRatio + verticalPixelRatio) / 2
         context.save()
         context.beginPath()
         context.strokeStyle = line.selected ? colors.selected : colors.line
         context.lineWidth = (line.selected ? 3 : 2) * scale
         context.setLineDash(line.preview ? [6 * scale, 4 * scale] : [])
-        context.moveTo(x1, y1)
-        context.lineTo(x2, y2)
+        context.moveTo(extended.x1, extended.y1)
+        context.lineTo(extended.x2, extended.y2)
         context.stroke()
         if (line.selected && !line.preview) {
           for (const [x, y] of [[x1, y1], [x2, y2]]) {

@@ -30,6 +30,7 @@ import {
 } from './interactive-kline-utils'
 import KlineDrawingToolbar from './KlineDrawingToolbar'
 import { useKlineDrawingController } from './use-kline-drawing-controller'
+import { panePointFromClick } from './kline-drawings'
 
 type KlineItem = {
   date: string
@@ -729,8 +730,15 @@ export default function InteractiveKline(props: {
       })
     }
     chart.subscribeCrosshairMove?.(onCrosshairMove)
-    const onChartClick = drawingChart.onClick
-    chart.subscribeClick?.(onChartClick)
+    const onChartClick = (event: MouseEvent) => {
+      const timeScale = chart.timeScale()
+      const paneHeight = container.clientHeight - Number(timeScale.height?.() ?? 0)
+      const point = panePointFromClick(
+        event.clientX, event.clientY, container.getBoundingClientRect(), Number(timeScale.width?.() ?? 0), paneHeight,
+      )
+      if (point) drawingChart.onClick({ point })
+    }
+    container.addEventListener('click', onChartClick)
 
     const ro = new ResizeObserver(() => {
       chart.applyOptions({ width: container.clientWidth })
@@ -754,7 +762,7 @@ export default function InteractiveKline(props: {
       ro.disconnect()
       chart.timeScale().unsubscribeVisibleLogicalRangeChange?.(onLogicalRangeChange)
       chart.unsubscribeCrosshairMove?.(onCrosshairMove)
-      chart.unsubscribeClick?.(onChartClick)
+      container.removeEventListener('click', onChartClick)
       drawingChart.cleanup()
       try {
         chart.remove()

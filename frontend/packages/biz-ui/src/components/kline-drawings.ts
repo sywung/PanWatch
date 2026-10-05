@@ -161,6 +161,25 @@ export function distanceToSegment(
   return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy))
 }
 
+/**
+ * Convert a DOM click into main-pane coordinates; null when it lands on the price or time axis.
+ * lightweight-charts swallows a second click within 500ms (it only checks for a double click),
+ * so drawing placement listens to DOM clicks instead of chart.subscribeClick.
+ */
+export function panePointFromClick(
+  clientX: number,
+  clientY: number,
+  rect: { left: number; top: number },
+  paneWidth: number,
+  paneHeight: number,
+): { x: number; y: number } | null {
+  const x = clientX - rect.left
+  const y = clientY - rect.top
+  if (!(paneWidth > 0) || !(paneHeight > 0)) return null
+  if (x < 0 || y < 0 || x >= paneWidth || y >= paneHeight) return null
+  return { x, y }
+}
+
 /** Return the nearest projected line ID within six screen pixels. */
 export function hitTestDrawings(
   point: { x: number; y: number },

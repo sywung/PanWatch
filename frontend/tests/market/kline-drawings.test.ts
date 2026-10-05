@@ -6,6 +6,7 @@ import {
   hitTestDrawings,
   initialDrawingToolState,
   logicalToAnchorTime,
+  panePointFromClick,
   type KlineDrawing,
 } from '@panwatch/biz-ui/components/kline-drawings'
 
@@ -129,5 +130,18 @@ describe('畫線工具狀態轉換', () => {
       action: { type: 'delete', id: 7 },
     })
     expect(drawingReducer(selected, { type: 'chartClick', point: first }).state.selectedId).toBeNull()
+  })
+})
+
+describe('panePointFromClick', () => {
+  const rect = { left: 100, top: 50 }
+  it('converts client coordinates into pane coordinates', () => {
+    expect(panePointFromClick(130, 90, rect, 900, 350)).toEqual({ x: 30, y: 40 })
+  })
+  it('rejects clicks on the price axis, the time axis and outside the chart', () => {
+    expect(panePointFromClick(1000, 90, rect, 900, 350)).toBeNull()
+    expect(panePointFromClick(130, 400, rect, 900, 350)).toBeNull()
+    expect(panePointFromClick(90, 90, rect, 900, 350)).toBeNull()
+    expect(panePointFromClick(130, 90, rect, 0, 350)).toBeNull()
   })
 })

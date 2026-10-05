@@ -34,6 +34,8 @@ function drawingApi(initial: unknown[] = []) {
     unsubscribeVisibleTimeRangeChange: vi.fn(),
     subscribeVisibleLogicalRangeChange: vi.fn(),
     unsubscribeVisibleLogicalRangeChange: vi.fn(),
+    width: () => 1000,
+    height: () => 30,
     logicalToCoordinate: (logical: number) => logical * 10,
     coordinateToLogical: (x: number) => x / 10,
   }
@@ -58,6 +60,17 @@ function drawingApi(initial: unknown[] = []) {
     get: (_target, key) => key === 'createChart' ? () => chart : genericSeries,
   })
   return { LW, priceLines, clickHandlers, createPriceLine, removePriceLine, candleSeries, initial }
+}
+
+async function chartContainer(): Promise<HTMLElement> {
+  let el: HTMLElement | null = null
+  await waitFor(() => {
+    el = document.querySelector<HTMLElement>('div.h-\\[380px\\]')
+    expect(el?.querySelector('canvas') ?? el).toBeTruthy()
+  })
+  Object.defineProperty(el!, 'clientHeight', { configurable: true, value: 380 })
+  el!.getBoundingClientRect = () => ({ left: 0, top: 0, right: 1080, bottom: 380, width: 1080, height: 380, x: 0, y: 0, toJSON() {} }) as DOMRect
+  return el!
 }
 
 describe('InteractiveKline 畫線接線', () => {
@@ -87,8 +100,8 @@ describe('InteractiveKline 畫線接線', () => {
 
     const button = await screen.findByRole('button', { name: '水平线' })
     fireEvent.click(button)
-    await waitFor(() => expect(fake.clickHandlers.length).toBeGreaterThan(0))
-    act(() => fake.clickHandlers[0]({ point: { x: 20, y: 100 } }))
+    const container = await chartContainer()
+    act(() => { fireEvent.click(container, { clientX: 20, clientY: 100 }) })
 
     await waitFor(() => expect(fetchAPI).toHaveBeenCalledWith('/chart-drawings', expect.objectContaining({ method: 'POST' })))
     await waitFor(() => expect(fake.createPriceLine).toHaveBeenCalledWith(expect.objectContaining({ price: 100, axisLabelVisible: true })))
@@ -132,5 +145,34 @@ describe('InteractiveKline 畫線接線', () => {
     await waitFor(() => expect(fetchAPI).toHaveBeenCalledWith(expect.stringContaining('interval=1w')))
     await waitFor(() => expect(fake.createPriceLine).toHaveBeenCalledTimes(2))
     expect(fake.createPriceLine).toHaveBeenLastCalledWith(expect.objectContaining({ price: 100 }))
+  })
+
+  it('places both trend points from two back-to-back DOM clicks', async () => {
+    const fake = drawingApi()
+    ;(window as any).LightweightCharts = fake.LW
+    render(<InteractiveKline symbol="2330" market="TW" />)
+    fireEvent.click(await screen.findByRole('button', { name: '趋势线' }))
+    const container = await chartContainer()
+    act(() => {
+      fireEvent.click(container, { clientX: 100, clientY: 120 })
+      fireEvent.click(container, { clientX: 300, clientY: 80 })
+    })
+    await waitFor(() => expect(fetchAPI).toHaveBeenCalledWith('/chart-drawings', expect.objectContaining({ method: 'POST' })))
+    const post = vi.mocked(fetchAPI).mock.calls.find(([path, options]) => path === '/chart-drawings' && options?.method === 'POST')!
+    const body = JSON.parse(String(post[1]!.body))
+    expect(body.kind).toBe('trend')
+    expect(body.data.p1.price).toBe(80)
+    expect(body.data.p2.price).toBe(120)
+  })
+
+  it('ignores clicks on the price axis while placing a line', async () => {
+    const fake = drawingApi()
+    ;(window as any).LightweightCharts = fake.LW
+    render(<InteractiveKline symbol="2330" market="TW" />)
+    fireEvent.click(await screen.findByRole('button', { name: '水平线' }))
+    const container = await chartContainer()
+    act(() => { fireEvent.click(container, { clientX: 1040, clientY: 100 }) })
+    await new Promise(resolve => setTimeout(resolve, 50))
+    expect(fetchAPI).not.toHaveBeenCalledWith('/chart-drawings', expect.objectContaining({ method: 'POST' }))
   })
 })

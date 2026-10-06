@@ -55,6 +55,8 @@ scheduler: AgentScheduler | None = None
 price_alert_scheduler: PriceAlertScheduler | None = None
 paper_trading_scheduler: PaperTradingScheduler | None = None
 context_maintenance_scheduler: ContextMaintenanceScheduler | None = None
+# 主事件循环（lifespan 记录）：AsyncIOScheduler 只能在它上面启动
+_main_loop: asyncio.AbstractEventLoop | None = None
 
 
 def apply_proxy_env(proxy: str | None) -> None:
@@ -1349,7 +1351,30 @@ def register_mcp_log_cleanup(sched: AgentScheduler) -> None:
 
 
 def reload_scheduler() -> bool:
-    """重载调度器（用于配置导入/批量修改后立即生效）"""
+    """重载调度器（用于配置导入/批量修改后立即生效）
+
+    同步端点在 threadpool 里调用时没有 running loop，AsyncIOScheduler.start() 会失败，
+    而旧调度器已先关掉 → 全部 Agent 停摆。所以离开主循环时改由主循环执行。
+    """
+    loop = _main_loop
+    try:
+        running = asyncio.get_running_loop()
+    except RuntimeError:
+        running = None
+    if loop is None or running is loop or not loop.is_running():
+        return _reload_scheduler_now()
+
+    async def _reload() -> bool:
+        return _reload_scheduler_now()
+
+    try:
+        return asyncio.run_coroutine_threadsafe(_reload(), loop).result(timeout=30)
+    except Exception as e:
+        logger.error(f"Agent 调度器重载失败: {e}")
+        return False
+
+
+def _reload_scheduler_now() -> bool:
     global scheduler
     try:
         current = globals().get("scheduler")
@@ -1638,6 +1663,8 @@ async def trigger_agent_for_stock(
 @asynccontextmanager
 async def lifespan(app):
     """应用生命周期: 初始化 + 启动调度器"""
+    global _main_loop
+    _main_loop = asyncio.get_running_loop()
     init_db()
     setup_logging()
     # OTel 导出(可选,默认关闭):仅当配置了 OTEL_EXPORTER_OTLP_ENDPOINT 且装了

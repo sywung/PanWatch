@@ -11,6 +11,7 @@ import { useToast } from '@panwatch/base-ui/components/ui/toast'
 import { useTranslation } from 'react-i18next'
 import { localizeAgentDescription, localizeAgentName } from '@/i18n/agent-labels'
 import { getCurrentLocale } from '@/i18n'
+import IntradayMonitorConfigDialog, { type IntradayMonitorConfig } from '@/components/IntradayMonitorConfigDialog'
 
 interface AgentConfig {
   id: number
@@ -180,6 +181,7 @@ export default function AgentsPage() {
   // TradingAgents 深度配置弹窗(双模型 / 预算 / 超时 / 模拟盘对接)
   const [taConfigAgent, setTaConfigAgent] = useState<AgentConfig | null>(null)
   const [taConfigForm, setTaConfigForm] = useState<Record<string, unknown>>({})
+  const [intradayConfigAgent, setIntradayConfigAgent] = useState<AgentConfig | null>(null)
   const [scheduleConfig, setScheduleConfig] = useState<ScheduleConfig>({ type: 'daily', time: '15:30' })
   const [schedulePreview, setSchedulePreview] = useState<SchedulePreview | { error: string } | null>(null)
   const [schedulePreviewLoading, setSchedulePreviewLoading] = useState(false)
@@ -473,6 +475,16 @@ export default function AgentsPage() {
     }
   }
 
+  const saveIntradayConfig = async (config: IntradayMonitorConfig) => {
+    await fetchAPI('/agents/intraday_monitor', {
+      method: 'PUT',
+      body: JSON.stringify({ config }),
+    })
+    toast(configT('messages.configSaved'), 'success')
+    setIntradayConfigAgent(null)
+    void load()
+  }
+
   const openScheduleDialog = (agent: AgentConfig) => {
     setScheduleDialogAgent(agent)
     setScheduleConfig(parseCronToConfig(agent.schedule))
@@ -588,6 +600,16 @@ export default function AgentsPage() {
                         >
                           <Settings2 className="w-3.5 h-3.5" />
                         <span className="text-[12px]">{configT('deepConfig')}</span>
+                        </button>
+                      )}
+                      {agent.name === 'intraday_monitor' && (
+                        <button
+                          onClick={() => setIntradayConfigAgent(agent)}
+                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors text-primary"
+                          title={configT('paramsConfig')}
+                        >
+                          <Settings2 className="w-3.5 h-3.5" />
+                          <span className="text-[12px]">{configT('paramsConfig')}</span>
                         </button>
                       )}
                     </div>
@@ -1171,6 +1193,12 @@ export default function AgentsPage() {
           </div>
         </DialogContent>
       </Dialog>
+      <IntradayMonitorConfigDialog
+        open={!!intradayConfigAgent}
+        config={intradayConfigAgent?.config || {}}
+        onCancel={() => setIntradayConfigAgent(null)}
+        onSave={saveIntradayConfig}
+      />
     </div>
   )
 }

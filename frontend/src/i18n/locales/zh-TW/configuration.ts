@@ -267,6 +267,7 @@ export const configuration = {
   },
   agentsPage: {
     pageTitle: 'Agent',
+    paramsConfig: '參數設定',
     runStatuses: { running: '執行中', success: '成功', failed: '失敗' },
     catalog: {
       premarket_outlook: { name: '盤前分析', description: '開盤前綜合昨日分析和隔夜資訊，展望今日走勢' },
@@ -275,6 +276,21 @@ export const configuration = {
       chart_analyst: { name: '技術分析（能力）', description: '內部能力：詳情頁按需觸發影像技術分析，不獨立排程' },
       news_digest: { name: '新聞速遞', description: '彙總相關新聞與事件' },
       tradingagents: { name: 'TradingAgents 深度分析', description: '多 Agent 投資決策框架，結合基本面、情緒、新聞、技術分析、辯論與風控' },
+    },
+    intradayConfig: {
+      title: '盤中監測參數設定', description: '設定盤中異動門檻、持倉提醒與通知間隔。',
+      takeProfit: '止盈提醒門檻（%）', takeProfitHint: '持倉浮盈達到此比例時，提示 AI 考慮止盈',
+      stopLoss: '止損預警門檻（%）', stopLossHint: '持倉浮虧達到此比例時，提示 AI 注意止損',
+      price: '價格異動門檻（%）', priceHint: '價格漲跌幅達到門檻時，作為盤中異動訊號',
+      volume: '量比異動門檻', volumeHint: '量比達到門檻時，作為盤中異動訊號',
+      throttle: '同一檔通知間隔（分鐘）', throttleHint: '同一檔股票在間隔內不重複傳送通知',
+      eventOnly: '啟用事件偵測', eventOnlyHint: '把價格／量能異動當作 AI 的參考訊號（不會阻擋分析）',
+      cancel: '取消', save: '儲存', saving: '儲存中…',
+      errors: {
+        required: '此欄位不可空白', number: '請輸入有效數字', takeProfit: '請輸入大於 0 且不超過 1000 的數值',
+        stopLoss: '請輸入介於 -100（含）與 0 之間的數值', price: '請輸入大於 0 且不超過 50 的數值',
+        volume: '請輸入大於 0 且不超過 50 的數值', throttle: '請輸入 0 到 1440 之間的整數', saveFailed: '儲存失敗',
+      },
     },
     title: '自動化任務管理與排程', health: '排程健康', refresh: '重新整理', timezone: '時區', next24h: '未來 24h 將觸發', recentFailed: '最近失敗', emptyTitle: '暫無 Agent', emptyDescription: '啟動後台服務後 Agent 會自動註冊',
     modes: { single: '逐只分析', batch: '批次分析' }, unbound: '未繫結股票', more: '、...更多', bound: '已繫結 {{bound}} / {{total}}', deepConfig: '深度設定', futureTrigger: '未來觸發時間：', futureThree: '未來 3 次：', systemDefault: '系統預設', running: '執行中', trigger: '觸發', recentRun: '最近執行', enabled: '啟用', disabled: '停用', recentRuns: '最近 5 次執行', loading: '載入中…', noRecords: '暫無記錄',

@@ -269,6 +269,7 @@ export const configuration = {
   },
   agentsPage: {
     pageTitle: 'Agents',
+    paramsConfig: 'Parameters',
     runStatuses: { running: 'Running', success: 'Succeeded', failed: 'Failed' },
     catalog: {
       premarket_outlook: { name: 'Pre-market outlook', description: 'Combines the prior session and overnight developments before the open to frame the day ahead' },
@@ -277,6 +278,21 @@ export const configuration = {
       chart_analyst: { name: 'Technical analysis (capability)', description: 'Internal on-demand chart analysis used from stock details; it is not scheduled independently' },
       news_digest: { name: 'News digest', description: 'Summarizes relevant news and events' },
       tradingagents: { name: 'TradingAgents deep analysis', description: 'Multi-agent investment research combining fundamentals, sentiment, news, technical analysis, debate, and risk review' },
+    },
+    intradayConfig: {
+      title: 'Intraday monitor parameters', description: 'Set intraday change thresholds, position alerts, and notification intervals.',
+      takeProfit: 'Take-profit alert threshold (%)', takeProfitHint: 'When unrealized profit reaches this level, prompt AI to consider taking profit',
+      stopLoss: 'Stop-loss warning threshold (%)', stopLossHint: 'When unrealized loss reaches this level, prompt AI to consider risk',
+      price: 'Price change threshold (%)', priceHint: 'Treat price changes that reach this level as an intraday signal',
+      volume: 'Volume ratio threshold', volumeHint: 'Treat volume ratios that reach this level as an intraday signal',
+      throttle: 'Notification interval per symbol (minutes)', throttleHint: 'Avoid repeating notifications for the same symbol during this interval',
+      eventOnly: 'Enable event detection', eventOnlyHint: 'Use price and volume changes as AI reference signals without blocking analysis',
+      cancel: 'Cancel', save: 'Save', saving: 'Saving…',
+      errors: {
+        required: 'This field is required', number: 'Enter a valid number', takeProfit: 'Enter a value greater than 0 and at most 1000',
+        stopLoss: 'Enter a value from -100 (inclusive) to less than 0', price: 'Enter a value greater than 0 and at most 50',
+        volume: 'Enter a value greater than 0 and at most 50', throttle: 'Enter an integer from 0 to 1440', saveFailed: 'Save failed',
+      },
     },
     title: 'Automation and scheduling', health: 'Schedule health', refresh: 'Refresh', timezone: 'Timezone', next24h: 'Next 24h triggers', recentFailed: 'Recent failures', emptyTitle: 'No Agents', emptyDescription: 'Agents register automatically after the background service starts',
     modes: { single: 'Analyze individually', batch: 'Batch analysis' }, unbound: 'No stocks bound', more: ', and more', bound: '{{bound}} / {{total}} bound', deepConfig: 'Advanced config', futureTrigger: 'Next trigger: ', futureThree: 'Next 3: ', systemDefault: 'System default', running: 'Running', trigger: 'Run', recentRun: 'Recent run', enabled: 'Enable', disabled: 'Disable', recentRuns: 'Last 5 runs', loading: 'Loading…', noRecords: 'No records',

@@ -266,6 +266,7 @@ export const configuration = {
   },
   agentsPage: {
     pageTitle: 'Agent',
+    paramsConfig: '参数设置',
     runStatuses: { running: '运行中', success: '成功', failed: '失败' },
     catalog: {
       premarket_outlook: { name: '盘前分析', description: '开盘前综合昨日分析和隔夜信息，展望今日走势' },
@@ -274,6 +275,21 @@ export const configuration = {
       chart_analyst: { name: '技术分析（能力）', description: '内部能力：详情页按需触发图像技术分析，不独立调度' },
       news_digest: { name: '新闻速递', description: '汇总相关新闻与事件' },
       tradingagents: { name: 'TradingAgents 深度分析', description: '多 Agent 投资决策框架，结合基本面、情绪、新闻、技术分析、辩论与风控' },
+    },
+    intradayConfig: {
+      title: '盘中监测参数设置', description: '设置盘中异动阈值、持仓提醒和通知间隔。',
+      takeProfit: '止盈提醒门槛（%）', takeProfitHint: '持仓浮盈达到此比例时，提示 AI 考虑止盈',
+      stopLoss: '止损预警门槛（%）', stopLossHint: '持仓浮亏达到此比例时，提示 AI 注意止损',
+      price: '价格异动门槛（%）', priceHint: '价格涨跌幅达到门槛时，作为盘中异动信号',
+      volume: '量比异动门槛', volumeHint: '量比达到门槛时，作为盘中异动信号',
+      throttle: '同一股票通知间隔（分钟）', throttleHint: '同一股票在间隔内不重复推送通知',
+      eventOnly: '启用事件检测', eventOnlyHint: '将价格／量能异动作为 AI 的参考信号（不会阻止分析）',
+      cancel: '取消', save: '保存', saving: '保存中…',
+      errors: {
+        required: '此字段不能为空', number: '请输入有效数字', takeProfit: '请输入大于 0 且不超过 1000 的数值',
+        stopLoss: '请输入介于 -100（含）与 0 之间的数值', price: '请输入大于 0 且不超过 50 的数值',
+        volume: '请输入大于 0 且不超过 50 的数值', throttle: '请输入 0 到 1440 之间的整数', saveFailed: '保存失败',
+      },
     },
     title: '自动化任务管理与调度', health: '调度健康', refresh: '刷新', timezone: '时区', next24h: '未来 24h 将触发', recentFailed: '最近失败', emptyTitle: '暂无 Agent', emptyDescription: '启动后台服务后 Agent 会自动注册',
     modes: { single: '逐只分析', batch: '批量分析' }, unbound: '未绑定股票', more: '、...更多', bound: '已绑定 {{bound}} / {{total}}', deepConfig: '深度配置', futureTrigger: '未来触发时间：', futureThree: '未来 3 次：', systemDefault: '系统默认', running: '运行中', trigger: '触发', recentRun: '最近运行', enabled: '启用', disabled: '停用', recentRuns: '最近 5 次运行', loading: '加载中…', noRecords: '暂无记录',

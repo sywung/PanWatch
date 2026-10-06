@@ -101,6 +101,54 @@ def _public_agent_config(config: dict | None) -> dict:
     return value
 
 
+_INTRADAY_MONITOR_CONFIG_RULES = {
+    "event_only": {"type": "bool"},
+    "price_alert_threshold": {"type": "number", "min": 0, "min_inclusive": False, "max": 50, "max_inclusive": True},
+    "volume_alert_ratio": {"type": "number", "min": 0, "min_inclusive": False, "max": 50, "max_inclusive": True},
+    "stop_loss_warning": {"type": "number", "min": -100, "min_inclusive": True, "max": 0, "max_inclusive": False},
+    "take_profit_warning": {"type": "number", "min": 0, "min_inclusive": False, "max": 1000, "max_inclusive": True},
+    "throttle_minutes": {"type": "integer", "min": 0, "min_inclusive": True, "max": 1440, "max_inclusive": True},
+}
+
+
+def _validate_intraday_monitor_config(config: dict | None) -> dict:
+    if not isinstance(config, dict):
+        raise api_error(422, "invalid_agent_config", "config 必須是物件")
+
+    for key, value in config.items():
+        rule = _INTRADAY_MONITOR_CONFIG_RULES.get(key)
+        if rule is None:
+            raise api_error(422, "invalid_agent_config", f"{key} 不是允許的設定欄位")
+
+        value_type = rule["type"]
+        if value_type == "bool":
+            valid_type = isinstance(value, bool)
+        elif value_type == "integer":
+            valid_type = isinstance(value, int) and not isinstance(value, bool)
+        else:
+            valid_type = isinstance(value, (int, float)) and not isinstance(value, bool)
+
+        if not valid_type:
+            raise api_error(422, "invalid_agent_config", f"{key} 型別不正確")
+
+        if value_type != "bool":
+            lower_ok = value >= rule["min"] if rule["min_inclusive"] else value > rule["min"]
+            upper_ok = value <= rule["max"] if rule["max_inclusive"] else value < rule["max"]
+            if not lower_ok or not upper_ok:
+                raise api_error(422, "invalid_agent_config", f"{key} 超出允許範圍")
+
+    return dict(config)
+
+
+def _reload_scheduler_best_effort() -> None:
+    try:
+        from server import reload_scheduler
+
+        reload_scheduler()
+    except Exception:
+        logger.warning("更新 Agent 後重載排程失敗", exc_info=True)
+
+
 @router.get("/health")
 def agents_health(
     include_internal: bool = Query(default=False),
@@ -284,7 +332,11 @@ def update_agent(
     if not agent:
         raise api_error(404, "agent_not_found", f"Agent {agent_name} 不存在")
 
-    for key, value in update.model_dump(exclude_unset=True).items():
+    updates = update.model_dump(exclude_unset=True)
+    if agent_name == "intraday_monitor" and "config" in updates:
+        updates["config"] = _validate_intraday_monitor_config(updates["config"])
+
+    for key, value in updates.items():
         if key == "config":
             value = _public_agent_config(value)
         setattr(agent, key, value)
@@ -297,6 +349,8 @@ def update_agent(
 
     db.commit()
     db.refresh(agent)
+    if any(key in updates for key in ("config", "schedule", "enabled")):
+        _reload_scheduler_best_effort()
     return _agent_to_response(agent)
 
 

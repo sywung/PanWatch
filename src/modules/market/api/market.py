@@ -85,13 +85,30 @@ async def get_market_indices():
         md = get_market_data()
         # 台股指数走 TWSE MIS(腾讯无台股指数);其余市场照旧走腾讯
         tw_fetch = getattr(md, "tw_index_quotes", None)
-        tw_quotes = tw_fetch() if tw_fetch else []
-        quotes = md.index_quotes(
-            [idx["tencent_symbol"] for idx in MARKET_INDICES if idx["market"] != "TW"]
-        )
     except Exception as e:
         logger.error(f"获取市场指数失败: {e}")
         return []
+
+    fetches = []
+    if tw_fetch:
+        fetches.append(asyncio.to_thread(tw_fetch))
+    else:
+        fetches.append(asyncio.sleep(0, result=[]))
+    fetches.append(asyncio.to_thread(
+        md.index_quotes,
+        [idx["tencent_symbol"] for idx in MARKET_INDICES if idx["market"] != "TW"],
+    ))
+    tw_result, quote_result = await asyncio.gather(*fetches, return_exceptions=True)
+    if isinstance(tw_result, Exception):
+        logger.error(f"获取台湾市场指数失败: {tw_result}")
+        tw_quotes = []
+    else:
+        tw_quotes = tw_result
+    if isinstance(quote_result, Exception):
+        logger.error(f"获取其他市场指数失败: {quote_result}")
+        quotes = []
+    else:
+        quotes = quote_result
 
     # 构建 response_symbol -> quote 映射
     quote_map = {}

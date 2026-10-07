@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import re
 
-from marketdata.http import market_get
+from marketdata.http import market_get, register_circuit_breaker
 from marketdata.symbol import Symbol
 from marketdata.types import Quote
 from marketdata.vendors.base import QuoteVendor
 
 _URL = "https://mis.twse.com.tw/stock/api/getStockInfo.jsp"
 _CODE_RE = re.compile(r"^\d{4,6}[A-Z]?$")
+
+register_circuit_breaker("mis.twse.com.tw", failure_threshold=3, cooldown_s=300)
 
 
 def _number(value) -> float | None:

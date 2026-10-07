@@ -61,7 +61,89 @@ def record_error(msg: str) -> None:
 
 
 _THROTTLE_LOCK = threading.Lock()
+_THROTTLE_HOST_LOCKS: dict[str, threading.Lock] = {}
 _last_call: dict[str, float] = {}
+
+
+class _CircuitBreaker:
+    def __init__(self, failure_threshold: int, cooldown_s: float):
+        self.failure_threshold = failure_threshold
+        self.cooldown_s = cooldown_s
+        self.failures = 0
+        self.open_until: float | None = None
+        self.probe_in_flight = False
+
+
+_CIRCUIT_LOCK = threading.Lock()
+_CIRCUIT_BREAKERS: dict[str, _CircuitBreaker] = {}
+
+
+def register_circuit_breaker(host_key: str, failure_threshold: int, cooldown_s: float) -> None:
+    """为 host 启用连续失败熔断。重复注册会更新配置并重置该 host 状态。"""
+    with _CIRCUIT_LOCK:
+        _CIRCUIT_BREAKERS[host_key] = _CircuitBreaker(
+            failure_threshold=max(1, int(failure_threshold)),
+            cooldown_s=max(0.0, float(cooldown_s)),
+        )
+
+
+def circuit_breaker_config(host_key: str) -> tuple[int, float] | None:
+    """返回 host 的熔断配置；未注册时返回 None。"""
+    with _CIRCUIT_LOCK:
+        breaker = _CIRCUIT_BREAKERS.get(host_key)
+        if breaker is None:
+            return None
+        return breaker.failure_threshold, breaker.cooldown_s
+
+
+def reset_circuit_breakers() -> None:
+    """清除所有 host 的熔断状态(失败计数、开路、探测中),保留注册配置。供测试隔离使用。"""
+    with _CIRCUIT_LOCK:
+        for breaker in _CIRCUIT_BREAKERS.values():
+            breaker.failures = 0
+            breaker.open_until = None
+            breaker.probe_in_flight = False
+
+
+def _acquire_circuit(host_key: str) -> tuple[_CircuitBreaker | None, bool, str | None]:
+    """返回 (状态, 是否为半开探测, 拒绝原因)。"""
+    with _CIRCUIT_LOCK:
+        breaker = _CIRCUIT_BREAKERS.get(host_key)
+        if breaker is None or breaker.open_until is None:
+            return breaker, False, None
+
+        if time.monotonic() < breaker.open_until:
+            return breaker, False, f"{host_key} 熔断中，冷却期尚未结束"
+        if breaker.probe_in_flight:
+            return breaker, False, f"{host_key} 熔断半开，探测请求进行中"
+
+        breaker.probe_in_flight = True
+        return breaker, True, None
+
+
+def _finish_circuit(breaker: _CircuitBreaker | None, *, success: bool, probe: bool, host_key: str) -> None:
+    if breaker is None:
+        return
+    with _CIRCUIT_LOCK:
+        # reset/register may have replaced this state while its request was in flight.
+        if _CIRCUIT_BREAKERS.get(host_key) is not breaker:
+            return
+        if success:
+            breaker.failures = 0
+            if probe:
+                breaker.open_until = None
+                breaker.probe_in_flight = False
+            return
+
+        if probe:
+            breaker.probe_in_flight = False
+            breaker.failures = breaker.failure_threshold
+            breaker.open_until = time.monotonic() + breaker.cooldown_s
+        else:
+            breaker.failures += 1
+            if breaker.failures >= breaker.failure_threshold:
+                breaker.failures = breaker.failure_threshold
+                breaker.open_until = time.monotonic() + breaker.cooldown_s
 
 
 def throttle(host_key: str, min_interval_s: float) -> None:
@@ -69,6 +151,8 @@ def throttle(host_key: str, min_interval_s: float) -> None:
     if min_interval_s <= 0:
         return
     with _THROTTLE_LOCK:
+        host_lock = _THROTTLE_HOST_LOCKS.setdefault(host_key, threading.Lock())
+    with host_lock:
         wait = min_interval_s - (time.time() - _last_call.get(host_key, 0.0))
         if wait > 0:
             time.sleep(wait)
@@ -171,7 +255,14 @@ def _market_request(
     """共用 HTTP 请求、解析及失败处理。"""
     effective_proxy = proxy
     last_err: Any = None
-    for attempt in range(max(1, retries + 1)):
+    breaker, probe, rejected_reason = _acquire_circuit(host_key)
+    if rejected_reason is not None:
+        label = log_label or host_key
+        record_error(f"{label}: {rejected_reason}")
+        return None
+
+    attempts = 1 if probe else max(1, retries + 1)
+    for attempt in range(attempts):
         throttle(host_key, min_interval_s)
         try:
             with httpx.Client(
@@ -189,17 +280,20 @@ def _market_request(
                 if raise_for_status:
                     resp.raise_for_status()
                 if parse == "response":
-                    return resp
-                if parse == "json":
-                    return resp.json()
-                if parse == "content":
-                    return resp.content
-                if encoding:
-                    return resp.content.decode(encoding, errors="ignore")
-                return resp.text
+                    result = resp
+                elif parse == "json":
+                    result = resp.json()
+                elif parse == "content":
+                    result = resp.content
+                elif encoding:
+                    result = resp.content.decode(encoding, errors="ignore")
+                else:
+                    result = resp.text
+                _finish_circuit(breaker, success=True, probe=probe, host_key=host_key)
+                return result
         except Exception as e:
             last_err = e
-        if attempt < retries:
+        if attempt + 1 < attempts:
             time.sleep(backoff * (attempt + 1) + random.uniform(0, jitter))
 
     if last_err is not None:
@@ -207,4 +301,5 @@ def _market_request(
         sym = f" symbol={symbol}" if symbol else ""
         logger.warning(f"{label} 获取失败{sym}: {last_err}{source_suffix()}")
         record_error(f"{label}{sym}: {type(last_err).__name__}: {last_err}")
+    _finish_circuit(breaker, success=False, probe=probe, host_key=host_key)
     return None

@@ -147,22 +147,33 @@ export default function DashboardPage() {
     // 指数 pills:独立加载不阻塞首屏(spark 冷启动可能 ~1s,数据到了自然浮现)
     dashboardApi.indices().then(setIndices).catch(() => {})
     // 快车道:DB/轻量查询,先让首屏(要紧事/体检分布/组合速览)尽快出来
-    const [sc, ov, dg, ht, td, ps, ms] = await Promise.allSettled([
-      dashboardApi.intradayScan(),
-      dashboardApi.overview({ market: 'ALL', action_limit: 6, risk_limit: 6 }),
-      portfolioApi.diagnostics(),
-      homeApi.alertHitsToday(),
-      homeApi.todos(),
-      dashboardApi.portfolioSummary(),
-      dashboardApi.marketStatus(),
+    const scanRequest = dashboardApi.intradayScan()
+    const overviewRequest = dashboardApi.overview({ market: 'ALL', action_limit: 6, risk_limit: 6 })
+    const diagnosticsRequest = portfolioApi.diagnostics()
+    const alertHitsRequest = homeApi.alertHitsToday()
+    const todosRequest = homeApi.todos()
+    const portfolioSummaryRequest = dashboardApi.portfolioSummary()
+    const marketStatusRequest = dashboardApi.marketStatus()
+
+    // 每個快車道結果到達就先回填，避免慢 API 阻住已完成的首頁區塊。
+    void scanRequest.then((value) => setScan(value.stocks || []), () => {})
+    void overviewRequest.then(setOverview, () => {})
+    void diagnosticsRequest.then(setDiag, () => {})
+    void alertHitsRequest.then(setAlertHits, () => {})
+    void todosRequest.then((value) => setTodos(value.todos || []), () => {})
+    void portfolioSummaryRequest.then(setPortfolioSummary, () => {})
+    void marketStatusRequest.then(setMarketStatus, () => {})
+
+    const settled = await Promise.allSettled([
+      scanRequest,
+      overviewRequest,
+      diagnosticsRequest,
+      alertHitsRequest,
+      todosRequest,
+      portfolioSummaryRequest,
+      marketStatusRequest,
     ])
-    if (sc.status === 'fulfilled') setScan(sc.value.stocks || [])
-    if (ov.status === 'fulfilled') setOverview(ov.value)
-    if (dg.status === 'fulfilled') setDiag(dg.value)
-    if (ht.status === 'fulfilled') setAlertHits(ht.value)
-    if (td.status === 'fulfilled') setTodos(td.value.todos || [])
-    if (ps.status === 'fulfilled') setPortfolioSummary(ps.value)
-    if (ms.status === 'fulfilled') setMarketStatus(ms.value)
+    const ov = settled[1]
     setLoading(false) // 首屏不再等基准/归因(要拉全持仓 K 线)
     setRefreshedAt(new Date())
 

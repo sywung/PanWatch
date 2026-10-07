@@ -185,3 +185,33 @@ def test_breaker_logs_once_when_opening(monkeypatch, caplog):
         for _ in range(5):
             mh.market_get("http://x", host_key="brk-log", retries=0)
     assert sum("熔断" in r.getMessage() for r in caplog.records) == 1
+
+
+def _capture_market_get(monkeypatch, module):
+    calls = []
+
+    def fake(url, **kw):
+        calls.append(kw)
+        return None
+
+    monkeypatch.setattr(module, "market_get", fake)
+    return calls
+
+
+def test_twse_quote_vendor_fails_fast_without_retry(monkeypatch):
+    """MIS 正常几百毫秒内回应；超时 10s 加上递增重试，会让熔断前的首次请求卡 20 秒以上（2026-10-07 实测 23s）。"""
+    import marketdata.vendors.twse as tv
+    from marketdata.symbol import Symbol
+
+    calls = _capture_market_get(monkeypatch, tv)
+    tv.TwseMisQuoteVendor().fetch([Symbol.parse("2330", "TW")], {})
+    assert calls and all(c.get("timeout", 10) <= 3 and c.get("retries") == 0 for c in calls)
+
+
+def test_tw_index_quotes_fails_fast_without_retry(monkeypatch):
+    import marketdata.client as client_mod
+    import marketdata.vendors.twse as tv
+
+    calls = _capture_market_get(monkeypatch, tv)  # tw_index_quotes 经由 twse.market_get 取数
+    client_mod.MarketData.tw_index_quotes(object.__new__(client_mod.MarketData))
+    assert calls and all(c.get("timeout", 10) <= 3 and c.get("retries") == 0 for c in calls)

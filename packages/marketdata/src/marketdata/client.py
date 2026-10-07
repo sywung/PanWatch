@@ -270,10 +270,11 @@ class MarketData:
         """通过 TWSE MIS 取得加权与櫃买指数行情。"""
         from marketdata.vendors import twse
         payload = twse.market_get(
-            "https://mis.twse.com.tw/stock/api/getStockInfo.jsp",
-            host_key="mis.twse.com.tw",
+            twse._URL,
+            host_key=twse.MIS_HOST,
             params={"ex_ch": "tse_t00.tw|otc_o00.tw", "json": "1", "delay": "0"},
-            headers={"User-Agent": "Mozilla/5.0"}, timeout=10, parse="json",
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=twse.MIS_TIMEOUT_S, retries=twse.MIS_RETRIES, parse="json",
             log_label="TWSE指数行情",
         )
         rows = payload.get("msgArray") if isinstance(payload, dict) else []

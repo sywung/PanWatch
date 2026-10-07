@@ -12,7 +12,12 @@ from marketdata.vendors.base import QuoteVendor
 _URL = "https://mis.twse.com.tw/stock/api/getStockInfo.jsp"
 _CODE_RE = re.compile(r"^\d{4,6}[A-Z]?$")
 
-register_circuit_breaker("mis.twse.com.tw", failure_threshold=3, cooldown_s=300)
+MIS_HOST = "mis.twse.com.tw"
+# MIS 正常几百毫秒内回应;封锁 IP 时会断线或读超时。快速失败、不重试,交给熔断与下一个报价来源。
+MIS_TIMEOUT_S = 3
+MIS_RETRIES = 0
+
+register_circuit_breaker(MIS_HOST, failure_threshold=3, cooldown_s=300)
 
 
 def _number(value) -> float | None:
@@ -44,10 +49,11 @@ class TwseMisQuoteVendor(QuoteVendor):
             channels = [f"{ex}_{code}.tw" for code in batch for ex in ("tse", "otc")]
             payload = market_get(
                 _URL,
-                host_key="mis.twse.com.tw",
+                host_key=MIS_HOST,
                 params={"ex_ch": "|".join(channels), "json": "1", "delay": "0"},
                 headers={"User-Agent": "Mozilla/5.0"},
-                timeout=10,
+                timeout=MIS_TIMEOUT_S,
+                retries=MIS_RETRIES,
                 parse="json",
                 log_label="TWSE MIS行情",
             )

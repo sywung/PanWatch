@@ -133,17 +133,24 @@ def _finish_circuit(breaker: _CircuitBreaker | None, *, success: bool, probe: bo
             if probe:
                 breaker.open_until = None
                 breaker.probe_in_flight = False
+                logger.info(f"{host_key} 半开探测成功,熔断解除")
             return
 
         if probe:
             breaker.probe_in_flight = False
             breaker.failures = breaker.failure_threshold
             breaker.open_until = time.monotonic() + breaker.cooldown_s
+            logger.warning(f"{host_key} 半开探测失败,继续熔断 {breaker.cooldown_s:.0f}s")
         else:
             breaker.failures += 1
             if breaker.failures >= breaker.failure_threshold:
+                was_closed = breaker.open_until is None
                 breaker.failures = breaker.failure_threshold
                 breaker.open_until = time.monotonic() + breaker.cooldown_s
+                if was_closed:
+                    logger.warning(
+                        f"{host_key} 连续失败 {breaker.failure_threshold} 次,熔断 {breaker.cooldown_s:.0f}s"
+                    )
 
 
 def throttle(host_key: str, min_interval_s: float) -> None:

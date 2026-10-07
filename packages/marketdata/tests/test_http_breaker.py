@@ -175,3 +175,13 @@ def test_throttle_still_serializes_same_host(monkeypatch):
     started = _real_time.perf_counter()
     mh.throttle("thr-c", 0.3)
     assert _real_time.perf_counter() - started >= 0.25
+
+
+def test_breaker_logs_once_when_opening(monkeypatch, caplog):
+    _clock(monkeypatch)
+    mh.register_circuit_breaker("brk-log", failure_threshold=1, cooldown_s=60)
+    monkeypatch.setattr(mh.httpx, "Client", _FailClient)
+    with caplog.at_level("WARNING", logger=mh.logger.name):
+        for _ in range(5):
+            mh.market_get("http://x", host_key="brk-log", retries=0)
+    assert sum("熔断" in r.getMessage() for r in caplog.records) == 1

@@ -53,7 +53,12 @@ export function formatDate(
 ): string {
   const date = value instanceof Date ? value : new Date(value)
   if (Number.isNaN(date.getTime())) return ''
-  return new Intl.DateTimeFormat(localeOrCurrent(locale), options).format(date)
+  // 顯示時、分時一律 24 小時制(zh-TW 預設為「下午02:05」);呼叫端明確指定 hour12/hourCycle 時尊重之
+  const showsHour = options?.hour !== undefined || options?.timeStyle !== undefined
+  const resolved = showsHour && options?.hour12 === undefined && options?.hourCycle === undefined
+    ? { ...options, hour12: false }
+    : options
+  return new Intl.DateTimeFormat(localeOrCurrent(locale), resolved).format(date)
 }
 
 export function formatMarketName(market: MarketCode | 'all' | string): string {

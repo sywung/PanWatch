@@ -56,7 +56,7 @@ export function ApprovalCard({ approval, onDecision }: ApprovalCardProps) {
             </p>
           ) : approval.expires_at && (
             <p className="mt-1.5 text-[11px] text-muted-foreground/80">
-              {assistantT('assistantPage.pendingApproval', { time: new Date(approval.expires_at).toLocaleString() })}
+              {assistantT('assistantPage.pendingApproval', { time: new Date(approval.expires_at).toLocaleString(undefined, { hour12: false }) })}
             </p>
           )}
           {failed && <p className="mt-1.5 text-[11px] text-destructive">{assistantT('assistantPage.submitFailed')}</p>}

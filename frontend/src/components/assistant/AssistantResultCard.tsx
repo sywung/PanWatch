@@ -29,7 +29,7 @@ function formatObservedAt(value: string | null | undefined, locale: string): str
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return ''
   return new Intl.DateTimeFormat(locale, {
-    month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit',
+    month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
   }).format(date)
 }
 

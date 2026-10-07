@@ -1539,7 +1539,7 @@ export default function StocksPage() {
                 <>
                   <div className="w-px h-4 bg-border" />
                   <span className="text-[10px] text-muted-foreground/60">
-                    {lastRefreshTime.toLocaleTimeString(getCurrentLocale(), { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    {lastRefreshTime.toLocaleTimeString(getCurrentLocale(), { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
                   </span>
                 </>
               )}
@@ -1625,7 +1625,7 @@ export default function StocksPage() {
           </div>
           {lastRefreshTime && (
             <span className="md:hidden shrink-0 text-[10px] text-muted-foreground/60 font-mono ml-1">
-              {lastRefreshTime.toLocaleTimeString(getCurrentLocale(), { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              {lastRefreshTime.toLocaleTimeString(getCurrentLocale(), { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
             </span>
           )}
         </div>

@@ -213,5 +213,7 @@ def test_tw_index_quotes_fails_fast_without_retry(monkeypatch):
     import marketdata.vendors.twse as tv
 
     calls = _capture_market_get(monkeypatch, tv)  # tw_index_quotes 经由 twse.market_get 取数
-    client_mod.MarketData.tw_index_quotes(object.__new__(client_mod.MarketData))
+    from marketdata import StaticConfigProvider
+
+    client_mod.MarketData(config=StaticConfigProvider({})).tw_index_quotes()  # 无来源设定:照旧打 MIS
     assert calls and all(c.get("timeout", 10) <= 3 and c.get("retries") == 0 for c in calls)

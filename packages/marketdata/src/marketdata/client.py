@@ -12,7 +12,7 @@ from marketdata.cache import TTLCache
 from marketdata.defaults import InMemoryMetricsSink
 from marketdata.engine import Engine
 from marketdata.http import record_error
-from marketdata.ports import ConfigProvider, MetricsSink
+from marketdata.ports import ConfigProvider, MetricsSink, SourceConfig
 from marketdata.registry import build_vendors
 from marketdata.symbol import Symbol
 from marketdata.types import (
@@ -59,6 +59,7 @@ INDEX_TENCENT: dict[str, str] = {
 # Yahoo 只有加权指数(^TWII);柜买指数没有对应代码(实测 ^TWOII 等均 404),
 # 柜买指数仅提供 tw_index_quotes() 的实时报价,不提供日K
 INDEX_YAHOO: dict[str, str] = {"TWII": "^TWII"}
+_TW_INDEX_ORDER = ("TWII", "TPEX")
 
 logger = logging.getLogger(__name__)
 
@@ -267,6 +268,34 @@ class MarketData:
         return fetch_raw(list(tencent_symbols)) if tencent_symbols else []
 
     def tw_index_quotes(self) -> list[dict]:
+        """加权与櫃买指数行情:依报价来源(TW)的启用与优先级,在 MIS 与 yuantaData 间逐一补齐。
+
+        没有启用的 twse 来源时仍先打 MIS(维持旧行为)。单一来源失败不影响其他来源。
+        """
+        from marketdata.vendors import yuantadata
+
+        sources = [s for s in self.config.sources_for("quote", "TW") if s.vendor in ("twse", "yuantadata")]
+        if not any(s.vendor == "twse" for s in sources):
+            sources = [SourceConfig(vendor="twse"), *sources]
+        found: dict[str, dict] = {}
+        for src in sources:
+            missing = {s for s in _TW_INDEX_ORDER if s not in found}
+            if not missing:
+                break
+            try:
+                if src.vendor == "twse":
+                    rows = self._tw_index_quotes_mis()
+                else:
+                    rows = yuantadata.fetch_tw_index_quotes(src.config or {}, missing)
+            except Exception as e:
+                logger.warning(f"台股指数行情 {src.vendor} 失败: {e}")
+                continue
+            for row in rows:
+                if row.get("symbol") in missing:
+                    found.setdefault(row["symbol"], row)
+        return [found[s] for s in _TW_INDEX_ORDER if s in found]
+
+    def _tw_index_quotes_mis(self) -> list[dict]:
         """通过 TWSE MIS 取得加权与櫃买指数行情。"""
         from marketdata.vendors import twse
         payload = twse.market_get(

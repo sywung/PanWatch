@@ -19,6 +19,8 @@ _MARKET_CACHE: dict[tuple[str, str], tuple[str | None, float | None]] = {}
 _MARKET_CACHE_LOCK = threading.Lock()
 _NEGATIVE_CACHE_SECONDS = 600.0
 _QUOTE_BATCH_SIZE = 50
+# 指数报价代码(2026-10-07 实测):不在商品清单,必须指定 market。
+_INDEX_CODES = {"TWII": ("IX0001", "TSE", "加權指數"), "TPEX": ("IX0043", "OTC", "櫃買指數")}
 _INTRADAY_INTERVALS = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "60m": 60}
 
 
@@ -234,6 +236,37 @@ def _missing_today_during_session(bars: list[Bar]) -> bool:
         and now.time() >= dt_time(9, 0)
         and not any(bar.date[:10] == now.date().isoformat() for bar in bars)
     )
+
+
+def fetch_tw_index_quotes(config: dict, wanted: set[str]) -> list[dict]:
+    """取加权(TWII)/柜买(TPEX)指数报价,格式同 MarketData.tw_index_quotes 的 MIS 结果。"""
+    base = _base_url(config)
+    out: list[dict] = []
+    for symbol, (code, market, name) in _INDEX_CODES.items():
+        if symbol not in wanted:
+            continue
+        response = _request(
+            f"{base}/api/v1/market/quotes", config,
+            params={"symbols": code, "market": market}, symbol=code,
+        )
+        if response is None or _response_status(response) != 200:
+            continue
+        payload = _response_json(response)
+        rows = payload.get("data") if isinstance(payload, dict) else None
+        for row in rows or []:
+            if not isinstance(row, dict) or str(row.get("symbol") or "").strip().upper() != code:
+                continue
+            price = _number(row.get("price"))
+            if price is None or price <= 0:
+                continue
+            prev_close = _zero_none(row.get("prev_close"))
+            change = price - prev_close if prev_close is not None else 0.0
+            out.append({"symbol": symbol, "name": name, "current_price": price,
+                        "prev_close": prev_close, "change_amount": change,
+                        "change_pct": change / prev_close * 100 if prev_close else 0.0,
+                        "volume": 0.0, "turnover": 0.0})
+            break
+    return out
 
 
 class YuantaDataQuoteVendor(QuoteVendor):

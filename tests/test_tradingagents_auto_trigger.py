@@ -7,12 +7,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.modules.automation.tradingagents import operations as auto_trigger
+from src.platform.persistence.models import AgentConfig
 
 
-def _make_agent(raw_config: dict):
-    agent = MagicMock()
-    agent.raw_config = raw_config
-    return agent
+def _make_agent(config: dict):
+    # 用真 model：MagicMock 会凭空长出不存在的属性(曾读 raw_config 而测试照样过)
+    return AgentConfig(name="tradingagents", display_name="TradingAgents", config=config)
 
 
 def test_no_change_pct_skips():

@@ -72,3 +72,20 @@ export async function loadPortfolioPageBackgroundData<
 
   return { marketStatus, suggestions, priceAlerts, klines }
 }
+
+export interface AddedWatchlistItemApi<QuoteData> {
+  reloadStocks: () => Promise<unknown> | unknown
+  loadQuotes: (items: Array<{ symbol: string; market: string }>) => Promise<QuoteData>
+}
+
+// 新增自選後立刻補抓這一檔的報價；只重載清單的話，要等下一輪自動刷新才會有價格（畫面先顯示 --）
+export async function refreshAddedWatchlistItem<QuoteData>(
+  created: { symbol: string; market: string },
+  api: AddedWatchlistItemApi<QuoteData>,
+): Promise<QuoteData> {
+  const [, quotes] = await Promise.all([
+    api.reloadStocks(),
+    api.loadQuotes([{ symbol: created.symbol, market: created.market }]),
+  ])
+  return quotes
+}

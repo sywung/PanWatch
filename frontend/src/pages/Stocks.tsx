@@ -11,6 +11,7 @@ import {
   loadPortfolioPageBackgroundData,
   loadPortfolioPageCoreData,
   loadPortfolioPageQuoteData,
+  refreshAddedWatchlistItem,
 } from '@/lib/portfolio-page-data'
 import { SuggestionBadge, type SuggestionInfo, type KlineSummary } from '@panwatch/biz-ui/components/suggestion-badge'
 import { buildKlineSuggestion } from '@/lib/kline-scorer'
@@ -1008,11 +1009,12 @@ export default function StocksPage() {
   const handleStockSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      await stocksApi.create(stockForm)
+      const created = await stocksApi.create(stockForm)
       setStockForm(emptyStockForm)
       setSearchQuery('')
       setShowStockForm(false)
-      load()
+      void refreshAddedWatchlistItem(created, { reloadStocks: () => load(), loadQuotes: requestQuotes })
+        .then(rows => { if (rows.length > 0) setQuotes(prev => ({ ...prev, ...toQuoteMap(rows) })) })
       toast(stockT('stocksPage.messages.stockAdded'), 'success')
     } catch (e) {
       toast(e instanceof Error ? e.message : stockT('stocksPage.messages.addStockFailed'), 'error')

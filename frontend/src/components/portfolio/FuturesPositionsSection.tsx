@@ -130,7 +130,7 @@ export function FuturesPositionsSection({ accountId, positions, formatMoney, for
                     <Metric label={tr('unrealizedPnl')} value={position.unrealized_pnl == null ? '—' : `${position.unrealized_pnl >= 0 ? '+' : ''}${formatMoney(position.unrealized_pnl)}`} className={marketSignTextClass(position.unrealized_pnl)} />
                     <Metric label={tr('marginUsed')} value={position.margin_used == null ? '—' : formatMoney(position.margin_used)} />
                     <Metric label={tr('equity')} value={position.equity == null ? '—' : formatMoney(position.equity)} />
-                    <Metric label={tr('settlement')} value={`${position.settlement_date || '—'} · ${urgencyText(position)}`} className={urgencyClass(position)} />
+                    <Metric label={tr('settlement')} value={`${position.settlement_date || '—'} · ${urgencyText(position)}`} className={urgencyClass(position)} wide />
                   </div>
                 </article>
               ))}
@@ -156,6 +156,6 @@ export function FuturesPositionsSection({ accountId, positions, formatMoney, for
   )
 }
 
-function Metric({ label, value, className = '' }: { label: string; value: string; className?: string }) {
-  return <div className="flex justify-between gap-2 min-w-0"><span className="text-muted-foreground shrink-0">{label}</span><span className={`font-mono text-right truncate ${className}`}>{value}</span></div>
+function Metric({ label, value, className = '', wide = false }: { label: string; value: string; className?: string; wide?: boolean }) {
+  return <div className={`flex justify-between gap-2 min-w-0${wide ? ' col-span-2' : ''}`}><span className="text-muted-foreground shrink-0">{label}</span><span className={`font-mono text-right truncate ${className}`}>{value}</span></div>
 }

@@ -328,7 +328,7 @@ export const configuration = {
       product: '期貨商品', productSearchPlaceholder: '搜尋期貨商品代碼或名稱', contractMonth: '合約月份', selectContractMonth: '選擇合約月份',
       direction: '方向', long: '多', short: '空', lots: '口數', lotsUnit: '口', entryPrice: '成交價', currentPrice: '現價',
       unrealizedPnl: '期貨損益', marginUsed: '保證金佔用', equity: '權益數', settlement: '結算日', settlementExpired: '已過結算',
-      settlementToday: '今日結算', settlementInDays: '{{count}} 天后結算', settlementDaysLeft: '剩 {{count}} 天', marginCall: '追繳警示', actions: '操作', edit: '編輯', delete: '刪除',
+      settlementToday: '今日結算', settlementInDays: '{{count}} 天後結算', settlementDaysLeft: '剩 {{count}} 天', marginCall: '追繳警示', actions: '操作', edit: '編輯', delete: '刪除',
       deleteTitle: '刪除期貨部位', deleteDescription: '確定刪除 {{product}} {{contract}}？', cancel: '取消', deleting: '刪除中…',
       multiplier: '契約乘數', multiplierHint: '預設值，調整型契約請自行修改', note: '備註', save: '儲存', saving: '儲存中…',
       created: '期貨部位已新增', updated: '期貨部位已更新', deleted: '期貨部位已刪除', saveFailed: '儲存期貨部位失敗',

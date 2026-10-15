@@ -33,6 +33,7 @@ from marketdata.types import (
 )
 from marketdata.vendors.discovery import DiscoveryVendor
 from marketdata.vendors.news import EastmoneyStockNewsVendor
+from marketdata.vendors.base import ShareholdersVendor
 
 # 指数 secid(东财):指数与个股 secid 前缀规则不同,必须显式映射,否则按个股规则会取错标的。
 # 美股指数东财K线不支持,未列入 → index_klines 返回空,fail-soft。
@@ -512,6 +513,37 @@ class MarketData:
             if resp.ok and resp.data:
                 out.extend(resp.data)
         return out
+
+    def shareholders_history(
+        self, symbol: str | Symbol, *, skip_dates=(), market: str | None = None
+    ) -> list[tuple[str, list[dict]]]:
+        """依台股股權分散來源優先序，回傳第一個有資料的歷史序列。"""
+        sym = symbol if isinstance(symbol, Symbol) else Symbol.parse(symbol, market or "TW")
+        if sym.market.value != "TW":
+            return []
+
+        sources = sorted(
+            self._shareholders_engine.config.sources_for("shareholders", "TW"),
+            key=lambda source: source.priority,
+        )
+        for source in sources:
+            if not source.enabled:
+                continue
+            vendor = self._shareholders_engine.vendors.get(source.vendor)
+            history_method = getattr(vendor, "history", None) if vendor is not None else None
+            if (
+                not callable(history_method)
+                or getattr(type(vendor), "history", None) is ShareholdersVendor.history
+            ):
+                continue
+            try:
+                history = history_method(sym.code, source.config or {}, skip_dates)
+            except Exception as exc:
+                logger.warning("[marketdata/shareholders/history] vendor=%s raised: %s", source.vendor, exc)
+                continue
+            if history:
+                return history
+        return []
 
     def dividend(self, symbols: list[str | Symbol], *, market: str | None = None) -> list[DividendItem]:
         """批量分红(按 symbol,返回每只全部历史)。照 fundamentals() 分组范式。"""

@@ -435,6 +435,17 @@ class PremarketOutlookAgent(BaseAgent):
                 except Exception:
                     pass
 
+            if getattr(getattr(stock, "market", None), "value", getattr(stock, "market", None)) == MarketCode.TW.value:
+                from src.modules.market.shareholder_dispersion import dispersion_line_for
+                from src.platform.persistence.database import SessionLocal
+
+                with SessionLocal() as db:
+                    dispersion_line = dispersion_line_for(
+                        db, stock.symbol, "TW", context.report_language
+                    )
+                if dispersion_line:
+                    lines.append(f"- {dispersion_line}")
+
             # 个股相关新闻（分层：实时 > 扩展 > 历史）
             stock_news = (
                 (stock_ctx.get("news") or {}).get("realtime")

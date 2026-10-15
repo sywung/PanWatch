@@ -175,6 +175,27 @@ class ChartDrawing(Base):
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
 
+class ShareholderDispersion(Base):
+    """台股集保股權分散表的每週快照。"""
+
+    __tablename__ = "shareholder_dispersion"
+    __table_args__ = (
+        UniqueConstraint("market", "symbol", "data_date", name="uq_shareholder_dispersion"),
+        Index("ix_shareholder_dispersion_market_symbol_data_date", "market", "symbol", "data_date"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    symbol = Column(String(32), nullable=False)
+    market = Column(String, nullable=False)
+    data_date = Column(String, nullable=False)
+    holder_num = Column(Integer, nullable=True)
+    avg_shares = Column(Float, nullable=True)
+    big_holder_ratio = Column(Float, nullable=True)
+    thousand_lot_ratio = Column(Float, nullable=True)
+    levels = Column(JSON, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+
 class StockAgent(Base):
     """多对多: 每只股票可被多个 Agent 监控"""
 

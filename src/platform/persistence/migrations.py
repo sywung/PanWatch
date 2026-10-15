@@ -2095,6 +2095,30 @@ CREATE TABLE IF NOT EXISTS chart_drawings (
     )
 
 
+def _m9004_shareholder_dispersion(conn: Connection) -> None:
+    conn.execute(text("""
+CREATE TABLE IF NOT EXISTS shareholder_dispersion (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  symbol VARCHAR(32) NOT NULL,
+  market TEXT NOT NULL,
+  data_date TEXT NOT NULL,
+  holder_num INTEGER,
+  avg_shares FLOAT,
+  big_holder_ratio FLOAT,
+  thousand_lot_ratio FLOAT,
+  levels JSON NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT uq_shareholder_dispersion UNIQUE(market, symbol, data_date)
+)
+"""))
+    _create_index_if_missing(
+        conn,
+        "ix_shareholder_dispersion_market_symbol_data_date",
+        "CREATE INDEX ix_shareholder_dispersion_market_symbol_data_date "
+        "ON shareholder_dispersion(market, symbol, data_date)",
+    )
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(101, "agent_config_kind_and_visibility", _m101_agent_config_kind),
     Migration(102, "backfill_agent_kind_data", _m102_backfill_agent_kind),
@@ -2127,6 +2151,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(9001, "ai_model_extra_params", _m9001_ai_model_extra_params),
     Migration(9002, "futures_positions", _m9002_futures_positions),
     Migration(9003, "chart_drawings", _m9003_chart_drawings),
+    Migration(9004, "shareholder_dispersion", _m9004_shareholder_dispersion),
 )
 
 

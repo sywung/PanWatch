@@ -342,6 +342,13 @@ export const configuration = {
       },
     },
     marketStatus: { trading: 'Open', pre_market: 'Pre-market', break: 'Midday break', after_hours: 'Closed', closed: 'Closed', unknown: 'Unknown' },
+    watchToPosition: {
+      addTitle: 'Convert to position',
+      editTitle: 'Edit position',
+      noAccount: 'Please add an account first',
+      alreadyHeld: 'Already held; opened for editing',
+      account: 'Account',
+    },
     messages: {
       agent: 'Agent',
       futuresPositionUnsupported: 'Futures positions are not supported yet. Add futures to your watchlist instead.',

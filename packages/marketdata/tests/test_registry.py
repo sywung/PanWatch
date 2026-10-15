@@ -20,7 +20,7 @@ def test_package_vendors_by_type_content():
         "fundamentals": frozenset({"tencent", "eastmoney", "twse"}),
         "dragon_tiger": frozenset({"eastmoney", "twse"}),
         "margin": frozenset({"eastmoney", "twse"}),
-        "shareholders": frozenset({"eastmoney", "tdcc"}),
+        "shareholders": frozenset({"eastmoney", "tdcc", "yuantadata"}),
         "dividend": frozenset({"eastmoney", "twse"}),
         "northbound": frozenset({"ths"}),
     }

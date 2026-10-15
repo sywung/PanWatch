@@ -33,6 +33,7 @@ from src.modules.market.api import (
     news,
     price_alerts,
     quotes,
+    shareholders,
     stocks,
 )
 from src.modules.paper_trading.api import paper_trading
@@ -85,6 +86,12 @@ app.include_router(
     chart_drawings.router,
     prefix="/api/chart-drawings",
     tags=["chart-drawings"],
+    dependencies=protected,
+)
+app.include_router(
+    shareholders.router,
+    prefix="/api/shareholders",
+    tags=["shareholders"],
     dependencies=protected,
 )
 app.include_router(

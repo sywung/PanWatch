@@ -60,7 +60,9 @@ from marketdata.vendors.tw_news import (
     CnyesFlashNewsVendor,
 )
 from marketdata.vendors.yuanta import YuantaKlineVendor, YuantaQuoteVendor
-from marketdata.vendors.yuantadata import YuantaDataKlineVendor, YuantaDataQuoteVendor
+from marketdata.vendors.yuantadata import (
+    YuantaDataKlineVendor, YuantaDataQuoteVendor, YuantaDataShareholdersVendor,
+)
 
 # 各数据类型 → {vendor name: vendor 类}。注意:vendor 的 import 本身是廉价的
 # (可选三方依赖如 yfinance 均在 fetch() 内部惰性 import),模块级导入不会引入重依赖。
@@ -123,6 +125,7 @@ VENDOR_CLASSES_BY_TYPE: dict[str, dict[str, type]] = {
     "shareholders": {
         "eastmoney": EastmoneyShareholdersVendor,
         "tdcc": TdccShareholdersVendor,
+        "yuantadata": YuantaDataShareholdersVendor,
     },
     "dividend": {
         "eastmoney": EastmoneyDividendVendor,

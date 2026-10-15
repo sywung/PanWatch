@@ -339,6 +339,13 @@ export const configuration = {
       },
     },
     marketStatus: { trading: '交易中', pre_market: '盘前', break: '午间休市', after_hours: '已收盘', closed: '休市', unknown: '未知' },
+    watchToPosition: {
+      addTitle: '转为持仓',
+      editTitle: '编辑持仓',
+      noAccount: '请先新增账户',
+      alreadyHeld: '已持有，已开启编辑',
+      account: '账户',
+    },
     messages: {
       agent: 'Agent',
       futuresPositionUnsupported: '期货持仓尚未支持，请改用自选观察',

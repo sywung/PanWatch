@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import threading
 import time
 from datetime import date, datetime, time as dt_time, timedelta, timezone
@@ -10,8 +11,8 @@ from zoneinfo import ZoneInfo
 
 from marketdata.http import market_get
 from marketdata.symbol import Symbol
-from marketdata.types import Bar, Quote
-from marketdata.vendors.base import KlineVendor, QuoteVendor
+from marketdata.types import Bar, Quote, ShareholderItem
+from marketdata.vendors.base import KlineVendor, QuoteVendor, ShareholdersVendor
 
 _TAIPEI = ZoneInfo("Asia/Taipei")
 _UTC = timezone.utc
@@ -391,3 +392,87 @@ class YuantaDataKlineVendor(KlineVendor):
         if _missing_today_during_session(bars):
             return []
         return bars
+
+
+class YuantaDataShareholdersVendor(ShareholdersVendor):
+    """從 yuantaData 讀取台股集保股權分散與歷史分級資料。"""
+
+    name = "yuantadata"
+    supports_markets = {"TW"}
+    _BATCH_SIZE = 50
+
+    def fetch(self, symbols: list[Symbol], config: dict) -> list[ShareholderItem]:
+        base = _base_url(config)
+        codes = list(dict.fromkeys(
+            symbol.code.strip() for symbol in symbols
+            if symbol.market == "TW" and symbol.code.strip()
+        ))
+        out: list[ShareholderItem] = []
+        for start in range(0, len(codes), self._BATCH_SIZE):
+            batch = codes[start:start + self._BATCH_SIZE]
+            response = _request(
+                f"{base}/api/v1/market/dispersion", config,
+                params={"symbols": ",".join(batch), "levels": "latest"},
+                symbol=",".join(batch),
+            )
+            if response is None:
+                raise RuntimeError("yuantaData 集保股權分散請求失敗")
+            status = _response_status(response)
+            if status != 200:
+                raise RuntimeError(f"yuantaData 集保股權分散 HTTP {status}")
+            payload = _response_json(response)
+            if not isinstance(payload, dict):
+                raise RuntimeError("yuantaData 集保股權分散回應無效")
+            rows = payload.get("items")
+            if not isinstance(rows, dict):
+                continue
+            for code in batch:
+                row = rows.get(code)
+                if not isinstance(row, dict):
+                    continue
+                out.append(ShareholderItem(
+                    report_date=str(row.get("data_date") or ""),
+                    symbol=code,
+                    holder_num=row.get("holder_num"),
+                    avg_shares=row.get("avg_shares"),
+                    big_holder_ratio=row.get("big_holder_ratio"),
+                    thousand_lot_ratio=row.get("thousand_lot_ratio"),
+                    levels=row.get("levels"),
+                ))
+        return out
+
+    def history(
+        self, code: str, config: dict, skip_dates=()
+    ) -> list[tuple[str, list[dict]]]:
+        code = str(code).strip()
+        if re.fullmatch(r"[0-9A-Za-z]{1,10}", code) is None:
+            return []
+        base = _base_url(config)
+        response = _request(
+            f"{base}/api/v1/market/dispersion/{code}", config,
+            params={"weeks": 52, "levels": "all"}, symbol=code,
+        )
+        if response is None:
+            raise RuntimeError("yuantaData 集保股權分散歷史請求失敗")
+        status = _response_status(response)
+        if status != 200:
+            raise RuntimeError(f"yuantaData 集保股權分散歷史 HTTP {status}")
+        payload = _response_json(response)
+        if not isinstance(payload, dict):
+            raise RuntimeError("yuantaData 集保股權分散歷史回應無效")
+        rows = payload.get("items")
+        if not isinstance(rows, list):
+            rows = []
+        backfill_status = str(payload.get("backfill_status") or "unknown")
+        if backfill_status not in {"done", "unavailable"} and len(rows) < 2:
+            return []
+        skipped = {str(day) for day in skip_dates}
+        result = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            data_date = str(row.get("data_date") or "")
+            levels = row.get("levels")
+            if data_date and data_date not in skipped and isinstance(levels, list):
+                result.append((data_date, levels))
+        return result

@@ -328,6 +328,17 @@ class DailyReportAgent(BaseAgent):
                 if flow.get("trend_5d") and flow.get("trend_5d") != "无数据":
                     lines.append(f"- 5日资金：{flow['trend_5d']}")
 
+            if getattr(getattr(w, "market", None), "value", getattr(w, "market", None)) == MarketCode.TW.value:
+                from src.modules.market.shareholder_dispersion import dispersion_line_for
+                from src.platform.persistence.database import SessionLocal
+
+                with SessionLocal() as db:
+                    dispersion_line = dispersion_line_for(
+                        db, w.symbol, "TW", context.report_language
+                    )
+                if dispersion_line:
+                    lines.append(f"- {dispersion_line}")
+
             # 相关新闻/公告
             stock_news = (
                 (stock_ctx.get("news") or {}).get("realtime")

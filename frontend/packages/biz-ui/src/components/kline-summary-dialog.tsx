@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Sparkles } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { fetchAPI } from '@panwatch/api'
@@ -7,6 +7,7 @@ import { Button } from '@panwatch/base-ui/components/ui/button'
 import { buildKlineSuggestion } from '@/lib/kline-scorer'
 import { TechnicalBadge, technicalToneFromSuggestionAction } from '@panwatch/biz-ui/components/technical-badge'
 import { KlineIndicators, localizeTechnicalStatus } from '@panwatch/biz-ui/components/kline-indicators'
+import InteractiveKline from '@panwatch/biz-ui/components/InteractiveKline'
 import { DEFAULT_MARKET } from '../market'
 import { getCurrentLocale, type SupportedLocale } from '@/i18n'
 
@@ -75,6 +76,8 @@ interface KlineSummaryDialogProps {
   stockName?: string
   hasPosition?: boolean
   initialSummary?: KlineSummaryData | null
+  showChart?: boolean
+  children?: ReactNode
 }
 
 type Translate = (key: string, options?: Record<string, unknown>) => string
@@ -155,6 +158,8 @@ export function KlineSummaryDialog({
   stockName,
   hasPosition,
   initialSummary = null,
+  showChart = false,
+  children,
 }: KlineSummaryDialogProps) {
   const { t, i18n } = useTranslation('bizUi')
   const tr: Translate = (key, options) =>
@@ -221,7 +226,10 @@ export function KlineSummaryDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md" onClick={(event) => event.stopPropagation()}>
+      <DialogContent
+        className={showChart ? 'max-w-5xl max-h-[90vh] overflow-y-auto' : 'max-w-md'}
+        onClick={(event) => event.stopPropagation()}
+      >
         <DialogHeader>
           <DialogTitle>{tr('title')}</DialogTitle>
           <DialogDescription>
@@ -237,6 +245,13 @@ export function KlineSummaryDialog({
             </div>
           </DialogDescription>
         </DialogHeader>
+
+        {showChart && symbol ? (
+          <section className="space-y-3">
+            <InteractiveKline symbol={symbol} market={market} />
+            {children}
+          </section>
+        ) : children}
 
         {!initialSummary && loading ? (
           <div className="text-[12px] text-muted-foreground">{tr('loading')}</div>

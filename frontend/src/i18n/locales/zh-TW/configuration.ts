@@ -340,6 +340,13 @@ export const configuration = {
       },
     },
     marketStatus: { trading: '交易中', pre_market: '盤前', break: '午間休市', after_hours: '已收盤', closed: '休市', unknown: '未知' },
+    watchToPosition: {
+      addTitle: '轉為持倉',
+      editTitle: '編輯持倉',
+      noAccount: '請先新增帳戶',
+      alreadyHeld: '已持有，已開啟編輯',
+      account: '帳戶',
+    },
     messages: {
       agent: 'Agent',
       futuresPositionUnsupported: '期貨持倉尚未支援，請改用自選觀察',

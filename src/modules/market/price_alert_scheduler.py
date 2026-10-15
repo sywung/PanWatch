@@ -51,6 +51,20 @@ class PriceAlertScheduler:
         except Exception as e:
             logger.exception(f"[期货转仓提醒] 扫描异常: {e}")
 
+    async def _shareholder_dispersion_job(self):
+        try:
+            from src.modules.market.shareholder_dispersion import collect_watchlist
+            from src.platform.persistence.database import SessionLocal
+
+            def collect():
+                with SessionLocal() as db:
+                    return collect_watchlist(db)
+
+            count = await asyncio.to_thread(collect)
+            logger.info("[集保股權分散] 每日收集完成: 新增=%s", count)
+        except Exception as exc:
+            logger.exception("[集保股權分散] 每日收集异常: %s", exc)
+
     async def trigger_once(self, *, dry_run: bool = False, rule_id: int | None = None) -> dict:
         return await ENGINE.scan_once(
             dry_run=dry_run, only_rule_id=rule_id, bypass_market_hours=True
@@ -80,6 +94,14 @@ class PriceAlertScheduler:
             self._rollover_job,
             CronTrigger(day_of_week="mon-fri", hour=12, minute=30, timezone=taipei),
             id="futures_rollover_noon",
+            replace_existing=True,
+            coalesce=True,
+            max_instances=1,
+        )
+        self.scheduler.add_job(
+            self._shareholder_dispersion_job,
+            CronTrigger(hour=6, minute=30, timezone=taipei),
+            id="shareholder_dispersion_daily",
             replace_existing=True,
             coalesce=True,
             max_instances=1,

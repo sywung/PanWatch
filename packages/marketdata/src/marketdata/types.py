@@ -197,6 +197,7 @@ class ShareholderItem:
     avg_shares: float | None = None    # 户均持股(股)
     big_holder_ratio: float | None = None    # 台股持股超过400张的占比(%)
     thousand_lot_ratio: float | None = None   # 台股持股超过1000张的占比(%)
+    levels: list[dict] | None = None
 
 
 @dataclass

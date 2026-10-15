@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Plus, Trash2, Pencil, Search, X, TrendingUp, Bot, Play, RefreshCw, Wallet, PiggyBank, ArrowUpRight, ArrowDownRight, Building2, ChevronDown, ChevronRight, Cpu, Bell, Clock, Newspaper, ExternalLink, BarChart3, Brain } from 'lucide-react'
+import { Plus, Trash2, Pencil, Search, X, TrendingUp, Bot, Play, RefreshCw, Wallet, PiggyBank, ArrowUpRight, ArrowDownRight, Building2, ChevronDown, ChevronRight, Cpu, Bell, Clock, Newspaper, ExternalLink, BarChart3, Brain, Briefcase } from 'lucide-react'
 import { fetchAPI, stocksApi, type AIService, type NotifyChannel } from '@panwatch/api'
 import { futuresPositionsApi, type FuturesPosition } from '@panwatch/api/futures-positions'
 import { klinesApi } from '@panwatch/api/klines'
@@ -28,6 +28,7 @@ import { useToast } from '@panwatch/base-ui/components/ui/toast'
 import StockInsightModal from '@panwatch/biz-ui/components/stock-insight-modal'
 import { DeepAnalysisModal } from '@panwatch/biz-ui/components/deep-analysis-modal'
 import StockPriceAlertPanel from '@panwatch/biz-ui/components/stock-price-alert-panel'
+import { DispersionPanel } from '@/components/DispersionPanel'
 import { FuturesPositionsSection } from '@/components/portfolio/FuturesPositionsSection'
 import { searchExampleFor } from '@/lib/search-example'
 import { useTranslation } from 'react-i18next'
@@ -35,6 +36,7 @@ import { localizeAgentDescription, localizeAgentName } from '@/i18n/agent-labels
 import { getCurrentLocale } from '@/i18n'
 import { marketSignTextClass } from '@/lib/market-colors'
 import { parseAssistantPortfolioTarget } from '@/lib/assistant-navigation'
+import { isHeldAnywhere, planWatchToPosition } from '@/lib/watch-to-position'
 import { BASE_CURRENCY, DEFAULT_MARKET, futuresContractMonth, getMarketBadge, isFuturesMarket, marketCurrency } from '@panwatch/biz-ui'
 
 interface AgentResult {
@@ -1124,6 +1126,37 @@ export default function StocksPage() {
       setEditPositionId(null)
     }
     setPositionDialogOpen(true)
+  }
+
+  // 持倉資料還在載入（portfolio 為 null）時退回帳戶清單，避免把「載入中」誤判成「沒有帳戶」
+  const watchPlanAccounts = portfolio?.accounts ?? accounts.map(account => ({ id: account.id, positions: [] }))
+
+  const openWatchPosition = (stock: Stock) => {
+    const plan = planWatchToPosition(stock, watchPlanAccounts)
+    if (plan.kind === 'unsupported') return
+    if (plan.kind === 'no-account') {
+      toast(stockT('stocksPage.watchToPosition.noAccount'), 'error')
+      openAccountDialog()
+      return
+    }
+    if (plan.kind === 'add') {
+      openPositionDialog(plan.accountId)
+      setPositionForm(previous => ({
+        ...previous,
+        stock_id: stock.id,
+        stock_symbol: stock.symbol,
+        stock_name: stock.name,
+        stock_market: stock.market,
+      }))
+      return
+    }
+
+    const position = portfolio?.accounts
+      .find(account => account.id === plan.accountId)
+      ?.positions?.find(item => item.id === plan.positionId)
+    if (!position) return
+    openPositionDialog(plan.accountId, position)
+    toast(stockT('stocksPage.watchToPosition.alreadyHeld'), 'success')
   }
 
   const doPositionSearch = async (q: string, market: string = positionSearchMarket) => {
@@ -2372,6 +2405,7 @@ export default function StocksPage() {
                 const quote = getStockQuote(`${stock.market}:${stock.symbol}`)
                 const changeColor = marketSignTextClass(quote?.change_pct)
                 const { suggestion, kline } = getSuggestionForStock(stock.symbol, stock.market, false)
+                const watchPositionPlan = planWatchToPosition(stock, watchPlanAccounts)
                 return (
                   <div
                     key={stock.id}
@@ -2533,6 +2567,19 @@ export default function StocksPage() {
                         >
                           <ExternalLink className="w-3.5 h-3.5" />
                         </Button>
+                        {watchPositionPlan.kind !== 'unsupported' && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => openWatchPosition(stock)}
+                            title={stockT(isHeldAnywhere(stock.id, watchPlanAccounts)
+                              ? 'stocksPage.watchToPosition.editTitle'
+                              : 'stocksPage.watchToPosition.addTitle')}
+                          >
+                            <Briefcase className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="icon"
@@ -2561,7 +2608,12 @@ export default function StocksPage() {
         stockName={klineDialogName}
         hasPosition={klineDialogHasPosition}
         initialSummary={klineDialogInitialSummary as any}
-      />
+        showChart
+      >
+        {klineDialogMarket === 'TW' ? (
+          <DispersionPanel symbol={klineDialogSymbol} market={klineDialogMarket} enabled={klineDialogOpen} />
+        ) : null}
+      </KlineSummaryDialog>
 
       <StockInsightModal
         open={insightOpen}
@@ -2684,6 +2736,28 @@ export default function StocksPage() {
               </div>
             ) : (
               <div>
+                {accounts.length > 1 && (
+                  <div className="mb-3 space-y-1.5">
+                    <Label>{stockT('stocksPage.watchToPosition.account')}</Label>
+                    <Select
+                      value={String(positionForm.account_id)}
+                      onValueChange={value => {
+                        const accountId = Number(value)
+                        setPositionDialogAccountId(accountId)
+                        setPositionForm(previous => ({ ...previous, account_id: accountId }))
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {accounts.map(account => (
+                          <SelectItem key={account.id} value={String(account.id)}>{account.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div className="flex items-center gap-2 mb-2">
                   <Label className="mb-0">{stockT('stocksPage.messages.searchStock')}</Label>
                   <div className="flex items-center gap-1">

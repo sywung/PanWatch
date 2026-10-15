@@ -643,6 +643,15 @@ DATA_SOURCE_SEEDS: list[dict] = [
             "test_symbols": list(DEFAULT_TEST_SYMBOLS_BY_MARKET["TW"]),
         },
         {
+            "name": "yuantaData 集保股權分散（自架資料服務）", "type": "shareholders", "provider": "yuantadata",
+            "config": {
+                "base_url": "", "token": "",
+                "description": "說明：需自架 yuantaData 服務並填入 base_url；由該服務統一收集全市場集保週資料與一年歷史，連不上時自動退回集保直連。",
+            },
+            "enabled": False, "priority": -1, "supports_batch": True,
+            "test_symbols": list(DEFAULT_TEST_SYMBOLS_BY_MARKET["TW"]),
+        },
+        {
             "name": "集保股權分散", "type": "shareholders", "provider": "tdcc",
             "config": {}, "enabled": True, "priority": 0, "supports_batch": True,
             "test_symbols": list(DEFAULT_TEST_SYMBOLS_BY_MARKET["TW"]),

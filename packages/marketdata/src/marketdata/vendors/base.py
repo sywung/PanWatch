@@ -76,7 +76,9 @@ class MarginVendor(Vendor):
 class ShareholdersVendor(Vendor):
     """股东户数 vendor:fetch 返回 list[ShareholderItem]。按 symbol(逐只取最新一期)。"""
 
-    pass
+    def history(self, code: str, config: dict, skip_dates=()) -> list[tuple[str, list[dict]]]:
+        """可選的股權分散歷史介面；不支援歷史的來源回傳空清單。"""
+        return []
 
 
 class DividendVendor(Vendor):

@@ -37,6 +37,12 @@ OVERRIDES: dict[str, str] = {
     "language.simplifiedChinese": "简体中文",
     "language.quickSwitch": "简体中文",
     "normalVolatility": "正常波動",
+    # 集保股權分散表：週（非「周」）、占比（集保用字）、持股級距（集保分級用語）
+    "dispersion.empty": "尚無集保資料",
+    "dispersion.weeklyChange": "週增減",
+    "dispersion.levelColumn": "持股級距",
+    "dispersion.pctColumn": "占比",
+    "dispersion.trendAccumulating": "趨勢從 {{date}} 起每週累積，目前只有 {{count}} 週",
     "loadingEarlier": "載入更早資料…",
     "bollSqueeze": "波幅收斂",
     "bollExpansion": "波動擴大",

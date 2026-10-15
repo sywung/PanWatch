@@ -483,6 +483,17 @@ class IntradayMonitorAgent(BaseAgent):
                     amp_info += f"（5日平均：{amplitude_avg5:.2f}%）"
                 lines.append(f"- {amp_info}")
 
+        if getattr(getattr(stock, "market", None), "value", getattr(stock, "market", None)) == MarketCode.TW.value:
+            from src.modules.market.shareholder_dispersion import dispersion_line_for
+            from src.platform.persistence.database import SessionLocal
+
+            with SessionLocal() as db:
+                dispersion_line = dispersion_line_for(
+                    db, stock.symbol, "TW", context.report_language
+                )
+            if dispersion_line:
+                lines.append(f"- {dispersion_line}")
+
         # 账户资金情况
         lines.append(f"\n## 账户资金")
         lines.append(f"- 总可用资金：{context.portfolio.total_available_funds:.0f} 元")

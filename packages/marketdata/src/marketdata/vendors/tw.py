@@ -9,7 +9,7 @@ from marketdata.symbol import Symbol
 from marketdata.types import (
     CapitalFlow, DividendItem, EventItem, Fundamentals, MarginItem, Quote, ShareholderItem,
 )
-from marketdata.vendors import tw_bulk
+from marketdata.vendors import tdcc_web, tw_bulk
 from marketdata.vendors.base import (
     CapitalFlowVendor, DividendVendor, EventsVendor, FundamentalsVendor, QuoteVendor,
     MarginVendor, ShareholdersVendor,
@@ -247,6 +247,18 @@ class TdccShareholdersVendor(ShareholdersVendor):
         for code, group in groups.items():
             total = next((row for row in group if row.get("持股分級") == "17"), {})
 
+            levels = [
+                {
+                    "level": int(row["持股分級"]),
+                    "holders": int(float(row.get("人數") or 0)),
+                    "shares": int(float(row.get("股數") or 0)),
+                    "pct": _f(row.get("占集保庫存數比例%")) or 0.0,
+                }
+                for row in group
+                if str(row.get("持股分級", "")).isdigit()
+            ]
+            levels.sort(key=lambda row: row["level"])
+
             def ratio(levels):
                 return sum(_f(row.get("占集保庫存數比例%")) or 0 for row in group
                            if row.get("持股分級") in levels)
@@ -258,8 +270,12 @@ class TdccShareholdersVendor(ShareholdersVendor):
                 avg_shares=(_f(total.get("股數")) or 0) / int(float(total.get("人數") or 1)),
                 big_holder_ratio=ratio({"12", "13", "14", "15"}),
                 thousand_lot_ratio=ratio({"15"}),
+                levels=levels,
             ))
         return result
+
+    def history(self, code: str, config: dict, skip_dates=()) -> list[tuple[str, list[dict]]]:
+        return tdcc_web.fetch_history(code, skip_dates=skip_dates)
 
 
 class TwseEventsVendor(EventsVendor):

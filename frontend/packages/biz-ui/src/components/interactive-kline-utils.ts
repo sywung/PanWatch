@@ -4,6 +4,35 @@ export type UTCTimestamp = number & { readonly __utcTimestamp: unique symbol }
 export type KlineTime = BusinessDay | UTCTimestamp
 export type LogicalRange = { from: number; to: number }
 
+export function visibleHighLow(
+  klines: { high: number; low: number }[],
+  range: { from: number; to: number } | null,
+): { high: number; low: number } | null {
+  if (!klines.length) return null
+
+  if (range == null) {
+    return {
+      high: Math.max(...klines.map(kline => kline.high)),
+      low: Math.min(...klines.map(kline => kline.low)),
+    }
+  }
+
+  const { from, to } = range
+  if (!Number.isFinite(from) || !Number.isFinite(to) || from > to) return null
+
+  const firstIndex = Math.max(0, Math.ceil(from - 0.5))
+  const lastIndex = Math.min(klines.length - 1, Math.floor(to + 0.5))
+  if (firstIndex > lastIndex) return null
+
+  let high = -Infinity
+  let low = Infinity
+  for (let index = firstIndex; index <= lastIndex; index++) {
+    high = Math.max(high, klines[index].high)
+    low = Math.min(low, klines[index].low)
+  }
+  return { high, low }
+}
+
 export const MAX_KLINE_DAYS = 5200
 
 export function doubledKlineRequestDays(requestedDays: number, maxDays = MAX_KLINE_DAYS): number {

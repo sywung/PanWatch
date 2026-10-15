@@ -46,6 +46,7 @@ OVERRIDES: dict[str, str] = {
     # interactiveKline is a one-line locale object, so key_for handles its full path explicitly.
     "interactiveKline.dispersion": "千張大戶",
     "interactiveKline.dispersionTitle": "千張大戶持股 %",
+    "interactiveKline.metrics.range": "可見區間高低",
     "loadingEarlier": "載入更早資料…",
     "bollSqueeze": "波幅收斂",
     "bollExpansion": "波動擴大",

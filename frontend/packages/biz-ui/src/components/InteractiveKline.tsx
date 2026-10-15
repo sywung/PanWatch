@@ -26,6 +26,7 @@ import {
   MAX_KLINE_DAYS,
   parseKlineTime,
   shiftLogicalRange,
+  visibleHighLow,
   type KlineInterval,
   type LogicalRange,
 } from './interactive-kline-utils'
@@ -202,6 +203,7 @@ export default function InteractiveKline(props: {
   const [loadingEarlier, setLoadingEarlier] = useState(false)
   const [error, setError] = useState<string>('')
   const [data, setData] = useState<KlineItem[]>([])
+  const [visibleRange, setVisibleRange] = useState<LogicalRange | null>(null)
   const [dispersionData, setDispersionData] = useState<{ key: string; history: DispersionHistoryPoint[] } | null>(null)
   const [indicators, setIndicators] = useState<KlineIndicatorSettings>(readKlineIndicatorSettings)
   const [showChan, setShowChan] = useState(false)
@@ -390,17 +392,22 @@ export default function InteractiveKline(props: {
     return { klines, candles, volumes, ma5, ma10, ma20, ma60, ma120, ma240, boll, kd, obv, vwap, volMa5, volMa10, macd, rsi6 }
   }, [data, interval, palette])
 
+  useEffect(() => {
+    setVisibleRange(null)
+  }, [props.symbol, props.market, interval, data])
+
   const latestMetrics = useMemo(() => {
     if (!series.klines.length) return null
     const last = series.klines[series.klines.length - 1]
     const prev = series.klines.length > 1 ? series.klines[series.klines.length - 2] : null
-    const maxHigh = Math.max(...series.klines.map(k => k.high))
-    const minLow = Math.min(...series.klines.map(k => k.low))
+    const visiblePrices = visibleHighLow(series.klines, visibleRange)
+    const maxHigh = visiblePrices?.high ?? Math.max(...series.klines.map(k => k.high))
+    const minLow = visiblePrices?.low ?? Math.min(...series.klines.map(k => k.low))
     const avgVol = series.klines.reduce((acc, k) => acc + (k.volume || 0), 0) / series.klines.length
     const changePct = prev && prev.close ? ((last.close - prev.close) / prev.close) * 100 : 0
     const ampPct = last.close ? ((last.high - last.low) / last.close) * 100 : 0
     return { last, changePct, ampPct, maxHigh, minLow, avgVol }
-  }, [series.klines])
+  }, [series.klines, visibleRange])
 
   const indexByDate = useMemo(() => {
     const m = new Map<string, number>()
@@ -723,6 +730,19 @@ export default function InteractiveKline(props: {
     }
     const onLogicalRangeChange = (range: any) => { void requestEarlier(range) }
     chart.timeScale().subscribeVisibleLogicalRangeChange?.(onLogicalRangeChange)
+    const onVisibleLogicalRangeChange = (range: LogicalRange | null) => {
+      setVisibleRange(previous => {
+        if (!range || !Number.isFinite(range.from) || !Number.isFinite(range.to)) {
+          return previous === null ? previous : null
+        }
+        const next = {
+          from: Math.round(range.from * 10) / 10,
+          to: Math.round(range.to * 10) / 10,
+        }
+        return previous?.from === next.from && previous.to === next.to ? previous : next
+      })
+    }
+    chart.timeScale().subscribeVisibleLogicalRangeChange?.(onVisibleLogicalRangeChange)
     const onCrosshairMove = (param: any) => {
       const point = param?.point
       drawingChart.onCrosshairMove(param)
@@ -817,6 +837,7 @@ export default function InteractiveKline(props: {
     return () => {
       ro.disconnect()
       chart.timeScale().unsubscribeVisibleLogicalRangeChange?.(onLogicalRangeChange)
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange?.(onVisibleLogicalRangeChange)
       chart.unsubscribeCrosshairMove?.(onCrosshairMove)
       container.removeEventListener('click', onChartClick)
       drawingChart.cleanup()

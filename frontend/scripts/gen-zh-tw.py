@@ -43,6 +43,9 @@ OVERRIDES: dict[str, str] = {
     "dispersion.levelColumn": "持股級距",
     "dispersion.pctColumn": "占比",
     "dispersion.trendAccumulating": "趨勢從 {{date}} 起每週累積，目前只有 {{count}} 週",
+    # interactiveKline is a one-line locale object, so key_for handles its full path explicitly.
+    "interactiveKline.dispersion": "千張大戶",
+    "interactiveKline.dispersionTitle": "千張大戶持股 %",
     "loadingEarlier": "載入更早資料…",
     "bollSqueeze": "波幅收斂",
     "bollExpansion": "波動擴大",
@@ -114,6 +117,8 @@ def key_for(source: str, start: int) -> str | None:
     prop = re.search(r"([A-Za-z_$][\w$]*):\s*$", current)
     if not prop:
         return None
+    if re.search(r"\binteractiveKline:\s*\{", current):
+        return f"interactiveKline.{prop.group(1)}"
     return ".".join((*stack, prop.group(1)))
 
 

@@ -30,6 +30,7 @@ export interface KlineIndicatorSettings {
   rsi: boolean
   kd: boolean
   obv: boolean
+  dispersion: boolean
 }
 
 export const DEFAULT_KLINE_INDICATOR_SETTINGS: KlineIndicatorSettings = {
@@ -43,6 +44,7 @@ export const DEFAULT_KLINE_INDICATOR_SETTINGS: KlineIndicatorSettings = {
   rsi: true,
   kd: false,
   obv: false,
+  dispersion: true,
 }
 
 export const KLINE_INDICATOR_STORAGE_KEY = 'panwatch.kline.indicators'

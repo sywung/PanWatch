@@ -5,6 +5,7 @@ import { Button } from '@panwatch/base-ui/components/ui/button'
 import { useTranslation } from 'react-i18next'
 import { useMarketColors } from '@/hooks/use-market-colors'
 import { getMarketColorPalette, marketColorWithAlpha, marketSignTextClass } from '@/lib/market-colors'
+import { alignDispersionToBars, type DispersionHistoryPoint } from '@/lib/dispersion'
 import {
   calculateBollinger,
   calculateKd,
@@ -48,6 +49,12 @@ type KlinesResponse = {
   interval?: string
   klines: KlineItem[]
 }
+
+type DispersionResponse = {
+  history: DispersionHistoryPoint[]
+}
+
+const EMPTY_DISPERSION_HISTORY: DispersionHistoryPoint[] = []
 
 type ChanResponse = ChanLevel & { level?: string }
 
@@ -195,12 +202,18 @@ export default function InteractiveKline(props: {
   const [loadingEarlier, setLoadingEarlier] = useState(false)
   const [error, setError] = useState<string>('')
   const [data, setData] = useState<KlineItem[]>([])
+  const [dispersionData, setDispersionData] = useState<{ key: string; history: DispersionHistoryPoint[] } | null>(null)
   const [indicators, setIndicators] = useState<KlineIndicatorSettings>(readKlineIndicatorSettings)
   const [showChan, setShowChan] = useState(false)
   const [chanByKey, setChanByKey] = useState<Record<string, ChanResponse>>({})
   const [hoverTip, setHoverTip] = useState<HoverTip>({ visible: false, x: 0, y: 0, row: null })
   const drawingController = useKlineDrawingController(props.symbol, props.market)
   const { drawings, error: drawingError, toolState: drawingToolState, capabilities: drawingCapabilities } = drawingController
+  const dispersionKey = props.market === 'TW' && props.symbol ? `${props.market}:${props.symbol}` : ''
+  const dispersionHistory = useMemo(
+    () => dispersionKey && dispersionData?.key === dispersionKey ? dispersionData.history : EMPTY_DISPERSION_HISTORY,
+    [dispersionData, dispersionKey],
+  )
 
   const fixedDays = useMemo(() => {
     const customDays = Number(props.initialDays)
@@ -229,6 +242,20 @@ export default function InteractiveKline(props: {
       // Indicator preferences remain usable for this session when storage is unavailable.
     }
   }, [indicators])
+
+  useEffect(() => {
+    if (!dispersionKey) return
+    const controller = new AbortController()
+    setDispersionData(null)
+    const params = new URLSearchParams({ symbol: props.symbol, market: 'TW', weeks: '52' })
+    fetchAPI<DispersionResponse>(`/shareholders/dispersion?${params}`, { signal: controller.signal })
+      .then((response) => {
+        if (controller.signal.aborted) return
+        setDispersionData({ key: dispersionKey, history: response.history || EMPTY_DISPERSION_HISTORY })
+      })
+      .catch(() => undefined)
+    return () => controller.abort()
+  }, [dispersionKey, props.symbol])
 
   const setIndicator = (key: keyof KlineIndicatorSettings, value: boolean) => {
     setIndicators(previous => ({ ...previous, [key]: value }))
@@ -601,6 +628,35 @@ export default function InteractiveKline(props: {
       if (obvChart) addLine(obvChart, LW, { color: 'rgba(14, 165, 233, 0.95)', lineWidth: 2 }).setData(lineData(series.obv) as any)
     }
 
+    if (indicators.dispersion && props.market === 'TW') {
+      const values = alignDispersionToBars(series.klines, dispersionHistory, 'thousand_lot_ratio')
+      const points = lineData(values)
+      if (points.length > 0) {
+        const dispersionChart = createPane(tr('dispersionTitle'), 110)
+        if (dispersionChart) {
+          const stepLineType = LW.LineType?.WithSteps
+          let dispersionLine: any
+          try {
+            dispersionLine = addLine(dispersionChart, LW, {
+              color: marketColorWithAlpha(palette.up.bright, 0.95),
+              lineWidth: 2,
+              title: tr('dispersionTitle'),
+              priceFormat: { type: 'custom', formatter: (value: number) => `${value.toFixed(2)}%` },
+              ...(stepLineType == null ? {} : { lineType: stepLineType }),
+            })
+          } catch {
+            dispersionLine = addLine(dispersionChart, LW, {
+              color: marketColorWithAlpha(palette.up.bright, 0.95),
+              lineWidth: 2,
+              title: tr('dispersionTitle'),
+              priceFormat: { type: 'custom', formatter: (value: number) => `${value.toFixed(2)}%` },
+            })
+          }
+          dispersionLine.setData(points as any)
+        }
+      }
+    }
+
     const sync = (range: any) => {
       for (const item of subCharts) {
         try {
@@ -773,7 +829,7 @@ export default function InteractiveKline(props: {
         try { item.chart.remove() } catch { /* ignore */ }
       }
     }
-  }, [series, lwReady, indicators, indexByDate, interval, palette, chanLevel, props.symbol, props.market, i18n.language, i18n.resolvedLanguage, drawingController.bindChart])
+  }, [series, dispersionHistory, lwReady, indicators, indexByDate, interval, palette, chanLevel, props.symbol, props.market, i18n.language, i18n.resolvedLanguage, drawingController.bindChart])
 
   return (
     <div className="card p-4 md:p-5" onKeyDown={drawingController.onKeyDown}>
@@ -791,6 +847,7 @@ export default function InteractiveKline(props: {
             { key: 'rsi', label: 'rsi', disabled: false },
             { key: 'kd', label: 'kd', disabled: false },
             { key: 'obv', label: 'obv', disabled: false },
+            ...(props.market === 'TW' ? [{ key: 'dispersion' as const, label: 'dispersion', disabled: false }] : []),
           ] as const).map(item => (
             <Button
               key={item.key}
@@ -949,11 +1006,11 @@ export default function InteractiveKline(props: {
           </div>
         ) : null}
       </div>
-      {(indicators.macd || indicators.rsi || indicators.kd || indicators.obv) ? (
+      {(indicators.macd || indicators.rsi || indicators.kd || indicators.obv || (indicators.dispersion && props.market === 'TW')) ? (
         <div className="mt-3 grid grid-cols-1 gap-3">
           <div>
             <div className="text-[11px] text-muted-foreground mb-1">
-              {tr('momentum', { rsi: [indicators.macd && tr('macd'), indicators.rsi && tr('rsi'), indicators.kd && tr('kd'), indicators.obv && tr('obv')].filter(Boolean).join(' · ') })}
+              {tr('momentum', { rsi: [indicators.macd && tr('macd'), indicators.rsi && tr('rsi'), indicators.kd && tr('kd'), indicators.obv && tr('obv'), indicators.dispersion && props.market === 'TW' && tr('dispersion')].filter(Boolean).join(' · ') })}
             </div>
             <div className="text-[11px] text-muted-foreground mb-2 rounded-lg bg-accent/15 border border-border/40 px-2.5 py-1.5">
               {tr('help')}

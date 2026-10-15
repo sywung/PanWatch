@@ -13,6 +13,39 @@ export interface DispersionHistoryPoint {
   thousand_lot_ratio: number | null
 }
 
+type DispersionTrendField = 'thousand_lot_ratio' | 'big_holder_ratio' | 'holder_num'
+
+function parseDateOnly(value: string): string | null {
+  const date = value.slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null
+  const timestamp = Date.parse(`${date}T00:00:00.000Z`)
+  if (!Number.isFinite(timestamp) || new Date(timestamp).toISOString().slice(0, 10) !== date) return null
+  return date
+}
+
+export function alignDispersionToBars(
+  bars: { date: string }[],
+  history: DispersionHistoryPoint[],
+  field: DispersionTrendField,
+): Array<number | null> {
+  return bars.map(({ date: barDate }) => {
+    const date = parseDateOnly(barDate)
+    if (!date) return null
+
+    let latestDate = ''
+    let latestValue: number | null = null
+    for (const point of history) {
+      const pointDate = parseDateOnly(point.data_date)
+      const value = point[field]
+      if (pointDate && pointDate <= date && value != null && pointDate > latestDate) {
+        latestDate = pointDate
+        latestValue = value
+      }
+    }
+    return latestValue
+  })
+}
+
 export const LEVEL_LABELS = [
   '1–999 股',
   '1–5 張',

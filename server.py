@@ -1809,16 +1809,12 @@ app.router.lifespan_context = lifespan
 # 生产环境静态文件服务
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 if os.path.exists(static_dir):
-    from fastapi.staticfiles import StaticFiles
-    from fastapi.responses import FileResponse
+    from src.web.spa import spa_file_response
 
     # SPA 路由：所有非 API 请求返回 index.html
     @app.get("/{path:path}")
     async def serve_spa(path: str):
-        file_path = os.path.join(static_dir, path)
-        if os.path.isfile(file_path):
-            return FileResponse(file_path)
-        return FileResponse(os.path.join(static_dir, "index.html"))
+        return spa_file_response(static_dir, path)
 
     logger.info(f"静态文件服务已启用: {static_dir}")
 

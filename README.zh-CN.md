@@ -276,27 +276,11 @@ Langfuse / Tempo 同理,把 `OTEL_EXPORTER_OTLP_ENDPOINT` 指向对应 OTLP 入�
 
 ## 捐赠支持
 
-PanWatch 完全免费开源。如果它节省了你的时间或改善了工作流，欢迎支持项目持续开发：
+本分支完全免费开源。如果它节省了你的时间或改善了工作流，欢迎支持项目持续开发：
 
-[![PayPal](https://img.shields.io/badge/PayPal-Donate-0070BA?logo=paypal&logoColor=white&style=for-the-badge)](https://paypal.me/sunxiaoyes)
+[![捐赠](https://img.shields.io/badge/捐赠-donate.twater.cc-E8590C?style=for-the-badge)](https://donate.twater.cc)
 
-<details>
-<summary>USDT（TRC20）</summary>
-
-地址：`TKBV69B2AoU67p3vDhnJUbMJtZ1DxuUF5C`
-
-<img src="./docs/donate/binance.png" width="220" alt="币安 USDT TRC20 二维码" />
-
-</details>
-
-<details>
-<summary>支付宝 / 微信支付</summary>
-
-| 支付宝 | 微信支付 |
-|:---:|:---:|
-| <img src="./docs/donate/alipay.png" width="160" alt="支付宝二维码" /> | <img src="./docs/donate/wechat.png" width="160" alt="微信支付二维码" /> |
-
-</details>
+PanWatch 原作者为 [TNT-Likely](https://github.com/TNT-Likely/PanWatch)，你也可以[支持原作者](https://github.com/TNT-Likely/PanWatch#support-the-project)。
 
 ## 贡献
 

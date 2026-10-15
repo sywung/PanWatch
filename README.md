@@ -279,27 +279,11 @@ Configure these repository secrets before publishing:
 
 ## Support the Project
 
-PanWatch is free and open source. If it saves you time or improves your workflow, you can support continued development:
+This fork is free and open source. If it saves you time or improves your workflow, you can support continued development:
 
-[![PayPal](https://img.shields.io/badge/PayPal-Donate-0070BA?logo=paypal&logoColor=white&style=for-the-badge)](https://paypal.me/sunxiaoyes)
+[![Donate](https://img.shields.io/badge/Donate-donate.twater.cc-E8590C?style=for-the-badge)](https://donate.twater.cc)
 
-<details>
-<summary>USDT (TRC20)</summary>
-
-Address: `TKBV69B2AoU67p3vDhnJUbMJtZ1DxuUF5C`
-
-<img src="./docs/donate/binance.png" width="220" alt="Binance USDT TRC20 QR code" />
-
-</details>
-
-<details>
-<summary>Alipay / WeChat Pay</summary>
-
-| Alipay | WeChat Pay |
-|:---:|:---:|
-| <img src="./docs/donate/alipay.png" width="160" alt="Alipay QR code" /> | <img src="./docs/donate/wechat.png" width="160" alt="WeChat Pay QR code" /> |
-
-</details>
+PanWatch was originally created by [TNT-Likely](https://github.com/TNT-Likely/PanWatch); you can also [support the original author](https://github.com/TNT-Likely/PanWatch#support-the-project).
 
 ## Contributing
 

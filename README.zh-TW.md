@@ -203,6 +203,12 @@ python frontend/scripts/gen-zh-tw.py      # 上游新增了簡中文字時，重
 
 本分支盡量把台股相關的預設值集中在常數（`DEFAULT_MARKET`、`ALL_MARKETS`、`BASE_CURRENCY`，位於 `src/platform/marketdata/models.py`），以減少合併時的衝突。`tests/test_default_market_sweep.py` 會掃描整個專案，若合併後出現新的寫死 A 股預設值，測試會失敗。
 
+## 贊助
+
+本分支完全免費開源。如果它節省了你的時間或改善了工作流，歡迎支持專案持續開發：
+
+[![贊助](https://img.shields.io/badge/贊助-donate.twater.cc-E8590C?style=for-the-badge)](https://donate.twater.cc)
+
 ## 授權與致謝
 
 [MIT](LICENSE)。原始專案由 [TNT-Likely/PanWatch](https://github.com/TNT-Likely/PanWatch) 開發，若這個專案對你有幫助，歡迎到上游給 ⭐ 或[支持原作者](https://github.com/TNT-Likely/PanWatch#support-the-project)。

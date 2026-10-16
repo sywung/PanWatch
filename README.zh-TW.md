@@ -38,7 +38,7 @@
 ```bash
 git clone https://github.com/sywung/PanWatch.git
 cd PanWatch
-git checkout feat/tw-market
+git checkout feat/tw-futures
 
 docker build -t panwatch-tw .        # 使用 Podman 時把 docker 換成 podman
 docker run -d \

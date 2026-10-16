@@ -281,7 +281,7 @@ Configure these repository secrets before publishing:
 
 This fork is free and open source. If it saves you time or improves your workflow, you can support continued development:
 
-[![Donate](https://img.shields.io/badge/Donate-donate.twater.cc-E8590C?style=for-the-badge)](https://donate.twater.cc)
+[![Donate](https://img.shields.io/badge/Donate-ECPay%20綠界-E8590C?style=for-the-badge)](https://donate.twater.cc)
 
 PanWatch was originally created by [TNT-Likely](https://github.com/TNT-Likely/PanWatch); you can also [support the original author](https://github.com/TNT-Likely/PanWatch#support-the-project).
 

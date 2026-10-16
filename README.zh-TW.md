@@ -207,7 +207,7 @@ python frontend/scripts/gen-zh-tw.py      # 上游新增了簡中文字時，重
 
 本分支完全免費開源。如果它節省了你的時間或改善了工作流，歡迎支持專案持續開發：
 
-[![贊助](https://img.shields.io/badge/贊助-donate.twater.cc-E8590C?style=for-the-badge)](https://donate.twater.cc)
+[![贊助](https://img.shields.io/badge/贊助-ECPay%20綠界-E8590C?style=for-the-badge)](https://donate.twater.cc)
 
 ## 授權與致謝
 

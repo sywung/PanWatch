@@ -278,7 +278,7 @@ Langfuse / Tempo 同理,把 `OTEL_EXPORTER_OTLP_ENDPOINT` 指向对应 OTLP 入�
 
 本分支完全免费开源。如果它节省了你的时间或改善了工作流，欢迎支持项目持续开发：
 
-[![捐赠](https://img.shields.io/badge/捐赠-donate.twater.cc-E8590C?style=for-the-badge)](https://donate.twater.cc)
+[![捐赠](https://img.shields.io/badge/捐赠-ECPay%20绿界-E8590C?style=for-the-badge)](https://donate.twater.cc)
 
 PanWatch 原作者为 [TNT-Likely](https://github.com/TNT-Likely/PanWatch)，你也可以[支持原作者](https://github.com/TNT-Likely/PanWatch#support-the-project)。
 

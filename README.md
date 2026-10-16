@@ -6,6 +6,8 @@
 
 Powered by [TradingAgents](https://github.com/TauricResearch/TradingAgents) for multi-agent investment research, including specialist analysis, bull/bear debate, risk review, and a portfolio-manager decision.
 
+> 🇹🇼 **Taiwan-market fork.** This fork ([sywung/PanWatch](https://github.com/sywung/PanWatch)) adds Taiwan stocks (TWSE, TPEx, Emerging board, ETFs), TAIEX/TPEx index futures and single-stock futures, Taiwan data sources (TWSE, TPEx, TDCC, TAIFEX, FinMind), TDCC shareholder-dispersion charts, a K-line chart with indicators, drawing tools and Chan-theory overlay, and Traditional Chinese as the default UI language. Setup and feature details are in [繁體中文（台股版）](README.zh-TW.md).
+
 > 🌐 Available in English and Simplified Chinese. On first visit, PanWatch follows the browser language; a manual selection is remembered.
 
 [Quick start](#quick-start) · [Feature overview](#-feature-overview) · [Core features](#core-features) · [Development](#local-development) · [Support](#support-the-project) · [Contributing](#contributing)

@@ -1,6 +1,7 @@
 // 由 gen-zh-tw.py 自 zh-CN 產生；手動修正請寫進腳本的 OVERRIDES，不要直接改本檔。
 export const navigation = {
   items: {
+    gettingStarted: '引導中心',
     home: '首頁',
     portfolio: '持倉',
     opportunities: '機會',

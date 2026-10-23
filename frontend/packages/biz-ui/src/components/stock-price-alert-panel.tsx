@@ -1,3 +1,4 @@
+import { useConfirm } from '@panwatch/base-ui/components/ui/confirm-dialog'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Bell, Plus, Pencil, Trash2 } from 'lucide-react'
 import { fetchAPI, stocksApi, type NotifyChannel } from '@panwatch/api'
@@ -74,6 +75,7 @@ export default function StockPriceAlertPanel(props: {
 }) {
   const { toast } = useToast()
   const { t } = useTranslation('bizUi')
+  const confirmAction = useConfirm()
   const tr = (key: string, options?: Record<string, unknown>) =>
     (t as unknown as (key: string, options?: Record<string, unknown>) => string)(`stockPriceAlert.${key}`, options)
   const symbol = String(props.symbol || '').trim()
@@ -201,7 +203,7 @@ export default function StockPriceAlertPanel(props: {
       cooldown_minutes: r.cooldown_minutes ?? 30,
       max_triggers_per_day: r.max_triggers_per_day ?? 3,
       repeat_mode: r.repeat_mode || 'repeat',
-      expire_at: r.expire_at ? r.expire_at.slice(0, 16) : '',
+      expire_at: r.expire_at || '',
       notify_channel_ids: r.notify_channel_ids || [],
     })
     setFormOpen(true)
@@ -237,7 +239,7 @@ export default function StockPriceAlertPanel(props: {
   }
 
   const removeRule = async (r: AlertRule) => {
-    if (!window.confirm(tr('messages.deleteConfirm', { name: r.name || tr('alert') }))) return
+    if (!(await confirmAction(tr('messages.deleteConfirm', { name: r.name || tr('alert') }), { destructive: true }))) return
     try {
       await fetchAPI(`/price-alerts/${r.id}`, { method: 'DELETE' })
       await load()
@@ -313,7 +315,7 @@ export default function StockPriceAlertPanel(props: {
                         </div>
                       </div>
                       <div className="flex items-center gap-1">
-                        <Button variant="secondary" size="sm" className="h-7 px-2" onClick={() => openEdit(r)}><Pencil className="w-3 h-3" /></Button>
+                        <Button variant="secondary" size="sm" className="h-7 px-2" aria-label={tr('editTitle')} onClick={() => openEdit(r)}><Pencil className="w-3 h-3" /></Button>
                         <Button variant={r.enabled ? 'destructive' : 'default'} size="sm" className="h-7 px-2.5" onClick={() => toggleRule(r)}>{r.enabled ? tr('disable') : tr('enable')}</Button>
                         <Button variant="secondary" size="sm" className="h-7 px-2" onClick={() => removeRule(r)}><Trash2 className="w-3 h-3" /></Button>
                       </div>

@@ -200,7 +200,7 @@ export function DispersionPanel({ symbol, market, enabled }: DispersionPanelProp
 
             <section>
               <h4 className="mb-2 text-xs font-semibold text-foreground">{tr('levelsTitle')}</h4>
-              <div className="overflow-x-auto rounded-md border border-border/40">
+              <div className="overflow-x-auto scrollbar rounded-md border border-border/40">
                 <table className="w-full border-collapse text-left text-[11px] sm:min-w-[590px]">
                   <thead className="bg-accent/40 text-muted-foreground">
                     <tr>

@@ -4,24 +4,44 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from functools import wraps
+from threading import RLock
 from datetime import datetime, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from src.platform.marketdata.marketdata_client import md_quote_rows
 from src.platform.marketdata.models import ALL_MARKETS, DEFAULT_MARKET, MarketCode, MARKETS
+from src.platform.marketdata.quote_display import quote_date_is_current
 from src.platform.persistence.database import SessionLocal
 from src.platform.persistence.models import (
     PaperTradingAccount,
     PaperTradingPosition,
+    PaperTradingSettlement,
     PaperTradingTrade,
     StrategySignalRun,
 )
 from src.modules.strategy.backtest.cost_model import CostModel
+from src.modules.paper_trading.paper_settlement import (
+    buying_power, consume_cn_proceeds, record_sale, settle_due, settlement_date,
+)
 
 logger = logging.getLogger(__name__)
+
+# The scheduler and manual requests share one cash account in the server process.
+# Serialize reads and writes together so concurrent scans cannot spend one balance twice.
+ACCOUNT_LOCK = RLock()
+
+
+def _account_mutation(method):
+    @wraps(method)
+    def guarded(*args, **kwargs):
+        with ACCOUNT_LOCK:
+            return method(*args, **kwargs)
+    return guarded
 
 # 模拟盘交易成本：未特别指定时沿用 A 股口径；台股使用台湾费率。
 COST_MODEL = CostModel()
@@ -104,6 +124,34 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+SELL_BLOCK_MESSAGES = {
+    "paper_trading_t1_locked": "A 股实行 T+1：当日买入的持仓须到下一交易日才能卖出",
+    "paper_trading_open_time_missing": "持仓买入时间缺失，无法确认可卖数量",
+}
+
+
+def sell_block_reason(pos: PaperTradingPosition, *, now: datetime | None = None) -> str | None:
+    """Settlement eligibility only; fills still require an open market and valid quote.
+
+    SQLite stores naive UTC timestamps. T+1 uses the Shanghai purchase date,
+    not elapsed 24-hour periods. The existing calendar guards enforce sessions.
+    """
+    if pos.stock_market != "CN":
+        return None
+    if pos.opened_at is None:
+        return "paper_trading_open_time_missing"
+    opened = pos.opened_at
+    if opened.tzinfo is None:
+        opened = opened.replace(tzinfo=timezone.utc)
+    current = now if now is not None else _utc_now()
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    shanghai = ZoneInfo("Asia/Shanghai")
+    if opened.astimezone(shanghai).date() >= current.astimezone(shanghai).date():
+        return "paper_trading_t1_locked"
+    return None
+
+
 def _to_market(market: str) -> MarketCode:
     try:
         return MarketCode(market)
@@ -112,11 +160,8 @@ def _to_market(market: str) -> MarketCode:
 
 
 def _is_trading_time(market: str) -> bool:
-    mc = _to_market(market)
-    market_def = MARKETS.get(mc)
-    if not market_def:
-        return False
-    return market_def.is_trading_time()
+    from src.platform.scheduling.trading_calendar import market_status
+    return market_status(market) == "trading"
 
 
 def _safe_float(v: Any) -> float | None:
@@ -170,8 +215,12 @@ def allocations_from_excluded(excluded: list[str] | None) -> dict[str, float]:
 def compute_market_cash(
     initial_capital: float, ratio: float, realized_pnl: float, open_cost: float
 ) -> float:
-    """某市场可用现金 = 总资金×比例 + 该市场已实现盈亏 − 该市场持仓成本（纯函数，可单测）。"""
+    """某市场账面现金 = 总资金×比例 + 已实现盈亏 − 持仓含费投入。"""
     return initial_capital * ratio + realized_pnl - open_cost
+
+
+def position_buy_cost(pos: PaperTradingPosition) -> float:
+    return -COST_MODEL.fill("buy", pos.entry_price, pos.quantity).cash_delta
 
 
 def market_realized_open(db: Session, market: str) -> tuple[float, float]:
@@ -181,19 +230,15 @@ def market_realized_open(db: Session, market: str) -> tuple[float, float]:
         .filter(PaperTradingTrade.stock_market == market)
         .scalar()
     ) or 0.0
-    open_cost = (
-        db.query(
-            func.coalesce(
-                func.sum(PaperTradingPosition.entry_price * PaperTradingPosition.quantity),
-                0.0,
-            )
-        )
+    positions = (
+        db.query(PaperTradingPosition)
         .filter(
             PaperTradingPosition.status == "open",
             PaperTradingPosition.stock_market == market,
         )
-        .scalar()
-    ) or 0.0
+        .all()
+    )
+    open_cost = sum(position_buy_cost(p) for p in positions)
     return float(realized), float(open_cost)
 
 
@@ -204,7 +249,16 @@ def market_available_cash(
     alloc = alloc or market_allocations_or_default(account)
     ratio = alloc.get(market, 0.0)
     realized, open_cost = market_realized_open(db, market)
-    return compute_market_cash(account.initial_capital, ratio, realized, open_cost)
+    cash = compute_market_cash(account.initial_capital, ratio, realized, open_cost)
+    now = _utc_now()
+    return min(buying_power(db, cash, market, now=now),
+               buying_power(db, account.current_capital, market, now=now, all_markets=True))
+
+
+def account_buying_power(db: Session, account: PaperTradingAccount) -> float:
+    """Aggregate allocated limits, capped by the shared cash balance."""
+    return min(buying_power(db, account.current_capital, "CN", now=_utc_now(), all_markets=True),
+               sum(market_available_cash(db, account, m) for m in ALL_MARKETS))
 
 
 def _serialize_position(pos: PaperTradingPosition) -> dict:
@@ -300,11 +354,15 @@ class PaperTradingEngine:
         self, db: Session, account: PaperTradingAccount,
     ) -> tuple[int, set[tuple[str, str]], list[tuple[PaperTradingPosition, StrategySignalRun | None]]]:
         """检查可入场的策略信号，自动建仓。返回 (建仓数, 新建仓股票key集合, 建仓事件列表)。"""
+        active_markets = [market for market in ALL_MARKETS if _is_trading_time(market)]
+        if not active_markets:
+            return 0, set(), []
         # 查询最新活跃买入信号
         query = (
             db.query(StrategySignalRun)
             .filter(
                 StrategySignalRun.status == "active",
+                StrategySignalRun.stock_market.in_(active_markets),
                 StrategySignalRun.action.in_(["buy", "add"]),
                 StrategySignalRun.entry_low.isnot(None),
                 StrategySignalRun.entry_high.isnot(None),
@@ -355,9 +413,11 @@ class PaperTradingEngine:
 
         opened = 0
         for sig in candidates:
+            if not _is_trading_time(sig.stock_market):
+                continue
             key = (sig.stock_market, sig.stock_symbol)
             quote = quotes.get(key)
-            if not quote:
+            if not quote or not quote_date_is_current(sig.stock_market, quote):
                 continue
             current_price = _safe_float(quote.get("current_price"))
             if current_price is None or current_price <= 0:
@@ -422,10 +482,19 @@ class PaperTradingEngine:
                 signal_snapshot_date=sig.snapshot_date or "",
                 signal_action=sig.action or "",
                 strategy_code=sig.strategy_code or "",
+                opened_at=_utc_now(),
+                settlement_date=settlement_date(sig.stock_market, _utc_now()),
             )
             db.add(pos)
             account.current_capital -= buy_outlay
+            if mkt == "CN":
+                consume_cn_proceeds(db, buy_outlay, now=_utc_now())
             market_cash[mkt] = avail - buy_outlay
+            # A different market's cached limit must also reflect this outlay.
+            for other in ALL_MARKETS:
+                if other != mkt:
+                    market_cash[other] = min(market_cash[other], buying_power(
+                        db, account.current_capital, other, now=_utc_now(), all_markets=True))
             open_keys.add((sig.stock_symbol, sig.stock_market))
             new_keys.add((sig.stock_symbol, sig.stock_market))
             entry_events.append((pos, sig))
@@ -456,6 +525,9 @@ class PaperTradingEngine:
     ) -> PaperTradingTrade:
         """平仓单个持仓，返回交易记录。"""
         now = _utc_now()
+        block = sell_block_reason(pos, now=now)
+        if block:
+            raise ValueError(block)
         # 含交易成本的净盈亏:卖出净回收 − 建仓含费投入(与建仓口径一致,资金守恒)
         cost_model = _cost_model_for(pos.stock_market, pos.stock_symbol)
         buy_cost = -cost_model.fill("buy", pos.entry_price, pos.quantity).cash_delta
@@ -497,6 +569,7 @@ class PaperTradingEngine:
 
         # 回收资金(卖出净回收,已扣卖出费)
         account.current_capital += sell_proceeds
+        record_sale(db, trade, sell_proceeds)
         account.total_pnl += pnl
         account.total_trades += 1
         if pnl > 0:
@@ -518,9 +591,12 @@ class PaperTradingEngine:
     ) -> tuple[int, list[tuple[PaperTradingPosition, PaperTradingTrade]]]:
         """检查持仓止损/止盈/信号反转，自动平仓。skip_keys 中的股票跳过（本轮新建仓）。"""
         exit_events: list[tuple[PaperTradingPosition, PaperTradingTrade]] = []
+        active_markets = [market for market in ALL_MARKETS if _is_trading_time(market)]
+        if not active_markets:
+            return 0, exit_events
         positions = (
             db.query(PaperTradingPosition)
-            .filter(PaperTradingPosition.status == "open")
+            .filter(PaperTradingPosition.status == "open", PaperTradingPosition.stock_market.in_(active_markets))
             .all()
         )
         if not positions:
@@ -532,12 +608,16 @@ class PaperTradingEngine:
 
         closed = 0
         for pos in positions:
+            if not _is_trading_time(pos.stock_market):
+                continue
             # 跳过本轮刚建仓的持仓
             if skip_keys and (pos.stock_symbol, pos.stock_market) in skip_keys:
                 continue
             key = (pos.stock_market, pos.stock_symbol)
             quote = quotes.get(key)
-            current_price = _safe_float(quote.get("current_price")) if quote else None
+            if not quote or not quote_date_is_current(pos.stock_market, quote):
+                continue
+            current_price = _safe_float(quote.get("current_price"))
 
             if current_price is None or current_price <= 0:
                 continue
@@ -549,6 +629,11 @@ class PaperTradingEngine:
             pos.unrealized_pnl = round(_sell_u - _buy_cost_u, 4)
             if pos.highest_price is None or current_price > pos.highest_price:
                 pos.highest_price = current_price
+
+            # Mark-to-market continues while today's A-share purchase is locked.
+            # Every automatic exit shares this guard, including reversal/time exits.
+            if sell_block_reason(pos):
+                continue
 
             # 检查止损
             if pos.stop_loss and current_price <= pos.stop_loss:
@@ -642,13 +727,16 @@ class PaperTradingEngine:
             if drawdown > account.max_drawdown_pct:
                 account.max_drawdown_pct = round(drawdown, 2)
 
+    @_account_mutation
     def _scan_sync(self) -> dict:
         """同步扫描（在线程中执行）。"""
         db = SessionLocal()
         try:
             account = self._get_or_create_account(db)
+            settled = settle_due(db, now=_utc_now())
+            db.commit()
             if not account.enabled:
-                return {"status": "disabled"}
+                return {"status": "disabled", "settled": settled}
 
             opened, new_keys, entry_events = self._check_entries(db, account)
             closed, exit_events = self._check_exits(db, account, skip_keys=new_keys)
@@ -667,6 +755,7 @@ class PaperTradingEngine:
                 "status": "ok",
                 "opened": opened,
                 "closed": closed,
+                "settled": settled,
                 "entry_events": serialized_entries,
                 "exit_events": serialized_exits,
             }
@@ -683,6 +772,7 @@ class PaperTradingEngine:
         await self._send_notifications(result)
         return result
 
+    @_account_mutation
     def close_position_manual(self, position_id: int) -> dict:
         """手动平仓。"""
         db = SessionLocal()
@@ -699,17 +789,25 @@ class PaperTradingEngine:
             if not pos:
                 return {"ok": False, "error": "持仓不存在或已平仓"}
 
+            block = sell_block_reason(pos)
+            if block:
+                return {"ok": False, "error_code": block, "error": SELL_BLOCK_MESSAGES[block]}
+
+            if not _is_trading_time(pos.stock_market):
+                return {"ok": False, "error": "该市场当前非交易时段，无法成交"}
+
             # 获取最新报价(走 flag 门控的 md_quote_rows,支持故障转移)
             mc = _to_market(pos.stock_market)
             rows = md_quote_rows([pos.stock_symbol], mc.value)
 
-            exit_price = pos.current_price or pos.entry_price
-            if rows:
-                p = _safe_float(rows[0].get("current_price"))
-                if p and p > 0:
-                    exit_price = p
+            exit_price = _safe_float(rows[0].get("current_price")) if rows else None
+            if not exit_price or exit_price <= 0 or not quote_date_is_current(pos.stock_market, rows[0]):
+                return {"ok": False, "error": "暂无有效报价，无法成交"}
+            if not _is_trading_time(pos.stock_market):
+                return {"ok": False, "error": "该市场当前非交易时段，无法成交"}
 
             trade = self._close_position(db, account, pos, exit_price, "manual")
+            settle_due(db, now=_utc_now())
             self._update_account_metrics(db, account)
             db.commit()
             # 序列化后返回，避免 db.close() 后 ORM 对象 detached
@@ -747,10 +845,12 @@ class PaperTradingEngine:
         except Exception:
             logger.exception("[模拟盘] 通知发送失败")
 
+    @_account_mutation
     def reset_account(self) -> dict:
         """重置模拟盘（清空所有数据）。"""
         db = SessionLocal()
         try:
+            db.query(PaperTradingSettlement).delete()
             db.query(PaperTradingPosition).delete()
             db.query(PaperTradingTrade).delete()
             account = db.query(PaperTradingAccount).first()

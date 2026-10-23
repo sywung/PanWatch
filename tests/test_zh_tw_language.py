@@ -113,9 +113,8 @@ def test_apply_report_language_zh_tw_adds_traditional_instruction():
 def test_zh_tw_converts_prompt_examples_models_copy():
     """2026-10-02:intraday_monitor.txt 的 JSON 示例写着「减仓」「RSI超买回落」,
     模型照抄,建议池出现简中。zh-TW 时提示词整份转繁体(JSON key 不动)。"""
-    from pathlib import Path
-
-    raw = (Path(__file__).resolve().parents[1] / "prompts" / "intraday_monitor.txt").read_text(encoding="utf-8")
+    # prompts/*.txt 已随上游研究图移除;以当时的 JSON 示例片段验证转换规则
+    raw = '{"action":"reduce","action_label":"减仓","signal":"RSI超买回落","invalidations":[]}'
     out = _agent().apply_report_language(_Ctx("zh-TW"), raw)
     assert "减仓" not in out and "RSI超买" not in out
     assert '"action_label":"減倉"' in out

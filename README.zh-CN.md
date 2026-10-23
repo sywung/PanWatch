@@ -1,20 +1,22 @@
-# 盯盘侠 PanWatch — 自托管 AI 盯盘助手
+<h1 align="center">盯盘侠 PanWatch — 自托管 AI 盯盘助手</h1>
 
 [English](README.md) | [简体中文](README.zh-CN.md) | [繁體中文（台股版）](README.zh-TW.md)
 
-**把自选与持仓变成全天候 AI 投研工作台。** PanWatch 将 A 股 / 港股 / 美股实时监控、持仓管理、智能分析和全渠道推送整合在你自己的基础设施中。
+<p align="center">
+  管理 A 股、港股和美股持仓，监控行情与提醒，并通过 <a href="https://github.com/TauricResearch/TradingAgents">TradingAgents</a> 进行深度分析。自托管部署，可接入你选择的 OpenAI 兼容服务商或 Ollama 本地模型。
+</p>
 
-集成 [TradingAgents](https://github.com/TauricResearch/TradingAgents) 多 Agent 投资决策：专业分析、看多看空辩论、风险审查，最终形成投资组合经理决策。
+<p align="center">
+  <a href="#-功能一览">功能一览</a> · <a href="#核心功能">核心功能</a> · <a href="#快速开始">快速开始</a> · <a href="#详细说明">详细说明</a> · <a href="#支持项目">支持项目</a> · <a href="#贡献">参与贡献</a>
+</p>
 
-> 🌐 支持简体中文与英文。首次访问会跟随浏览器语言，手动切换后会记住你的选择。
-
-[快速开始](#快速开始) · [功能一览](#-功能一览) · [核心功能](#核心功能) · [本地开发](#本地开发) · [捐赠支持](#捐赠支持) · [参与贡献](#贡献)
-
-[![GitHub stars](https://img.shields.io/github/stars/TNT-Likely/PanWatch?style=flat&logo=github&color=yellow)](https://github.com/TNT-Likely/PanWatch/stargazers)
-[![Docker Pulls](https://img.shields.io/docker/pulls/sunxiao0721/panwatch?logo=docker&label=docker%20pulls&color=2496ED)](https://hub.docker.com/r/sunxiao0721/panwatch)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Last commit](https://img.shields.io/github/last-commit/TNT-Likely/PanWatch)](https://github.com/TNT-Likely/PanWatch/commits/main)
-[![PWA](https://img.shields.io/badge/PWA-installable-5A0FC8?logo=pwa&logoColor=white)](https://github.com/TNT-Likely/PanWatch)
+<p align="center">
+  <a href="https://github.com/TNT-Likely/PanWatch/stargazers"><img src="https://img.shields.io/github/stars/TNT-Likely/PanWatch?style=flat&amp;logo=github&amp;color=yellow" alt="GitHub stars" /></a>
+  <a href="https://hub.docker.com/r/sunxiao0721/panwatch"><img src="https://img.shields.io/docker/pulls/sunxiao0721/panwatch?logo=docker&amp;label=docker%20pulls&amp;color=2496ED" alt="Docker Pulls" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" /></a>
+  <a href="https://github.com/TNT-Likely/PanWatch/commits/main"><img src="https://img.shields.io/github/last-commit/TNT-Likely/PanWatch" alt="Last commit" /></a>
+  <a href="https://github.com/TNT-Likely/PanWatch"><img src="https://img.shields.io/badge/PWA-installable-5A0FC8?logo=pwa&amp;logoColor=white" alt="PWA" /></a>
+</p>
 
 <p align="center">
   <a href="https://www.star-history.com/tnt-likely/panwatch">
@@ -29,13 +31,6 @@
 ![盯盘侠 PanWatch · TradingAgents 深度分析演示](docs/screenshots/zh-CN/tradingagents-demo.gif)
 
 > 🧠 **持仓页点一下 → TradingAgents 9-Agent 投研团队接力分析 → 看多看空辩论 → 风控审查 → PM 决策书,3-5 分钟一条完整推理链,结论直推到你的 IM。**
-
-## 为什么选择盯盘侠？
-
-- **数据私有** — 自托管部署，持仓数据始终由你掌控
-- **面向行动的 AI** — 将行情、新闻、技术信号和持仓上下文转化为明确关注事项，而不是继续堆砌指标
-- **全天候运行** — 自动执行盘前、盘中和收盘 Agent，并推送至 Telegram、企业微信、钉钉、飞书、Bark 或 Webhook
-- **多市场、模型无关** — 覆盖 A 股、港股和美股，兼容 OpenAI API，也可通过 Ollama 使用本地模型
 
 ## 📸 功能一览
 
@@ -58,26 +53,121 @@
 
 > 💡 如果盯盘侠对你有帮助，点右上角 ⭐ **Star** 支持一下 —— 这是对开源项目最好的鼓励，也能让更多人发现它。
 
-## 🧠 深度分析：TradingAgents 多 Agent 决策
-
-接入 [TradingAgents](https://github.com/TauricResearch/TradingAgents)（76k+ star）多 Agent 投资决策框架，在持仓页点 🧠 图标即可触发：
-
-- **4 类分析师**（技术 / 情绪 / 新闻 / 基本面） → **看多看空辩论** → **风控审查** → **PM 整合决策**
-- 3-5 分钟输出完整推理链，结论同步推送到 Telegram / 微信 / 钉钉
-- 默认 deepseek-chat，单次 ~$0.05，月度预算可控
-- [查看 TradingAgents 深度分析流程图](docs/tradingagents-flow.md)
-- [阅读后端架构设计](src/ARCHITECTURE.md)
-
 ## 核心功能
 
-<details>
-<summary><b>智能 Agent 系统</b></summary>
+| 能力 | 可以做什么 |
+|---|---|
+| **持仓管理** | 管理多个券商账户，查看持仓和盈亏，设置交易风格。 |
+| **AI 投研** | 由技术、情绪、新闻、基本面分析进入看多看空辩论、风控审查和投资组合经理决策。 |
+| **定时 Agent** | 按已配置的周期，在对应市场交易日执行盘前、盘中和盘后工作流。 |
+| **价格提醒** | 用 AND / OR 组合条件，设置冷却时间、日上限、到期时间和通知渠道。 |
+| **机会发现** | 查看排序后的候选及其入场位、目标价和风险信息。 |
+| **模拟盘** | 模拟按信号建仓和平仓，查看净值和绩效。 |
+| **消息推送** | 通过 Telegram、企业微信、钉钉、飞书、Bark 或 Webhook 接收报告和提醒。 |
+| **移动端** | 将 PWA 添加到主屏幕，在手机上使用同一套工作台。 |
 
-| Agent | 触发时机 | 功能 |
-|-------|---------|------|
-| **盘前分析** | 每日开盘前 | 综合隔夜美股、新闻消息、技术形态，给出今日操作策略 |
-| **盘中监测** | 交易时段实时 | 监控异动信号，RSI/KDJ/MACD 共振时推送提醒 |
-| **盘后日报** | 每日收盘后 | 复盘当日走势，分析资金流向，规划次日操作 |
+A 股、港股和美股的股票与场内 ETF 共用搜索、自选、持仓、价格提醒、行情和 K 线流程。可按代码或名称搜索，例如 `510300`、`159915`、`02800`、`SPY`。标的类型会随自选保存；数据源名称未标明 ETF 的基金，可在选中后将类型设为 **ETF**。
+
+ETF 深度分析使用基金上下文，不套用上市公司的财报。基金成分、净值、费用和跟踪误差暂未接入结构化数据。模拟盘沿用既有市场规则与成本模型，尚未模拟 ETF 专属 T+0 例外和费率。
+
+## 快速开始
+
+```bash
+docker run -d \
+  --name panwatch \
+  --restart unless-stopped \
+  -e TZ=Asia/Shanghai \
+  -p 8000:8000 \
+  -v panwatch_data:/app/data \
+  sunxiao0721/panwatch:latest
+```
+
+访问 `http://localhost:8000`，创建登录账号。
+
+通过 `TZ` 指定后台调度与通知静默时段的时区，例如 `-e TZ=UTC` 或
+`-e TZ=America/New_York`。镜像默认使用 `Asia/Shanghai`，不会自动读取宿主机时区。
+页面时间展示与提醒到期输入采用浏览器时区。[时区规则](docs/timezones.zh-CN.md)
+
+<details>
+<summary>首次配置</summary>
+
+1. 访问 Web 界面，设置登录账号
+2. 首次登录自动进入主流程，按自选、行情、AI、首次分析顺序完成；必做步骤不可跳过，可以暂停续接。随时从**引导中心**重新进入，中心还提供机会、模拟盘、助手、日常任务和数据源路线，各自保存进度，完成后可重走。直接点击高亮控件：主流程核验真实保存或测试结果，探索路线记录你确认已了解的提示
+3. 主流程中，在**设置 → AI 服务商**配置服务、选择默认模型并测试连接，再主动生成首次分析；这会使用模型额度，结果在页面展示
+4. 可选配置价格提醒和测试通知渠道。引导支持稍后处理和恢复，换浏览器或重启服务后保留进度；模型或渠道配置变更后需要重新测试
+5. 基础流程跑通后，再配置定时 Agent 或体验 TradingAgents 深度分析，它们独立于首次分析设置
+
+</details>
+
+<details>
+<summary>Docker Compose</summary>
+
+```yaml
+services:
+  panwatch:
+    image: sunxiao0721/panwatch:latest
+    container_name: panwatch
+    environment:
+      TZ: "Asia/Shanghai"
+    ports:
+      - "8000:8000"
+    volumes:
+      - panwatch_data:/app/data
+    restart: unless-stopped
+
+volumes:
+  panwatch_data:
+```
+
+```bash
+docker compose up -d
+```
+
+修改 `environment.TZ` 为所需 IANA 时区，再执行 `docker compose up -d` 重建容器。
+修改前核对已有 cron 和静默时段：同样的 `09:00` 将对应不同时间点。保留数据卷。
+
+</details>
+
+<details>
+<summary>首次启动与浏览器安装</summary>
+
+镜像已包含 Playwright 的系统依赖。用于截图的 Chromium 无头浏览器会在首次启动时下载到挂载卷（默认 `/app/data/playwright`），需要网络可达，可能耗时几分钟。
+
+不需要截图等浏览器能力时，可设置 `PLAYWRIGHT_SKIP_BROWSER_INSTALL=1` 跳过安装。
+
+</details>
+
+## 详细说明
+
+<details>
+<summary>定时 Agent 与深度分析</summary>
+
+| Agent | 用途 |
+|---|---|
+| **盘前分析** | 综合隔夜走势、新闻和技术形态，形成操作计划。 |
+| **盘中监测** | 在开市时监控行情异动与技术信号。 |
+| **盘后日报** | 复盘当日交易，为下个交易日准备计划。 |
+
+执行周期可配置。自动运行在采集和分析前过滤交易所休市日，盘中任务还需满足交易时段。
+
+点击持仓旁的脑图标，可启动 TradingAgents 深度分析。四类分析师进入看多看空辩论、风控审查和投资组合经理决策，推理过程可在应用内查看，也可通过配置的通知渠道推送。耗时和费用取决于选择的模型与配置。
+
+[深度分析流程图](docs/tradingagents-flow.md) · [后端架构](src/ARCHITECTURE.md)
+
+</details>
+
+<details>
+<summary>交易日历与执行规则</summary>
+
+- 点击市场状态栏，可对照三个市场未来 14 个日期是否交易。开盘和交易时段换算为浏览器所在时区；交易日期和当前状态按各市场当地日期判断。
+- 非交易日显示休市，当日交易结束后显示已收盘。北京时间周六上午，纽约可能仍是周五收盘后。
+- 应用内置 2026 年公布的休市日与半日市；启动只预热过去 30 天、未来 90 天，不请求全历史日历。未公布年份的工作日显示日历待更新，并暂停自动执行；跨年前需补充下一年度数据。
+- 保留已配置的 Agent Cron / 间隔，执行与时间预览共用交易日过滤。价格提醒的“全天”也只在交易日生效。
+- 模拟盘成交必须处于对应股票市场的交易时段；模拟盘通知按各交易所当地时间调度，兼容半日市与美股夏令时变化。
+- A 股模拟持仓遵循 T+1：按上海时区的买入日期计算，当日买入不可自动或手动卖出，下一交易日起可卖，无需等满 24 小时。锁定期间继续更新行情和浮盈亏；止损、止盈及其他退出条件在可卖时重新检查，按当时行情成交。
+- 模拟资金交收与可卖规则分别计算：A 股 T+1 交收，卖出款当日可继续买入；港股 T+2、美股 T+1，按现金账户策略，仅用已交收且未占用的资金买入。页面区分现金余额、购买力、已交收可用资金与待交收卖出款。买入时立即占用资金；交收仅释放可用额度，不重复增加现金或盈亏。
+- 交收日期按市场当地日历计算：港股半日市不交收，美股 Columbus Day 和 Veterans Day 即使交易也不交收。模拟在交收日期开始时释放资金，不模拟日内清算批次、提现截止时间、融资、换汇或券商垫资。已有余额视为已交收期初资金，不追溯锁定历史成交；后续日历未更新时，新待交收款继续保持待交收状态。
+- 规则依据：[港交所交收及半日市安排](https://www.hkex.com.hk/-/media/HKEX-Market/Services/Circulars-and-Notices/Participant-and-Members-Circulars/SEHK/2025/ce_SEHK_CT_075_2025.pdf)、[美国 SEC T+1](https://www.sec.gov/exams/educationhelpguidesfaqs/t1-faq)、[DTC 2026 年交收假期](https://www.dtcc.com/-/media/Files/pdf/2025/10/15/23034-25.pdf)。
 
 </details>
 
@@ -93,69 +183,12 @@
 </details>
 
 <details>
-<summary><b>多市场 & 多账户</b></summary>
-
-- **覆盖市场**：A 股、港股、美股实时行情
-- **账户管理**：支持多券商账户独立管理，汇总展示总资产
-- **交易风格**：按短线/波段/长线分别设置，AI 建议更精准
-
-</details>
-
-<details>
-<summary><b>全渠道通知</b></summary>
-
-Telegram / 企业微信 / 钉钉 / 飞书 / Bark / 自定义 Webhook
-
-</details>
-
-<details>
 <summary><b>价格提醒</b></summary>
 
 - 支持价格、涨跌幅、成交额、量比等条件组合（AND / OR）
-- 支持交易时段/全天生效、冷却时间、日触发上限、重复触发模式
+- 支持仅交易时段 / 交易日全天生效、冷却时间、日触发上限、重复触发模式
 - 到期时间使用弹窗内日期面板 + `HH:mm` 输入，留空表示永不过期
 - 可按规则选择通知渠道，不选则走系统默认渠道
-
-</details>
-
-## 快速开始
-
-```bash
-docker run -d \
-  --name panwatch \
-  --restart unless-stopped \
-  -p 8000:8000 \
-  -v panwatch_data:/app/data \
-  sunxiao0721/panwatch:latest
-```
-
-访问 `http://localhost:8000`，设置账号密码并连接 OpenAI 兼容服务商即可开始使用。首次访问会根据浏览器语言进入中文或英文界面。
-
-说明：镜像内已包含 Playwright 运行所需的系统依赖；Chromium 浏览器会在容器首次启动时自动下载并安装到挂载卷（默认 `/app/data/playwright`），首次启动可能需要几分钟且需要网络可达。
-
-如果不需要截图等浏览器能力，可以在启动容器时设置 `PLAYWRIGHT_SKIP_BROWSER_INSTALL=1` 跳过首次 Chromium 下载/安装。
-
-<details>
-<summary>Docker Compose</summary>
-
-```yaml
-services:
-  panwatch:
-    image: sunxiao0721/panwatch:latest
-    container_name: panwatch
-    ports:
-      - "8000:8000"
-    volumes:
-      - panwatch_data:/app/data
-    restart: unless-stopped
-
-volumes:
-  panwatch_data:
-```
-
-```bash
-docker compose up -d
-```
 
 </details>
 
@@ -168,21 +201,11 @@ docker compose up -d
 | `AUTH_PASSWORD` | 预设登录密码 | 首次访问时设置 |
 | `JWT_SECRET` | JWT 签名密钥 | 自动生成 |
 | `DATA_DIR` | 数据存储目录 | `./data` |
-| `TZ` | 应用时区（影响 Agent 调度触发时间与时间展示） | `Asia/Shanghai` |
+| `TZ` | 后台 Agent 调度与通知静默时段的部署时区；页面展示和输入采用浏览器时区 | `Asia/Shanghai` |
 | `PLAYWRIGHT_SKIP_BROWSER_INSTALL` | 跳过首次 Chromium 安装（不需要截图时可用） | 未设置 |
 | `LOG_LEVEL` | 控制台日志级别。默认 `INFO`（只输出业务事件 + 错误）；排查问题时设 `DEBUG` 可看到调度心跳、采集过程等底层日志。UI 日志板始终保留完整记录，不受影响 | `INFO` |
 | `HTTP_PROXY` / `HTTPS_PROXY` / `http_proxy` | 出站 HTTP 代理。三种配置方式任选其一: ① 启动前 `export HTTP_PROXY=...`；② `.env` 里写 `http_proxy=http://host:port`；③ UI「设置 → 全局 HTTP 代理」。三者优先级:外部环境变量 > UI > `.env`。生效后所有 httpx 客户端走代理。`NO_PROXY` 默认包含 `localhost,127.0.0.1` | 未设置 |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OpenTelemetry OTLP 导出端点(如 `http://jaeger:4318`)。**配置后**才启用 OTel trace 导出;留空则完全关闭(零副作用)。还需安装可选依赖 `requirements-otel.txt`。详见下方「OTel 导出」 | 未设置(关闭) |
-
-</details>
-
-<details>
-<summary>首次配置</summary>
-
-1. 访问 Web 界面，设置登录账号
-2. **设置 → AI 服务商**：配置 OpenAI 兼容 API（支持 OpenAI / 智谱 / DeepSeek / Ollama 等）
-3. **设置 → 通知渠道**：添加 Telegram 或其他推送渠道
-4. **持仓 → 添加股票**：添加自选股，启用对应 Agent
 
 </details>
 
@@ -205,7 +228,8 @@ cd frontend && pnpm install && pnpm dev       # 前端 :5183
 ```
 
 前端 dev server 跑在 `http://localhost:5183`，并把 `/api` 代理到 `127.0.0.1:8000`。
-前端用 `:5183` 而非默认 `:5173`，是为了和 BeeCount-Cloud 等本地常驻前端错开。
+
+[前端 UI 约定与检查](frontend/UI_GUIDELINES.zh-CN.md)
 
 </details>
 
@@ -274,13 +298,34 @@ Langfuse / Tempo 同理,把 `OTEL_EXPORTER_OTLP_ENDPOINT` 指向对应 OTLP 入�
 
 </details>
 
-## 捐赠支持
+## 支持项目
+
+### 赞助合作
+
+欢迎品牌赞助与合作，点击 [sunxiaoyes@outlook.com](mailto:sunxiaoyes@outlook.com?subject=PanWatch%20sponsorship) 联系。
+
+### 个人捐赠
 
 本分支完全免费开源。如果它节省了你的时间或改善了工作流，欢迎支持项目持续开发：
 
 [![捐赠](https://img.shields.io/badge/捐赠-ECPay%20绿界-E8590C?style=for-the-badge)](https://donate.twater.cc)
 
 PanWatch 原作者为 [TNT-Likely](https://github.com/TNT-Likely/PanWatch)，你也可以[支持原作者](https://github.com/TNT-Likely/PanWatch#support-the-project)。
+
+<details>
+<summary>USDT</summary>
+
+**币安 Pay**（币安 App 内扫码转账）：
+
+<img src="./docs/donate/binance.png" width="220" alt="币安 Pay 收款码" />
+
+**链上 USDT（TRC20）**——任意 TRON 钱包扫码：
+
+地址：`TKBV69B2AoU67p3vDhnJUbMJtZ1DxuUF5C`
+
+<img src="./docs/donate/trc20.png" width="220" alt="USDT TRC20 地址二维码" />
+
+</details>
 
 ## 贡献
 
@@ -290,3 +335,13 @@ PanWatch 原作者为 [TNT-Likely](https://github.com/TNT-Likely/PanWatch)，你
 ## License
 
 [MIT](LICENSE)
+
+### LangGraph 多 Agent 投研
+
+盘前、盘中、收盘统一使用可独立安装的 [Pan Investment Research 包](packages/pan-investment-research/README.zh-CN.md)。在 Agent 页的「投研编排」选择经过校验的图模板、专家、论证策略与整轮预算。盘中使用确定性变化门控及精简专家／决策图，无变化不调用模型、不覆盖上次建议；盘前提供开盘情景，收盘提供走势归因与基于已提供盘前计划的复核。
+
+市场模型不接收账户现金，研究定稿后由必经规则节点核对账户与报价限制。v139 迁移将旧 legacy／shadow 执行模式统一切到新图，并保留设置与历史记录。三个旧时段 prompt 与文本解析器已删除；TradingAgents 深度分析继续独立运行。
+
+盘前和收盘一次分析所有绑定股票，按组共享专家，再统一进行组合策略、风控和定稿。证据详情支持多股票批量读取；默认上下文、输出和 token 容量随标的数量调整，显式配置的全局上限保持有效，时间与并发限制不随股票数增加。
+
+模型候选和只读证据工具共用显式的请求、token、并发和时间限制。未解决的异议或预算不足会标记研究未完成，仅保留已校验的策略草案；没有策略时不生成虚假的观望建议。完整研究的图产物、标准化建议、预测跟踪与交付声明在同一事务中保存，未完成研究不进入正式建议或预测统计。通知回执不明确时记录状态，不盲目重发。首期不启用跨进程图续跑及 outbox 自动恢复。研究结果不会下单，也不会推断已核验的购买力。

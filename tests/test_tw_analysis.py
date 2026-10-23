@@ -101,14 +101,14 @@ def test_capital_flow_text_helper():
     assert "主力" in cn_line and "外資" not in cn_line
 
 
-def test_agents_use_shared_flow_text_helper():
-    """日报/盘前/盘中三个 Agent 不再各自用 main_net_inflow 拼字,统一走 helper(台股才会正确)。"""
+def test_research_evidence_uses_shared_flow_text_helper():
+    """研究图证据的三大法人文字统一走 helper(台股单位才会正确)。"""
+    text = (ROOT / "src/modules/research/orchestration/taiwan.py").read_text(encoding="utf-8")
+    assert "format_capital_flow_line" in text
     for rel in ("src/modules/automation/daily_report.py",
                 "src/modules/automation/premarket_outlook.py",
                 "src/modules/automation/intraday_monitor.py"):
-        text = (ROOT / rel).read_text(encoding="utf-8")
-        assert "format_capital_flow_line" in text, rel
-        assert 'flow.get("main_net_inflow")' not in text, rel
+        assert 'flow.get("main_net_inflow")' not in (ROOT / rel).read_text(encoding="utf-8"), rel
 
 
 def test_capital_flow_markets_include_tw():

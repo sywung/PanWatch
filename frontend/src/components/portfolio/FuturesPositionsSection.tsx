@@ -70,7 +70,7 @@ export function FuturesPositionsSection({ accountId, positions, formatMoney, for
         </div>
         {positions.length === 0 ? null : (
           <>
-            <div className="hidden xl:block overflow-x-auto">
+            <div className="hidden xl:block overflow-x-auto scrollbar">
               <table className="w-full min-w-[1120px]">
                 <thead>
                   <tr className="border-b border-border/30 bg-accent/20">

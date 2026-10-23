@@ -1,3 +1,5 @@
+import { useConfirm } from '@panwatch/base-ui/components/ui/confirm-dialog'
+import { localDateForInstant } from '@panwatch/base-ui'
 import { useEffect, useState, useCallback } from 'react'
 import { RefreshCw, Power, RotateCcw, X, TrendingUp, TrendingDown, Trophy, BarChart3, Wallet, Activity, Play, Bell, SlidersHorizontal } from 'lucide-react'
 import {
@@ -108,6 +110,7 @@ function EquityChart({ data }: { data: EquityCurvePoint[] }) {
 export default function PaperTradingPage() {
   const { toast } = useToast()
   const { t } = useTranslation('configuration')
+  const confirmAction = useConfirm()
   const paperT = t as unknown as (key: string, options?: Record<string, unknown>) => string
   const locale = getCurrentLocale()
   const tr = (key: string, options?: Record<string, unknown>) => paperT(`p4.paperTrading.${key}`, options)
@@ -145,30 +148,44 @@ export default function PaperTradingPage() {
   const [notifySaving, setNotifySaving] = useState(false)
   const [notifyTesting, setNotifyTesting] = useState(false)
 
-  const loadData = useCallback(async () => {
-    setLoading(true)
-    try {
-      const mkt = marketView === 'ALL' ? undefined : marketView
-      const [acc, pos, tradeData, metrics] = await Promise.all([
-        paperTradingApi.getAccount(mkt),
-        paperTradingApi.listPositions('open', mkt),
-        paperTradingApi.listTrades(tradesPageSize, tradesPage * tradesPageSize, mkt),
-        paperTradingApi.getMetrics(mkt),
-      ])
-      setAccount(acc)
-      setPositions(pos)
-      setTrades(tradeData.items)
-      setTradesTotal(tradeData.total)
-      setEquityCurve(metrics.equity_curve)
-      setStrategyPerf(metrics.strategy_performance || [])
-    } catch {
-      toast(message('loadFailed'), 'error')
-    } finally {
-      setLoading(false)
-    }
-  }, [tradesPage, marketView])
+  const [refreshVersion, setRefreshVersion] = useState(0)
+  const loadData = useCallback(() => { setRefreshVersion(value => value + 1) }, [])
 
-  useEffect(() => { loadData() }, [loadData])
+  useEffect(() => {
+    let cancelled = false
+    const mkt = marketView === 'ALL' ? undefined : marketView
+    setLoading(true)
+    setAccount(null)
+    setPositions([])
+    setEquityCurve([])
+    setStrategyPerf([])
+    const publish = <T,>(setter: (value: T) => void) => (value: T) => { if (!cancelled) setter(value) }
+    void Promise.allSettled([
+      paperTradingApi.getAccount(mkt).then(publish(setAccount)).finally(() => { if (!cancelled) setLoading(false) }),
+      paperTradingApi.listPositions('open', mkt).then(publish(setPositions)),
+      paperTradingApi.getMetrics(mkt).then(metrics => {
+        if (cancelled) return
+        setEquityCurve(metrics.equity_curve)
+        setStrategyPerf(metrics.strategy_performance || [])
+      }),
+    ]).then(results => {
+      if (!cancelled && results.some(result => result.status === 'rejected')) toast(message('loadFailed'), 'error')
+    })
+    return () => { cancelled = true }
+  }, [marketView, refreshVersion])
+
+  useEffect(() => {
+    let cancelled = false
+    const mkt = marketView === 'ALL' ? undefined : marketView
+    setTrades([])
+    setTradesTotal(0)
+    void paperTradingApi.listTrades(tradesPageSize, tradesPage * tradesPageSize, mkt).then(data => {
+      if (cancelled) return
+      setTrades(data.items)
+      setTradesTotal(data.total)
+    }).catch(() => { if (!cancelled) toast(message('loadFailed'), 'error') })
+    return () => { cancelled = true }
+  }, [marketView, tradesPage, refreshVersion])
 
   const handleToggle = async () => {
     if (!account) return
@@ -182,7 +199,7 @@ export default function PaperTradingPage() {
   }
 
   const handleReset = async () => {
-    if (!confirm(message('resetConfirm'))) return
+    if (!(await confirmAction(message('resetConfirm'), { destructive: true }))) return
     try {
       await paperTradingApi.resetAccount()
       toast(message('resetDone'), 'success')
@@ -210,8 +227,8 @@ export default function PaperTradingPage() {
       await paperTradingApi.closePosition(id)
       toast(message('closeDone'), 'success')
       loadData()
-    } catch {
-      toast(message('closeFailed'), 'error')
+    } catch (error) {
+      toast(error instanceof Error ? error.message : message('closeFailed'), 'error')
     }
   }
 
@@ -365,7 +382,7 @@ export default function PaperTradingPage() {
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline ml-1">{tr('refresh')}</span>
           </Button>
-          <Button variant="outline" size="sm" className="h-8" onClick={handleToggle}>
+          <Button data-tour="paper-controls" variant="outline" size="sm" className="h-8" onClick={handleToggle}>
             <Power className="w-3.5 h-3.5" />
             <span className="hidden sm:inline ml-1">{account?.enabled ? tr('pause') : tr('start')}</span>
           </Button>
@@ -403,7 +420,7 @@ export default function PaperTradingPage() {
               )
             })}
           </div>
-          <Button variant="outline" size="sm" className="h-8" onClick={handleOpenConfig}>
+          <Button data-tour="paper-capital" variant="outline" size="sm" className="h-8" onClick={handleOpenConfig}>
             <SlidersHorizontal className="w-3.5 h-3.5" />
             <span className="hidden sm:inline ml-1">{tr('capitalConfig')}</span>
           </Button>
@@ -445,10 +462,48 @@ export default function PaperTradingPage() {
           <div className="card p-3">
             <div className="flex items-center gap-1.5 text-muted-foreground text-xs mb-1">
               <Wallet className="w-3.5 h-3.5" />
-              {tr('availableCapital')}
+              {tr('buyingPower')}
             </div>
-            <div className="text-lg font-bold">{formatAmount(account.current_capital)}</div>
+            <div className="text-lg font-bold">{formatAmount(account.buying_power ?? account.current_capital)}</div>
           </div>
+        </div>
+      )}
+
+      {account && (
+        <div className="card p-4 space-y-3">
+          <h2 className="text-sm font-semibold">{tr('cashSettlement')}</h2>
+          <p className="text-xs text-muted-foreground">
+            {tr(marketView === 'CN' ? 'fundingCN' : marketView === 'ALL' ? 'fundingAll' : 'fundingCash')}
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+            <div><span className="text-muted-foreground text-xs">{tr('cashBalance')}</span>
+              <div className="font-semibold">{formatAmount(account.cash_balance ?? account.current_capital)}</div></div>
+            <div><span className="text-muted-foreground text-xs">{tr('settledCash')}</span>
+              <div className="font-semibold">{formatAmount(account.settled_cash ?? account.current_capital)}</div></div>
+            <div><span className="text-muted-foreground text-xs">{tr('unsettledCash')}</span>
+              <div className="font-semibold">{formatAmount(account.unsettled_cash ?? 0)}</div></div>
+          </div>
+          <p className="text-xs text-muted-foreground">{tr('settlementRules')}</p>
+          {(account.pending_settlements?.length ?? 0) > 0 ? (
+            <div className="overflow-x-auto scrollbar">
+              <table className="w-full text-sm">
+                <thead><tr className="border-b border-border text-xs text-muted-foreground">
+                  <th className="text-left py-2 pr-3">{tr('market')}</th>
+                  <th className="text-right py-2 px-2">{tr('remainingProceeds')}</th>
+                  <th className="text-right py-2 pl-2">{tr('expectedSettlement')}</th>
+                </tr></thead>
+                <tbody>{account.pending_settlements.map(item => (
+                  <tr key={item.trade_id} className="border-b border-border/50">
+                    <td className="py-2 pr-3">{item.market} · #{item.trade_id}</td>
+                    <td className="text-right py-2 px-2">{formatAmount(item.remaining_amount)}</td>
+                    <td className="text-right py-2 pl-2 text-xs whitespace-nowrap">
+                      {item.settlement_date ?? tr('settlementStatuses.unknown')}
+                    </td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          ) : <p className="text-xs text-muted-foreground">{tr('noPendingSettlement')}</p>}
         </div>
       )}
 
@@ -462,7 +517,7 @@ export default function PaperTradingPage() {
       {strategyPerf.length > 0 && (
         <div className="card p-4">
           <h2 className="text-sm font-semibold mb-3">{tr('strategyPerformance')}</h2>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto scrollbar">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-muted-foreground text-xs">
@@ -504,12 +559,12 @@ export default function PaperTradingPage() {
       )}
 
       {/* Open Positions */}
-      <div className="card p-4">
+      <div data-tour="paper-positions" className="card p-4">
         <h2 className="text-sm font-semibold mb-3">{tr('currentPositions', { count: positions.length })}</h2>
         {positions.length === 0 ? (
           <div className="text-center text-muted-foreground text-sm py-8">{tr('noPositions')}</div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto scrollbar">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-muted-foreground text-xs">
@@ -521,6 +576,7 @@ export default function PaperTradingPage() {
                   <th className="text-right py-2 px-2">{tr('takeProfit')}</th>
                   <th className="text-left py-2 px-2">{tr('strategy')}</th>
                   <th className="text-right py-2 px-2">{tr('holdingDays')}</th>
+                  <th className="text-right py-2 px-2">{tr('securitiesSettlement')}</th>
                   <th className="text-right py-2 pl-2">{tr('actions')}</th>
                 </tr>
               </thead>
@@ -541,16 +597,26 @@ export default function PaperTradingPage() {
                     <td className="text-right py-2 px-2">{p.target_price?.toFixed(2) ?? '-'}</td>
                     <td className="py-2 px-2 text-xs text-muted-foreground">{p.strategy_code || '-'}</td>
                     <td className="text-right py-2 px-2">{tr('days', { count: p.holding_days })}</td>
+                    <td className="text-right py-2 px-2 text-xs text-muted-foreground whitespace-nowrap">
+                      <div>{tr(`settlementStatuses.${p.settlement_status ?? 'legacy'}`)}</div>
+                      <div>{p.settlement_date ?? '-'}</div>
+                    </td>
                     <td className="text-right py-2 pl-2">
                       <Button
                         variant="ghost"
                         size="sm"
                         className="h-7 px-2 text-destructive hover:text-destructive"
+                        disabled={p.sellable_quantity === 0}
                         onClick={() => handleClosePosition(p.id)}
                       >
                         <X className="w-3.5 h-3.5 mr-0.5" />
                         {tr('closePosition')}
                       </Button>
+                      {p.sell_block_reason && (
+                        <div className="text-xs text-muted-foreground mt-1 min-w-28 max-w-44 ml-auto">
+                          {tr(`sellBlocks.${p.sell_block_reason}`)}
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -571,7 +637,7 @@ export default function PaperTradingPage() {
             <div className="text-center text-muted-foreground text-sm py-8">{tr('noTrades')}</div>
           ) : (
             <>
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto scrollbar">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border text-muted-foreground text-xs">
@@ -583,6 +649,7 @@ export default function PaperTradingPage() {
                       <th className="text-left py-2 px-2">{tr('exitReason')}</th>
                       <th className="text-left py-2 px-2">{tr('strategy')}</th>
                       <th className="text-right py-2 px-2">{tr('holdingDays')}</th>
+                      <th className="text-right py-2 px-2">{tr('cashSettlement')}</th>
                       <th className="text-right py-2 pl-2">{tr('closedAt')}</th>
                     </tr>
                   </thead>
@@ -600,7 +667,11 @@ export default function PaperTradingPage() {
                         <td className="py-2 px-2 text-xs">{tr(`exitReasons.${t.exit_reason}`, { defaultValue: t.exit_reason })}</td>
                         <td className="py-2 px-2 text-xs text-muted-foreground">{t.strategy_code || '-'}</td>
                         <td className="text-right py-2 px-2">{tr('days', { count: t.holding_days })}</td>
-                        <td className="text-right py-2 pl-2 text-xs text-muted-foreground">{t.closed_at?.slice(0, 10) || '-'}</td>
+                        <td className="text-right py-2 px-2 text-xs text-muted-foreground whitespace-nowrap">
+                          <div>{tr(`settlementStatuses.${t.settlement_status ?? 'legacy'}`)}</div>
+                          <div>{t.settlement_date ?? '-'}</div>
+                        </td>
+                        <td className="text-right py-2 pl-2 text-xs text-muted-foreground">{localDateForInstant(t.closed_at) || '-'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -636,7 +707,7 @@ export default function PaperTradingPage() {
 
       {/* 资金配置对话框 */}
       <Dialog open={configOpen} onOpenChange={setConfigOpen}>
-        <DialogContent>
+        <DialogContent data-tour="paper-config-dialog"><div data-tour-instructions />
           <DialogHeader>
             <DialogTitle>{tr('configTitle')}</DialogTitle>
             <DialogDescription>{tr('configDescription')}</DialogDescription>

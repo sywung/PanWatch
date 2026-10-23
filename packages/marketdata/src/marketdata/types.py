@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 
@@ -48,6 +48,10 @@ class Quote:
     timestamp: datetime = field(default_factory=datetime.now)
     contract: str | None = None
     session: str | None = None
+    # Source trading date, distinct from the time at which a quote was fetched.
+    quote_date: date | None = None
+    source_timestamp: datetime | None = None
+    source: str = ""
 
 
 @dataclass

@@ -1,3 +1,4 @@
+import { AnalysisMetadata } from './analysis-metadata'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { Copy, Download, ExternalLink, RefreshCw, Share2, Sparkles } from 'lucide-react'
@@ -36,6 +37,7 @@ import StockPriceAlertPanel from '@panwatch/biz-ui/components/stock-price-alert-
 import { TechnicalBadge } from '@panwatch/biz-ui/components/technical-badge'
 import AddPositionCalculator from '@panwatch/biz-ui/components/add-position-calculator'
 import { useTranslation } from 'react-i18next'
+import { resolveSuggestionAction as normalizeSuggestionAction, suggestionPresentation, type SuggestionStateInput } from './suggestion-action'
 import { useMarketColors } from '@/hooks/use-market-colors'
 import { marketSignTextClass } from '@/lib/market-colors'
 
@@ -205,13 +207,6 @@ function parseSuggestionJson(raw: unknown): Record<string, any> | null {
   return null
 }
 
-function normalizeSuggestionAction(action?: string, actionLabel?: string): string {
-  const a = String(action || '').trim().toLowerCase()
-  const l = String(actionLabel || '').trim()
-  if (a === 'buy/add' || a === 'add/buy') return /加仓|增持|补仓/.test(l) ? 'add' : 'buy'
-  if (a === 'sell/reduce' || a === 'reduce/sell') return /减仓|减持/.test(l) ? 'reduce' : 'sell'
-  return a || 'watch'
-}
 
 function pickSuggestionText(raw: unknown, field: 'signal' | 'reason'): string {
   const plain = String(raw || '').trim()
@@ -342,13 +337,8 @@ export default function StockInsightModal(props: {
   const locale = language.startsWith('en') ? 'en-US' : language.startsWith('zh-tw') ? 'zh-TW' : 'zh-CN'
   const english = locale === 'en-US'
   const agentLabel = (name: string) => name === 'daily_report' ? tr('reports.afterMarketAgent') : name === 'premarket_outlook' ? tr('reports.premarketAgent') : name
-  const actionLabel = (action?: string, label?: string) => {
-    const normalized = normalizeSuggestionAction(action, label)
-    if (english || !label) {
-      return (t as unknown as (key: string) => string)(`kline.actions.${normalized}`)
-    }
-    return label
-  }
+  const actionLabel = (action?: string, label?: string, state?: SuggestionStateInput) =>
+    (t as unknown as (key: string) => string)(suggestionPresentation({ ...state, action, action_label: label }).labelKey)
   const symbol = String(props.symbol || '').trim()
   const market = String(props.market || DEFAULT_MARKET).trim().toUpperCase()
   const [loading, setLoading] = useState(false)
@@ -479,6 +469,7 @@ export default function StockInsightModal(props: {
       include_expired: includeExpiredSuggestions,
     })
     const list = (data || []).map(item => ({
+      ...item,
       id: item.id,
       action: normalizeSuggestionAction(item.action, item.action_label),
       action_label: item.action_label || '',
@@ -897,7 +888,7 @@ export default function StockInsightModal(props: {
       }
     }
     if (suggestions.length > 0) {
-      const lines = suggestions.slice(0, 3).map(s => `- [${s.agent_label || s.agent_name}] ${actionLabel(s.action, s.action_label)}: ${s.signal}`)
+      const lines = suggestions.slice(0, 3).map(s => `- [${s.agent_label || s.agent_name}] ${actionLabel(s.action, s.action_label, s)}: ${s.signal}`)
       parts.push(`${english ? 'Recent AI suggestions:\n' : '最近AI建议：\n'}${lines.join('\n')}`)
     }
     if (holdingAgg) {
@@ -973,7 +964,7 @@ export default function StockInsightModal(props: {
     const price = quote?.current_price != null ? formatNumber(quote.current_price) : '--'
     const chg = quote?.change_pct != null ? `${quote.change_pct >= 0 ? '+' : ''}${quote.change_pct.toFixed(2)}%` : '--'
     const action = latestShareSuggestion
-      ? actionLabel(latestShareSuggestion.action, latestShareSuggestion.action_label)
+      ? actionLabel(latestShareSuggestion.action, latestShareSuggestion.action_label, latestShareSuggestion)
       : tr('suggestions.empty')
     const signal = firstNonEmptyText(
       latestShareSuggestion?.signal,
@@ -1272,7 +1263,7 @@ export default function StockInsightModal(props: {
     autoTriggeredRef.current[key] = Date.now()
     setAutoSuggesting(true)
     try {
-      // intraday_monitor 较 chart_analyst 更轻量、稳定，不依赖截图链路
+      // 使用盘中分析生成详情页建议，输入来自行情和结构化技术指标。
       await stocksApi.triggerAgent(0, 'intraday_monitor', {
         allow_unbound: true,
         symbol,
@@ -1574,68 +1565,62 @@ export default function StockInsightModal(props: {
 
                   <div className="card p-4 h-full">
                     <div className="text-[12px] text-muted-foreground mb-2">{tr('miniKline.title')}</div>
-                    {!klineSummary ? (
-                      <div className="text-[12px] text-muted-foreground py-8">{tr('miniKline.noSummary')}</div>
+                    {miniKlineLoading ? (
+                      <div className="h-32 rounded bg-accent/30 animate-pulse" />
+                    ) : miniKlines.length > 0 && miniKlineExtrema ? (
+                      <svg
+                        viewBox="0 0 320 120"
+                        className="w-full h-32 cursor-pointer"
+                        onClick={() => setTab('kline')}
+                        onMouseLeave={() => setMiniHoverIdx(null)}
+                        onMouseMove={(e) => {
+                          const rect = e.currentTarget.getBoundingClientRect()
+                          const x = e.clientX - rect.left
+                          const ratio = rect.width > 0 ? x / rect.width : 0
+                          const idx = Math.floor(ratio * miniKlines.length)
+                          setMiniHoverIdx(Math.max(0, Math.min(miniKlines.length - 1, idx)))
+                        }}
+                      >
+                        <title>{tr('miniKline.open')}</title>
+                        {miniKlines.map((k, idx) => {
+                          const xStep = 320 / miniKlines.length
+                          const x = xStep * idx + xStep / 2
+                          const bodyW = Math.max(2, xStep * 0.5)
+                          const toY = (v: number) => 114 - ((v - miniKlineExtrema.low) / (miniKlineExtrema.high - miniKlineExtrema.low)) * 100
+                          const yOpen = toY(Number(k.open))
+                          const yClose = toY(Number(k.close))
+                          const yHigh = toY(Number(k.high))
+                          const yLow = toY(Number(k.low))
+                          const close = Number(k.close)
+                          const open = Number(k.open)
+                          const color = close > open ? palette.up.bright : close < open ? palette.down.bright : palette.flat
+                          const bodyTop = Math.min(yOpen, yClose)
+                          const bodyH = Math.max(1.4, Math.abs(yOpen - yClose))
+                          const active = miniHoverIdx === idx
+                          return (
+                            <g key={`${k.date}-${idx}`}>
+                              {active && <rect x={x - xStep / 2} y={6} width={xStep} height={108} fill="rgba(59,130,246,0.10)" />}
+                              <line x1={x} y1={yHigh} x2={x} y2={yLow} stroke={color} strokeWidth="1" />
+                              <rect x={x - bodyW / 2} y={bodyTop} width={bodyW} height={bodyH} fill={color} rx="0.6" />
+                            </g>
+                          )
+                        })}
+                      </svg>
                     ) : (
-                      <>
-                        {miniKlineLoading ? (
-                          <div className="h-32 rounded bg-accent/30 animate-pulse" />
-                        ) : miniKlines.length > 0 && miniKlineExtrema ? (
-                          <svg
-                            viewBox="0 0 320 120"
-                            className="w-full h-32 cursor-pointer"
-                            onClick={() => setTab('kline')}
-                            onMouseLeave={() => setMiniHoverIdx(null)}
-                            onMouseMove={(e) => {
-                              const rect = e.currentTarget.getBoundingClientRect()
-                              const x = e.clientX - rect.left
-                              const ratio = rect.width > 0 ? x / rect.width : 0
-                              const idx = Math.floor(ratio * miniKlines.length)
-                              setMiniHoverIdx(Math.max(0, Math.min(miniKlines.length - 1, idx)))
-                            }}
-                          >
-                            <title>{tr('miniKline.open')}</title>
-                            {miniKlines.map((k, idx) => {
-                              const xStep = 320 / miniKlines.length
-                              const x = xStep * idx + xStep / 2
-                              const bodyW = Math.max(2, xStep * 0.5)
-                              const toY = (v: number) => 114 - ((v - miniKlineExtrema.low) / (miniKlineExtrema.high - miniKlineExtrema.low)) * 100
-                              const yOpen = toY(Number(k.open))
-                              const yClose = toY(Number(k.close))
-                              const yHigh = toY(Number(k.high))
-                              const yLow = toY(Number(k.low))
-                              const close = Number(k.close)
-                              const open = Number(k.open)
-                              const color = close > open ? palette.up.bright : close < open ? palette.down.bright : palette.flat
-                              const bodyTop = Math.min(yOpen, yClose)
-                              const bodyH = Math.max(1.4, Math.abs(yOpen - yClose))
-                              const active = miniHoverIdx === idx
-                              return (
-                                <g key={`${k.date}-${idx}`}>
-                                  {active && <rect x={x - xStep / 2} y={6} width={xStep} height={108} fill="rgba(59,130,246,0.10)" />}
-                                  <line x1={x} y1={yHigh} x2={x} y2={yLow} stroke={color} strokeWidth="1" />
-                                  <rect x={x - bodyW / 2} y={bodyTop} width={bodyW} height={bodyH} fill={color} rx="0.6" />
-                                </g>
-                              )
-                            })}
-                          </svg>
-                        ) : (
-                          <div className="h-32 text-[11px] text-muted-foreground flex items-center justify-center">{tr('miniKline.empty')}</div>
-                        )}
-                        <div className="mt-2 rounded bg-accent/10 p-2.5">
-                          <TechnicalIndicatorStrip
-                            klineSummary={klineSummary}
-                            technicalSuggestion={technicalFallbackSuggestion}
-                            stockName={resolvedName}
-                            stockSymbol={symbol}
-                            market={market}
-                            hasPosition={!!props.hasPosition}
-                            score={Number(technicalScored?.score ?? 0)}
-                            evidence={technicalScored?.evidence || []}
-                          />
-                        </div>
-                      </>
+                      <div className="h-32 text-[11px] text-muted-foreground flex items-center justify-center">{tr('miniKline.empty')}</div>
                     )}
+                    <div className="mt-2 rounded bg-accent/10 p-2.5">
+                      <TechnicalIndicatorStrip
+                        klineSummary={klineSummary}
+                        technicalSuggestion={technicalFallbackSuggestion}
+                        stockName={resolvedName}
+                        stockSymbol={symbol}
+                        market={market}
+                        hasPosition={!!props.hasPosition}
+                        score={Number(technicalScored?.score ?? 0)}
+                        evidence={technicalScored?.evidence || []}
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -1663,7 +1648,7 @@ export default function StockInsightModal(props: {
                         <div className="rounded bg-accent/10 p-2 text-[11px]">
                           <div className="text-muted-foreground">{tr('cards.core')}</div>
                           <div className="mt-1 text-foreground line-clamp-2">{suggestions[0].signal || suggestions[0].reason || tr('cards.noDescription')}</div>
-                          <div className="mt-1 text-muted-foreground">{tr('cards.action')}{actionLabel(suggestions[0].action, suggestions[0].action_label)}</div>
+                          <div className="mt-1 text-muted-foreground">{tr('cards.action')}{actionLabel(suggestions[0].action, suggestions[0].action_label, suggestions[0])}</div>
                           <div className="mt-1 text-foreground line-clamp-2">{tr('cards.rationale')}{suggestions[0].reason || tr('cards.noRationale')}</div>
                           <div className="mt-1 text-muted-foreground">
                             {tr('cards.source')}{suggestions[0].agent_label || suggestions[0].agent_name || 'AI'}{suggestions[0].created_at ? ` · ${formatTime(suggestions[0].created_at, locale)}` : ''}
@@ -1674,7 +1659,7 @@ export default function StockInsightModal(props: {
                             <div className="text-muted-foreground mb-1">{tr('cards.recentSuggestions')}</div>
                             {suggestions.slice(1, 3).map((item, idx) => (
                               <div key={`${item.created_at || 'extra'}-${idx}`} className="line-clamp-1 text-foreground">
-                                {actionLabel(item.action, item.action_label)} · {item.signal || item.reason || '--'}
+                                {actionLabel(item.action, item.action_label, item)} · {item.signal || item.reason || '--'}
                               </div>
                             ))}
                           </div>
@@ -1793,25 +1778,25 @@ export default function StockInsightModal(props: {
                         {activeReport.prompt_stats ? (
                           <div className="mt-2">
                             <div className="text-[11px] text-muted-foreground mb-1">{tr('reports.promptStats')}</div>
-                            <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto">{JSON.stringify(activeReport.prompt_stats, null, 2)}</pre>
+                            <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto scrollbar">{JSON.stringify(activeReport.prompt_stats, null, 2)}</pre>
                           </div>
                         ) : null}
                         {activeReport.news_debug ? (
                           <div className="mt-2">
                             <div className="text-[11px] text-muted-foreground mb-1">{tr('reports.newsDetails')}</div>
-                            <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto">{JSON.stringify(activeReport.news_debug, null, 2)}</pre>
+                            <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto scrollbar">{JSON.stringify(activeReport.news_debug, null, 2)}</pre>
                           </div>
                         ) : null}
                         {activeReport.context_payload ? (
                           <div className="mt-2">
                             <div className="text-[11px] text-muted-foreground mb-1">{tr('reports.contextSnapshot')}</div>
-                            <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto max-h-[220px] overflow-y-auto">{JSON.stringify(activeReport.context_payload, null, 2)}</pre>
+                            <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto max-h-[220px] overflow-y-auto scrollbar">{JSON.stringify(activeReport.context_payload, null, 2)}</pre>
                           </div>
                         ) : null}
                         {activeReport.prompt_context ? (
                           <div className="mt-2">
                             <div className="text-[11px] text-muted-foreground mb-1">{tr('reports.promptOriginal')}</div>
-                            <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto max-h-[220px] overflow-y-auto">{activeReport.prompt_context}</pre>
+                            <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto max-h-[220px] overflow-y-auto scrollbar">{activeReport.prompt_context}</pre>
                           </div>
                         ) : null}
                       </details>
@@ -2013,13 +1998,11 @@ function DeepAnalysisSection({
   setShowDebate: (v: boolean) => void
   onRefresh: () => void
 }) {
-  const { t, i18n } = useTranslation('bizUi')
+  const { t } = useTranslation('bizUi')
   const tr = (key: string, options?: Record<string, unknown>) =>
     (t as unknown as (key: string, options?: Record<string, unknown>) => string)(`stockInsight.${key}`, options)
-  const english = (i18n.resolvedLanguage || i18n.language).toLowerCase().startsWith('en')
-  const deepAction = (action: string, label: string) => english
-    ? (t as unknown as (key: string) => string)(`kline.actions.${normalizeSuggestionAction(action, label)}`)
-    : label
+  const deepAction = (suggestion: SuggestionStateInput) =>
+    (t as unknown as (key: string) => string)(suggestionPresentation(suggestion).labelKey)
   if (loading && !loaded) {
     return (
       <div className="card p-6 text-center text-[12px] text-muted-foreground">
@@ -2043,24 +2026,25 @@ function DeepAnalysisSection({
   const sug = rawData.suggestion
   const reports = rawData.analyst_reports || { market: '', social: '', news: '', fundamentals: '' }
   const debate = rawData.debate_history
-  const costUsd = rawData.cost_usd
 
   return (
     <div className="space-y-3 text-[13px]">
       <div className="flex items-center justify-between gap-2">
         <div className="text-[11px] text-muted-foreground">
-          {tr('deep.title')}{result?.timestamp ? ` · ${result.timestamp.slice(0, 16).replace('T', ' ')}` : ''}
+          {tr('deep.title')}
         </div>
         <Button variant="ghost" size="sm" className="h-7 px-2 text-[11px]" onClick={onRefresh} disabled={loading || historyLoading}>
           <RefreshCw className={`w-3.5 h-3.5 ${loading || historyLoading ? 'animate-spin' : ''}`} />
         </Button>
       </div>
 
+      {result && <AnalysisMetadata result={result} />}
+
       {sug && (
         <div className="rounded-lg bg-accent/30 p-4 space-y-2">
           <div className="flex items-center gap-3">
-            <span className={`text-[20px] font-bold ${DEEP_DECISION_COLOR[sug.action] || ''}`}>
-              {deepAction(sug.action, sug.action_label)}
+            <span className={`text-[20px] font-bold ${suggestionPresentation(sug).review ? 'text-orange-500' : DEEP_DECISION_COLOR[suggestionPresentation(sug).action] || ''}`}>
+              {deepAction(sug)}
             </span>
             {typeof sug.confidence === 'number' && (
               <span className="text-[12px] text-muted-foreground">
@@ -2069,9 +2053,6 @@ function DeepAnalysisSection({
             )}
           </div>
           {sug.reason && <div className="text-[12px] text-foreground/80">{sug.reason.slice(0, 240)}</div>}
-          {typeof costUsd === 'number' && (
-            <div className="text-[10px] text-muted-foreground mt-2">{tr('deep.cost', { value: costUsd.toFixed(4) })}</div>
-          )}
         </div>
       )}
 
@@ -2122,7 +2103,7 @@ function DeepAnalysisSection({
             {showDebate ? '▼' : '▶'} {tr('deep.debate')}
           </button>
           {showDebate && (
-            <div className="mt-2 pl-3 border-l-2 border-border/40 text-[11px] text-foreground/80 whitespace-pre-wrap max-h-96 overflow-y-auto">
+            <div className="mt-2 pl-3 border-l-2 border-border/40 text-[11px] text-foreground/80 whitespace-pre-wrap max-h-96 overflow-y-auto scrollbar">
               {debate.history}
               {debate.judge_decision && (
                 <>
@@ -2149,13 +2130,11 @@ function DeepHistoryComparison({
   history: HistoryComparisonResponse | null
   loading: boolean
 }) {
-  const { t, i18n } = useTranslation('bizUi')
+  const { t } = useTranslation('bizUi')
   const tr = (key: string, options?: Record<string, unknown>) =>
     (t as unknown as (key: string, options?: Record<string, unknown>) => string)(`stockInsight.${key}`, options)
-  const english = (i18n.resolvedLanguage || i18n.language).toLowerCase().startsWith('en')
-  const deepAction = (action: string, label: string) => english
-    ? (t as unknown as (key: string) => string)(`kline.actions.${normalizeSuggestionAction(action, label)}`)
-    : label
+  const deepAction = (suggestion: SuggestionStateInput) =>
+    (t as unknown as (key: string) => string)(suggestionPresentation(suggestion).labelKey)
   if (loading && !history) {
     return (
       <div className="rounded-lg border border-border/40 p-3 text-[11px] text-muted-foreground text-center">
@@ -2194,7 +2173,7 @@ function DeepHistoryComparison({
           <div className={`font-semibold ${retCls(stats.avg_return_20d_pct)}`}>{fmtRet(stats.avg_return_20d_pct)}</div>
         </div>
       </div>
-      <div className="overflow-x-auto -mx-1 mt-2">
+      <div className="overflow-x-auto -mx-1 mt-2 scrollbar">
         <table className="w-full text-[11px]">
           <thead className="text-muted-foreground">
             <tr className="border-b border-border/40">
@@ -2212,7 +2191,7 @@ function DeepHistoryComparison({
               <tr key={`${item.analysis_date}-${i}`} className="border-b border-border/20 hover:bg-accent/10">
                 <td className="px-1 py-1 text-muted-foreground whitespace-nowrap">{item.analysis_date}</td>
                 <td className="px-1 py-1">
-                  <span className={DEEP_DECISION_COLOR[item.action] || ''}>{deepAction(item.action, item.action_label)}</span>
+                  <span className={suggestionPresentation(item).review ? 'text-orange-500' : DEEP_DECISION_COLOR[suggestionPresentation(item).action] || ''}>{deepAction(item)}</span>
                   {typeof item.confidence === 'number' && (
                     <span className="text-muted-foreground text-[10px] ml-1">({item.confidence.toFixed(1)})</span>
                   )}

@@ -95,7 +95,13 @@ def test_futures_quote_rows_no_known_codes_makes_no_call():
 
 
 def test_md_quote_rows_routes_twf(monkeypatch):
-    md = FakeMD([_q("TXFJ6", 48461.0, contract="TXFJ6", session="night")])
+    # md_quote_rows 用「现在」决定近月合约;回传所请求的合约,避免测试随日期失效
+    class AnyContractMD(FakeMD):
+        def quotes(self, symbols, *, market=None):
+            self.calls.append((list(symbols), market))
+            return [_q(code, 48461.0, contract=code, session="night") for code in symbols]
+
+    md = AnyContractMD([])
     monkeypatch.setattr(mc, "get_market_data", lambda: md)
     rows = mc.md_quote_rows(["TXF"], "TWF")
     assert rows and rows[0]["symbol"] == "TXF"

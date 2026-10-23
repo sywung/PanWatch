@@ -2044,6 +2044,200 @@ def _m128_assistant_trusted_results(conn: Connection) -> None:
     )
 
 
+def _m129_assistant_task_notifications(conn: Connection) -> None:
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS assistant_task_notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_run_id INTEGER NOT NULL,
+            event_sequence INTEGER NOT NULL,
+            kind VARCHAR NOT NULL,
+            read_at DATETIME,
+            resolved_at DATETIME,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT ux_assistant_notification_event UNIQUE (task_run_id, event_sequence)
+        )
+    """))
+    _create_index_if_missing(conn, "ix_assistant_notification_inbox", "CREATE INDEX ix_assistant_notification_inbox ON assistant_task_notifications(resolved_at, read_at, id)")
+    _create_index_if_missing(conn, "ix_assistant_notification_task", "CREATE INDEX ix_assistant_notification_task ON assistant_task_notifications(task_run_id)")
+
+
+def _m130_global_notifications(conn: Connection) -> None:
+    from datetime import datetime
+    from sqlalchemy.dialects.sqlite import insert
+    from src.platform.persistence.models import NotificationEvent, NotificationReceipt
+
+    NotificationEvent.__table__.create(conn, checkfirst=True)
+    NotificationReceipt.__table__.create(conn, checkfirst=True)
+    if not all(_has_table(conn, name) for name in ('assistant_task_notifications', 'assistant_task_runs', 'chat_conversations')):
+        return
+    expiry = "(SELECT MIN(a.expires_at) FROM assistant_tool_approvals a WHERE a.task_run_id=n.task_run_id AND a.status='pending')" if _has_table(conn, 'assistant_tool_approvals') else 'NULL'
+    rows = conn.execute(text(f"""
+        SELECT n.*, t.conversation_id, c.title, {expiry} AS approval_expires_at
+        FROM assistant_task_notifications n
+        JOIN assistant_task_runs t ON t.id = n.task_run_id
+        JOIN chat_conversations c ON c.id = t.conversation_id
+        ORDER BY n.id
+    """)).mappings()
+    for row in rows:
+        def stamp(value):
+            return datetime.fromisoformat(value) if isinstance(value, str) else value
+        values = dict(id=row['id'], source='assistant', event_type=f"assistant_{row['kind']}",
+                      severity='warning' if row['kind'] == 'failed' else 'info',
+                      attention='action_required' if row['kind'] == 'awaiting_approval' else 'informational',
+                      dedupe_key=f"assistant:{row['task_run_id']}:{row['event_sequence']}",
+                      group_key=f"assistant:{row['task_run_id']}", subject_kind='assistant_task',
+                      subject_id=str(row['task_run_id']), correlation_id=str(row['task_run_id']),
+                      template_key=f"assistant_{row['kind']}", template_params={},
+                      display_snapshot={'title': (row['title'] or '')[:200]},
+                      actions=[dict(kind='assistant_conversation', conversation_id=row['conversation_id'], task_id=row['task_run_id'])],
+                      toast_eligible=False, occurred_at=stamp(row['created_at']), resolved_at=stamp(row['resolved_at']),
+                      expires_at=stamp(row['approval_expires_at']) if row['kind'] == 'awaiting_approval' else None)
+        conn.execute(insert(NotificationEvent).values(**values).on_conflict_do_nothing(index_elements=['dedupe_key']))
+        notification_id = conn.execute(text('SELECT id FROM notification_events WHERE dedupe_key=:key'), {'key': values['dedupe_key']}).scalar_one()
+        conn.execute(insert(NotificationReceipt).values(notification_id=notification_id, recipient_key='installation:default',
+                     read_at=stamp(row['read_at']), created_at=stamp(row['created_at']))
+                     .on_conflict_do_nothing(index_elements=['notification_id', 'recipient_key']))
+
+
+def _m131_assistant_conversation_titles(conn: Connection) -> None:
+    _add_column_if_missing(conn, 'chat_conversations', 'title_source',
+        "ALTER TABLE chat_conversations ADD COLUMN title_source TEXT NOT NULL DEFAULT 'legacy'")
+
+
+def _m132_assistant_context_exports(conn: Connection) -> None:
+    from src.platform.persistence.models import AssistantContextExport
+
+    AssistantContextExport.__table__.create(conn, checkfirst=True)
+
+
+def _m133_archive_idle_intraday_notifications(conn: Connection) -> None:
+    from src.platform.scheduling.run_summary import is_idle_single_summary
+
+    if not all(_has_table(conn, table) for table in (
+        "agent_runs", "notification_events", "notification_receipts",
+    )):
+        return
+    candidates = conn.execute(text("""
+SELECT e.id, r.result
+FROM notification_events e
+JOIN agent_runs r ON e.subject_id = CAST(r.id AS TEXT)
+WHERE e.source = 'agent' AND e.subject_kind = 'agent_run'
+  AND e.event_type = 'agent_completed' AND e.attention = 'informational'
+  AND r.agent_name = 'intraday_monitor' AND r.status = 'success'
+  AND r.trigger_source = 'schedule'
+  AND COALESCE(r.error, '') = ''
+  AND COALESCE(r.notify_attempted, 0) = 0 AND COALESCE(r.notify_sent, 0) = 0
+  AND r.result LIKE 'single mode executed 0, skipped %, total %'
+""")).mappings().all()
+    ids = [{"id": row["id"]} for row in candidates if is_idle_single_summary(row["result"])]
+    if ids:
+        # Retain both the source run and notification history. Archive only
+        # proven idle notices, preserving any existing receipt timestamps.
+        conn.execute(text("""
+UPDATE notification_receipts
+SET archived_at = COALESCE(archived_at, CURRENT_TIMESTAMP),
+    read_at = COALESCE(read_at, CURRENT_TIMESTAMP)
+WHERE notification_id = :id
+"""), ids)
+        logger.info("Archived %s idle intraday notification events", len(ids))
+
+
+def _m134_remove_manual_feedback(conn: Connection) -> None:
+    # SQLite removes the tables' indexes with DROP TABLE. Automated prediction
+    # and candidate outcomes remain the source of evaluation data.
+    conn.execute(text("DROP TABLE IF EXISTS suggestion_feedback"))
+    conn.execute(text("DROP TABLE IF EXISTS entry_candidate_feedback"))
+
+
+def _m135_retire_unused_agents(conn: Connection) -> None:
+    # Remove executable configuration and bindings, preserving reports and
+    # run history so existing notification/report links remain readable.
+    for table, column in (
+        ("stock_agents", "agent_name"),
+        ("notify_throttle", "agent_name"),
+        ("agent_configs", "name"),
+    ):
+        if _has_table(conn, table):
+            conn.execute(text(f"DELETE FROM {table} WHERE {column} IN ('chart_analyst', 'news_digest')"))
+
+
+def _m136_paper_trading_settlement(conn: Connection) -> None:
+    from src.platform.persistence.models import PaperTradingSettlement
+
+    _add_column_if_missing(conn, "paper_trading_positions", "settlement_date",
+        "ALTER TABLE paper_trading_positions ADD COLUMN settlement_date DATE")
+    PaperTradingSettlement.__table__.create(conn, checkfirst=True)
+    # Existing balances remain the opening settled funds. Do not reconstruct
+    # outstanding proceeds from historical trades or rewrite realized P&L.
+
+
+def _m137_stock_asset_type(conn: Connection) -> None:
+    _add_column_if_missing(
+        conn, "stocks", "asset_type",
+        "ALTER TABLE stocks ADD COLUMN asset_type TEXT NOT NULL DEFAULT 'stock'",
+    )
+    if _has_table(conn, "stocks"):
+        conn.execute(text("UPDATE stocks SET asset_type = 'etf' WHERE UPPER(name) LIKE '%ETF%'"))
+
+
+def _m138_investment_research(conn: Connection) -> None:
+    # Freeze this migration's schema without importing mutable business models.
+    statements = (
+        """CREATE TABLE IF NOT EXISTS research_runs (
+            id VARCHAR NOT NULL PRIMARY KEY,
+            trace_id VARCHAR NOT NULL,
+            agent_name VARCHAR NOT NULL,
+            scope_hash VARCHAR NOT NULL,
+            engine VARCHAR NOT NULL,
+            as_of VARCHAR NOT NULL,
+            status VARCHAR NOT NULL,
+            payload JSON,
+            progress JSON,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            finished_at DATETIME
+        )""",
+        "CREATE INDEX IF NOT EXISTS ix_research_runs_trace_id ON research_runs (trace_id)",
+        """CREATE TABLE IF NOT EXISTS research_artifacts (
+            run_id VARCHAR NOT NULL,
+            artifact_id VARCHAR NOT NULL,
+            payload JSON NOT NULL,
+            PRIMARY KEY (run_id, artifact_id)
+        )""",
+        """CREATE TABLE IF NOT EXISTS research_deliveries (
+            run_id VARCHAR NOT NULL PRIMARY KEY,
+            payload_hash VARCHAR NOT NULL,
+            payload JSON NOT NULL,
+            status VARCHAR NOT NULL
+        )""",
+        """CREATE TABLE IF NOT EXISTS research_notification_outbox (
+            run_id VARCHAR NOT NULL,
+            channel_key VARCHAR NOT NULL,
+            status VARCHAR NOT NULL,
+            policy_scope VARCHAR NOT NULL,
+            ttl_minutes INTEGER NOT NULL,
+            error VARCHAR,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (run_id, channel_key)
+        )""",
+    )
+    for statement in statements:
+        conn.execute(text(statement))
+
+
+def _m139_retire_session_legacy(conn: Connection) -> None:
+    """Preserve settings/data while promoting all three session agents to graph execution."""
+    if not _has_table(conn, "agent_configs"):
+        return
+    rows = conn.execute(text("SELECT id, name, config FROM agent_configs WHERE name IN ('daily_report', 'premarket_outlook', 'intraday_monitor')")).fetchall()
+    for identity, name, value in rows:
+        config = json.loads(value) if isinstance(value, str) else dict(value or {})
+        graph = dict(config.get("research_graph") or {})
+        graph["engine"] = "langgraph"
+        config["research_graph"] = graph
+        conn.execute(text("UPDATE agent_configs SET config=:config WHERE id=:id"),
+                     {"id": identity, "config": json.dumps(config, ensure_ascii=False)})
+
+
 def _m9001_ai_model_extra_params(conn: Connection) -> None:
     _add_column_if_missing(
         conn,
@@ -2148,6 +2342,17 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(126, "assistant_task_events", _m126_assistant_task_events),
     Migration(127, "assistant_trace_metrics", _m127_assistant_trace_metrics),
     Migration(128, "assistant_trusted_results", _m128_assistant_trusted_results),
+    Migration(129, "assistant_task_notifications", _m129_assistant_task_notifications),
+    Migration(130, "global_notifications", _m130_global_notifications),
+    Migration(131, "assistant_conversation_titles", _m131_assistant_conversation_titles),
+    Migration(132, 'assistant_context_exports', _m132_assistant_context_exports),
+    Migration(133, "archive_idle_intraday_notifications", _m133_archive_idle_intraday_notifications),
+    Migration(134, "remove_manual_feedback", _m134_remove_manual_feedback),
+    Migration(135, "retire_unused_agents", _m135_retire_unused_agents),
+    Migration(136, "paper_trading_settlement", _m136_paper_trading_settlement),
+    Migration(137, "stock_asset_type", _m137_stock_asset_type),
+    Migration(138, "investment_research_delivery", _m138_investment_research),
+    Migration(139, "retire_session_legacy", _m139_retire_session_legacy),
     Migration(9001, "ai_model_extra_params", _m9001_ai_model_extra_params),
     Migration(9002, "futures_positions", _m9002_futures_positions),
     Migration(9003, "chart_drawings", _m9003_chart_drawings),

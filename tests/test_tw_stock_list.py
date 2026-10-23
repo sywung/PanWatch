@@ -9,6 +9,28 @@ import pytest
 
 from src.platform.marketdata import stock_list as sl
 
+
+@pytest.fixture(autouse=True)
+def _offline_upstream_catalogs(monkeypatch):
+    """其他市场 catalog、akshare 备援与期货清单一律离线(个别用例可再覆写)。"""
+    import concurrent.futures
+
+    from src.platform.marketdata import futures as _futures
+    from src.platform.marketdata import stock_list as _sl
+
+    for name in ("_fetch_from_eastmoney", "_fetch_hk_from_eastmoney", "_fetch_us_from_eastmoney",
+                 "_fetch_bj_from_eastmoney", "_fetch_etf_from_eastmoney", "_fetch_etf_from_sina"):
+        monkeypatch.setattr(_sl, name, lambda: [])
+    monkeypatch.setattr(_futures, "search_futures", lambda *args, **kwargs: [])
+
+    def _no_akshare():
+        future = concurrent.futures.Future()
+        future.set_result([])
+        return future
+
+    monkeypatch.setattr(_sl, "_akshare_fallback", _no_akshare)
+
+
 _TWSE_ROWS = [  # openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL 的真实字段
     {"Code": "2330", "Name": "台積電", "ClosingPrice": "1000"},
     {"Code": "0050", "Name": "元大台灣50", "ClosingPrice": "112"},
@@ -92,7 +114,7 @@ def test_cache_without_tw_is_treated_as_stale(monkeypatch, tmp_path, fake_source
 
 def test_fresh_cache_with_tw_is_used_without_refetch(monkeypatch, tmp_path):
     cache = tmp_path / "stock_list_cache.json"
-    cache.write_text(json.dumps({"ts": time.time(), "stocks": [
+    cache.write_text(json.dumps({"version": sl.CACHE_VERSION, "ts": time.time(), "ttl": sl.CACHE_TTL, "stocks": [
         {"symbol": "2330", "name": "台積電", "market": "TW", "board": "TSE"},
     ]}), encoding="utf-8")
     monkeypatch.setattr(sl, "CACHE_FILE", cache)
@@ -121,7 +143,7 @@ def test_search_tw_skips_eastmoney_realtime(monkeypatch, tw_cache):
 
     monkeypatch.setattr(sl, "_realtime_search", forbidden)
     out = sl.search_stocks("2330", market="TW")
-    assert out == [{"symbol": "2330", "name": "台積電", "market": "TW"}]
+    assert out == [{"symbol": "2330", "name": "台積電", "market": "TW", "asset_type": "stock"}]
 
 
 def test_search_tw_by_traditional_name(monkeypatch, tw_cache):
@@ -143,5 +165,5 @@ def test_all_market_search_lists_tw_first(monkeypatch, tw_cache):
         lambda *a, **k: [{"symbol": "02330", "name": "某港股", "market": "HK"}],
     )
     out = sl.search_stocks("2330", market="")
-    assert out[0] == {"symbol": "2330", "name": "台積電", "market": "TW"}
+    assert out[0] == {"symbol": "2330", "name": "台積電", "market": "TW", "asset_type": "stock"}
     assert {"symbol": "02330", "name": "某港股", "market": "HK"} in out

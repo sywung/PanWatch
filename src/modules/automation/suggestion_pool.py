@@ -6,6 +6,8 @@ from typing import Optional
 from datetime import timezone
 from sqlalchemy import and_, func, or_
 
+from src.modules.research.signals.actions import normalize_suggestion, suggestion_state as extract_suggestion_state
+from src.modules.automation.agent_catalog import RETIRED_AGENT_NAMES
 from src.platform.persistence.database import SessionLocal
 from src.platform.persistence.models import StockSuggestion
 from src.platform.language import localize_text, resolve_report_language
@@ -63,6 +65,8 @@ def save_suggestion(
     ai_response: str = "",
     stock_market: str = DEFAULT_MARKET.value,
     meta: dict | None = None,
+    suggestion_state: dict | None = None,
+    db_session=None,
 ) -> bool:
     """
     保存 Agent 建议到建议池
@@ -83,7 +87,12 @@ def save_suggestion(
     Returns:
         是否保存成功
     """
-    db = SessionLocal()
+    normalized = normalize_suggestion({
+        **(suggestion_state or {}), "action": action, "action_label": action_label,
+    }, agent_name=agent_name)
+    action, action_label = normalized["action"], normalized["action_label"]
+    meta = {**(meta or {}), "suggestion_state": extract_suggestion_state(normalized)}
+    db = db_session if db_session is not None else SessionLocal()
     try:
         market = (stock_market or DEFAULT_MARKET.value).strip().upper() or DEFAULT_MARKET.value
 
@@ -128,6 +137,7 @@ def save_suggestion(
                     _norm_text(latest.action) == _norm_text(action)
                     and _norm_text(latest.action_label) == _norm_text(action_label)
                     and _norm_text(latest.signal or "") == _norm_text(signal)
+                    and (latest.meta or {}).get("suggestion_state") == meta["suggestion_state"]
                 )
 
                 if same_key and (now - latest_created) <= window:
@@ -136,43 +146,15 @@ def save_suggestion(
                         latest.expires_at = expires_at
                     if not (latest.stock_name or "") and stock_name:
                         latest.stock_name = stock_name
-                    db.commit()
+                    db.flush() if db_session is not None else db.commit()
                     logger.info(
                         f"建议去重: {stock_symbol} {action_label} (来源: {agent_label})"
                     )
                     return True
 
-                # Stability: avoid flip-flopping to a less severe action within a short window.
-                try:
-                    action_rank = {
-                        "alert": 4,
-                        "avoid": 4,
-                        "sell": 4,
-                        "reduce": 3,
-                        "buy": 2,
-                        "add": 2,
-                        "hold": 1,
-                        "watch": 0,
-                    }
-                    old_r = action_rank.get((latest.action or "").strip(), 0)
-                    new_r = action_rank.get((action or "").strip(), 0)
-                    change_window = timedelta(
-                        minutes=_dedupe_window_minutes(agent_name)
-                    )
-                    if (now - latest_created) <= change_window and new_r < old_r:
-                        # Keep the previous (more severe) action; extend expiry.
-                        if not latest.expires_at or _as_utc(latest.expires_at) < expires_at:
-                            latest.expires_at = expires_at
-                        if not (latest.stock_name or "") and stock_name:
-                            latest.stock_name = stock_name
-                        db.commit()
-                        logger.info(
-                            f"建议稳定: {stock_symbol} 新建议降级({action_label})，保持上一条({latest.action_label})"
-                        )
-                        return True
-                except Exception:
-                    db.rollback()
         except Exception:
+            if db_session is not None:
+                raise
             # Best-effort only; never block saving.
             db.rollback()
 
@@ -193,17 +175,20 @@ def save_suggestion(
             meta=to_jsonable(meta or {}),
         )
         db.add(suggestion)
-        db.commit()
+        db.flush() if db_session is not None else db.commit()
 
         logger.info(f"保存建议: {stock_symbol} {action_label} (来源: {agent_label})")
         return True
 
     except Exception as e:
+        if db_session is not None:
+            raise
         logger.error(f"保存建议失败: {e}")
         db.rollback()
         return False
     finally:
-        db.close()
+        if db_session is None:
+            db.close()
 
 
 def get_suggestions_for_stock(
@@ -227,7 +212,7 @@ def get_suggestions_for_stock(
     try:
         query = db.query(StockSuggestion).filter(StockSuggestion.stock_symbol == stock_symbol)
         if not include_expired:
-            query = query.filter(StockSuggestion.agent_name != "news_digest")
+            query = query.filter(StockSuggestion.agent_name.notin_(RETIRED_AGENT_NAMES))
         if stock_market:
             query = query.filter(
                 StockSuggestion.stock_market == (stock_market or DEFAULT_MARKET.value).strip().upper()
@@ -274,7 +259,7 @@ def get_latest_suggestions(
                 StockSuggestion.stock_market,
                 func.max(StockSuggestion.id).label("max_id"),
             )
-            .filter(StockSuggestion.agent_name != "news_digest")
+            .filter(StockSuggestion.agent_name.notin_(RETIRED_AGENT_NAMES))
             .group_by(StockSuggestion.stock_symbol, StockSuggestion.stock_market)
             .subquery()
         )
@@ -370,13 +355,18 @@ def _to_dict(
             expires_at = expires_at.replace(tzinfo=timezone.utc)
         expires_at_str = to_iso_with_tz(expires_at)
 
+    normalized = normalize_suggestion({
+        **(suggestion.meta or {}).get("suggestion_state", {}),
+        "action": suggestion.action, "action_label": suggestion.action_label,
+    }, agent_name=suggestion.agent_name)
     return {
+        **extract_suggestion_state(normalized),
         "id": suggestion.id,
         "stock_symbol": suggestion.stock_symbol,
         "stock_market": suggestion.stock_market or DEFAULT_MARKET.value,
         "stock_name": suggestion.stock_name,
-        "action": suggestion.action,
-        "action_label": localize_text(suggestion.action_label, language),
+        "action": normalized["action"],
+        "action_label": localize_text(normalized["action_label"], language),
         "signal": localize_text(suggestion.signal, language),
         "reason": localize_text(suggestion.reason, language),
         "agent_name": suggestion.agent_name,
@@ -387,8 +377,7 @@ def _to_dict(
         "prompt_context": suggestion.prompt_context or "",
         "ai_response": suggestion.ai_response or "",
         "meta": suggestion.meta or {},
-        "should_alert": (suggestion.action or "")
-        in ("alert", "avoid", "sell", "reduce"),
+        "should_alert": normalized["should_alert"],
     }
 
 

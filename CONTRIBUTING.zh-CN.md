@@ -77,7 +77,7 @@ make install-hooks
 3. 单元测试必须模拟网络调用，不得依赖付费 API 或真实发送通知。
 4. 用户可见行为变化时，同步更新中英文资源和公开文档。
 5. 运行与改动范围匹配的检查，最后执行 `git diff --check`。
-6. 按下文格式创建 Pull Request。
+6. 使用 PR 模板与[范围和验收规范](docs/pr-policy.zh-CN.md)创建 Pull Request。
 
 ## 验证命令
 
@@ -90,6 +90,7 @@ make install-hooks
 # 前端测试、多语言门禁、类型检查与生产构建
 pnpm --dir frontend exec vitest run
 pnpm --dir frontend run check:i18n
+pnpm --dir frontend run check:ui
 pnpm --dir frontend run build
 
 # 空白符和冲突标记检查
@@ -191,14 +192,26 @@ PR 标题和正文统一使用英文，标题同样采用 Conventional Commits�
 
 1. **Background**：问题和用户影响。
 2. **Changes**：按模块说明实现与行为变化。
-3. **Validation**：实际执行的命令及结果。
-4. **Boundaries and risks**：兼容性、未测试路径和已知限制。
-5. **Follow-up**：只记录明确留到后续处理的工作。
+3. **Scope**：一个可独立使用的行为、排除范围与适用时的已讨论方案。
+4. **Validation**：当前测试提交、实际命令及结果。
+5. **Acceptance evidence**：复现步骤、预期/实际结果与可访问的证据。
+6. **Boundaries and risks**：兼容性、未测试路径和已知限制。
+7. **Follow-up**：只记录明确留到后续处理的工作。
 
-通过 Codex 开发时，除非维护者另有要求，使用 `codex/` 前缀分支。仓库默认采用 squash merge。
+分支使用 `<type>/<简短英文 kebab-case>`，例如 `fix/report-symbol` 或 `feature/market-enablement`。仓库默认采用 squash merge。
+
+初始规模门槛为20个生产文件、800行生产代码新增加删除，排除测试、Markdown文档和已知lockfile；维护者可以批准当前提交的例外。完整的[范围和验收规范](docs/pr-policy.zh-CN.md)说明按风险提供证据、只读演练、第7天提醒、第14天关闭，以及暂停/例外标签。已有PR也获得完整提示期，达到规范后等待维护者评审的PR不会自动关闭。
 
 ## 反馈问题与安全问题
 
 普通 Bug 请提交 Issue，包含复现步骤、预期/实际行为、版本信息和脱敏日志。务必移除 Token、Cookie、账户标识、持仓等金融隐私数据。
 
 安全敏感问题不要在公开 Issue 中发布利用细节或凭据；请遵循 [SECURITY.md](SECURITY.md) 中的私密报告方式。
+
+## 统一 UI 约定
+
+修改控件或滚动面板前阅读 [UI 规范](frontend/UI_GUIDELINES.zh-CN.md)（[English](frontend/UI_GUIDELINES.md)）。运行 `pnpm --dir frontend check:ui` 拦截原生选择框、浏览器弹窗和漏用样式的滚动区域，并验证桌面 / 手机、亮色 / 深色效果。
+
+## 交易日历覆盖
+
+公布的年度休市日和半日市保存在 `src/platform/scheduling/exchange_calendar_data.py`（目前为 2026 年）。运行时只预热过去 30 天和未来 90 天，不请求历史日历。未公布年份的工作日标记未知，不能授权自动执行。跨年前应根据交易所公告补充下一年度数据，并验证市场当地日期、夏令时和半日市。已配置的 Agent Cron / 间隔保持不变，执行与预览共用交易日门禁。

@@ -1,12 +1,13 @@
 import { Suspense, useState, useEffect, useRef } from 'react'
 import { Routes, Route, NavLink, useLocation, Navigate } from 'react-router-dom'
-import { TrendingUp, Bot, ScrollText, Settings, List, Database, Clock, LayoutDashboard, Github, BellRing, Sparkles, Activity, ClipboardCheck, MessageCircle } from 'lucide-react'
+import { TrendingUp, Bot, ScrollText, Settings, List, Database, Clock, LayoutDashboard, Github, BellRing, Sparkles, Activity, ClipboardCheck, MessageCircle, Compass } from 'lucide-react'
 import { useTheme } from '@/hooks/use-theme'
 import { appApi } from '@panwatch/api/app'
 import { fetchAPI, isAuthenticated } from '@panwatch/api/client'
 import LogsModal from '@panwatch/biz-ui/components/logs-modal'
 import AmbientBackground from '@panwatch/biz-ui/components/AmbientBackground'
 import AccountMenu from '@/components/AccountMenu'
+import { GuidedTourProvider } from '@/components/onboarding/GuidedTour'
 import AssistantOpenBridge from '@/components/AssistantOpenBridge'
 import SelfCheckModal from '@/components/SelfCheckModal'
 import { RouteErrorBoundary, RouteLoadingFallback } from '@/components/RouteBoundary'
@@ -15,10 +16,12 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from '@panwatch/base-ui/components/ui/button'
 import { useTranslation } from 'react-i18next'
 import type { NavigationItemKey } from '@/i18n/resources'
+import { NotificationBell, NotificationProvider } from '@/components/notifications/NotificationProvider'
 
 const {
   LoginPage,
   DashboardPage,
+  GettingStartedPage,
   OpportunitiesPage,
   StocksPage,
   AgentsPage,
@@ -35,15 +38,16 @@ const {
 const NAV_ITEMS: Array<{ to: string; icon: typeof LayoutDashboard; labelKey: NavigationItemKey }> = [
   { to: '/', icon: LayoutDashboard, labelKey: 'home' },
   { to: '/portfolio', icon: List, labelKey: 'portfolio' },
+  { to: '/assistant', icon: MessageCircle, labelKey: 'assistant' },
   { to: '/opportunities', icon: Sparkles, labelKey: 'opportunities' },
   { to: '/paper-trading', icon: Activity, labelKey: 'paperTrading' },
-  { to: '/assistant', icon: MessageCircle, labelKey: 'assistant' },
   { to: '/alerts', icon: BellRing, labelKey: 'alerts' },
   { to: '/agents', icon: Bot, labelKey: 'agents' },
   { to: '/evaluations', icon: ClipboardCheck, labelKey: 'evaluations' },
   { to: '/history', icon: Clock, labelKey: 'history' },
   { to: '/datasources', icon: Database, labelKey: 'dataSources' },
   { to: '/settings', icon: Settings, labelKey: 'settings' },
+  { to: '/getting-started', icon: Compass, labelKey: 'gettingStarted' },
 ]
 
 // 认证守卫组件
@@ -140,14 +144,16 @@ function App() {
 
   return (
     <RequireAuth>
+    <GuidedTourProvider>
+    <NotificationProvider>
     <div
       className={isAssistantRoute
-        ? 'relative flex h-dvh flex-col overflow-hidden bg-background pb-16 md:pb-0'
+        ? 'relative flex h-dvh flex-col overflow-hidden bg-background'
         : 'min-h-screen pb-16 md:pb-0 relative overflow-x-clip bg-background'}
     >
       <AmbientBackground />
       {/* Desktop Floating Nav */}
-      <div className="sticky top-0 z-50 px-4 md:px-6 pt-3 md:pt-4 pb-2 hidden md:block">
+      <div className="sticky top-0 z-50 shrink-0 px-4 md:px-6 pt-3 md:pt-4 pb-2 hidden md:block">
         <header className="card px-4 md:px-5">
           <div className="h-14 flex items-center justify-between">
             {/* Logo */}
@@ -195,6 +201,7 @@ function App() {
 
             {/* action wrapper:GitHub + 日志 + 头像(头像下拉含更多导航/主题色/退出) */}
             <div className="flex items-center gap-1.5 px-1.5 py-1 rounded-2xl bg-accent/20 border border-border/40">
+              <NotificationBell />
               <button
                 onClick={() => window.open(repoUrl, '_blank', 'noopener,noreferrer')}
                 className="w-9 h-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-background/70 transition-all"
@@ -221,20 +228,21 @@ function App() {
       </div>
 
       {/* Mobile Top Bar */}
-      <div className="sticky top-0 z-50 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 md:hidden">
+      <div className="sticky top-0 z-50 shrink-0 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 md:hidden">
         <header className="card px-4">
           <div className="h-12 flex items-center justify-between">
-            <NavLink to="/" className="flex items-center gap-2 group">
+            <NavLink to="/" className="flex shrink-0 items-center gap-2 group">
               <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-sm">
                 <TrendingUp className="w-3.5 h-3.5 text-white" />
               </div>
               <span className="text-[14px] font-bold text-foreground">PanWatch</span>
               {version && <span className="text-[10px] text-muted-foreground/60 font-normal">v{version}</span>}
             </NavLink>
-            <div className="flex items-center gap-1.5 px-1.5 py-1 rounded-2xl bg-accent/20 border border-border/40">
+            <div className="flex shrink-0 items-center gap-1.5 px-1.5 py-1 rounded-2xl bg-accent/20 border border-border/40">
+              <NotificationBell mobile />
               <button
                 onClick={() => window.open(repoUrl, '_blank', 'noopener,noreferrer')}
-                className="w-8 h-8 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-background/70 transition-all"
+                className="hidden w-8 h-8 rounded-xl items-center justify-center min-[360px]:flex text-muted-foreground hover:text-foreground hover:bg-background/70 transition-all"
                 title={t('common:links.github')}
               >
                 <Github className="w-4 h-4" />
@@ -286,7 +294,7 @@ function App() {
       {/* Content */}
       <main
         className={`${isAssistantRoute
-          ? 'flex min-h-0 flex-1 flex-col overflow-hidden pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-6'
+          ? 'flex min-h-0 flex-1 flex-col overflow-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-6'
           : 'pb-4 md:pb-6'} px-4 pt-4 md:px-6 md:pt-6 w-full`}
       >
         <AssistantOpenBridge />
@@ -294,6 +302,7 @@ function App() {
           <Suspense fallback={<RouteLoadingFallback />}>
             <Routes>
               <Route path="/" element={<DashboardPage />} />
+              <Route path="/getting-started" element={<GettingStartedPage />} />
               <Route path="/opportunities" element={<OpportunitiesPage />} />
               <Route path="/portfolio" element={<StocksPage />} />
               <Route path="/agents" element={<AgentsPage />} />
@@ -345,6 +354,8 @@ function App() {
         </DialogContent>
       </Dialog>
     </div>
+    </NotificationProvider>
+    </GuidedTourProvider>
     </RequireAuth>
   )
 }

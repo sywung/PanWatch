@@ -17,13 +17,14 @@ from pan_agent import (
     RunResult,
     RunStatus,
 )
-from pydantic import BaseModel
+from pydantic import BaseModel, PositiveInt
 from sqlalchemy.orm import Session
 
 from src.platform.marketdata.models import DEFAULT_MARKET
 from src.platform.ai.errors import descriptor_for_code
 from src.platform.persistence.database import get_db
 from src.platform.tasking.contracts import TaskStatus
+from src.web.datetime import as_utc
 from src.web.errors import api_error
 
 from .context_schemas import (
@@ -33,13 +34,18 @@ from .context_schemas import (
     ContextDetailDTO,
 )
 from .event_stream import subscribe_task_events
+from .exports import ContextExportError, ContextExportHistoryDTO, ContextExportJobDTO, ExportContextCommand
+from .export_jobs import ExportJobRepository, context_export_runner
 from .prompt import build_assistant_messages
 from .repository import AssistantRepository
 from .schemas import (
     ApprovalDecisionCommand,
+    AssistantActivityDTO,
+    ReadAssistantNotificationsCommand,
     ConversationDetailDTO,
     ConversationDTO,
     CreateConversationCommand,
+    RenameConversationCommand,
     ToolPermissionCommand,
 )
 from .service import (
@@ -195,7 +201,7 @@ class _SSEEventSink:
 
 
 def _approval_event_payload(approval) -> dict:
-    expires_at = approval.expires_at
+    expires_at = AssistantRepository._utc_timestamp(approval.expires_at)
     return {
         "approval_id": approval.id,
         "presentation": approval.presentation or {},
@@ -308,7 +314,7 @@ async def _stream_runtime(
                     {
                         "message_id": final.id,
                         "content": final.content,
-                        "created_at": final.created_at.isoformat()
+                        "created_at": as_utc(final.created_at).isoformat()
                         if final.created_at
                         else "",
                     },
@@ -368,16 +374,20 @@ async def create_assistant_task(
 ) -> dict:
     """Persist a task and return immediately; execution happens in the worker."""
     try:
-        user_message = service.record_user_message(conversation_id, body.content)
-        task = service.create_task(conversation_id, user_message.id)
-        assistant_task_runner.start_message(task.id, conversation_id)
-        return {
-            "task_id": task.id,
-            "status": task.status,
-            "event_url": f"/api/assistant/tasks/{task.id}/events",
-            "snapshot_url": f"/api/assistant/tasks/{task.id}",
-            "created_at": task.created_at,
-        }
+        def persist(worker):
+            user_message = worker.record_user_message(conversation_id, body.content)
+            task = worker.create_task(conversation_id, user_message.id)
+            return {
+                "task_id": task.id,
+                "status": task.status,
+                "event_url": f"/api/assistant/tasks/{task.id}/events",
+                "snapshot_url": f"/api/assistant/tasks/{task.id}",
+                "created_at": task.created_at,
+            }
+
+        snapshot = await service.in_worker(persist)
+        assistant_task_runner.start_message(snapshot["task_id"], conversation_id)
+        return snapshot
     except AssistantNotFoundError as exc:
         raise api_error(404, "assistant_resource_not_found", "助手资源不存在") from exc
 
@@ -390,7 +400,7 @@ async def stream_assistant_task_events(
     service: AssistantService = Depends(get_assistant_service),
 ) -> StreamingResponse:
     try:
-        service.get_task_snapshot(task_id)
+        await service.in_worker(lambda worker: worker.get_task_snapshot(task_id))
     except AssistantNotFoundError as exc:
         raise api_error(404, "assistant_resource_not_found", "助手资源不存在") from exc
     return _task_stream_response(
@@ -398,6 +408,25 @@ async def stream_assistant_task_events(
         request=request,
         after_sequence=last_event_id,
     )
+
+
+@router.get("/active-tasks")
+def get_active_assistant_tasks(db: Session = Depends(get_db)):
+    from .repository import AssistantRepository
+    return AssistantRepository(db).get_active_tasks()
+
+
+@router.get("/activity", response_model=AssistantActivityDTO)
+def get_assistant_activity(service: AssistantService = Depends(get_assistant_service)) -> AssistantActivityDTO:
+    return service.get_activity()
+
+
+@router.post("/notifications/read")
+def read_assistant_notifications(
+    body: ReadAssistantNotificationsCommand,
+    service: AssistantService = Depends(get_assistant_service),
+) -> dict[str, int]:
+    return {"updated": service.read_notifications(ids=body.ids, through_id=body.through_id)}
 
 
 @router.get("/tasks/{task_id}")
@@ -417,7 +446,7 @@ async def cancel_assistant_task(
     service: AssistantService = Depends(get_assistant_service),
 ) -> dict:
     try:
-        snapshot = service.cancel_task(task_id)
+        snapshot = await service.in_worker(lambda worker: worker.cancel_task(task_id))
         assistant_task_runner.cancel(task_id)
         return snapshot
     except AssistantNotFoundError as exc:
@@ -430,7 +459,10 @@ async def retry_assistant_task(
     service: AssistantService = Depends(get_assistant_service),
 ) -> dict:
     try:
-        snapshot = service.retry_task(task_id)
+        if assistant_task_runner.is_running(task_id):
+            snapshot = await service.in_worker(lambda worker: worker.get_task_snapshot(task_id))
+            return {**snapshot, "can_retry": False, "retry_blocked_reason": "worker_stopping"}
+        snapshot = await service.in_worker(lambda worker: worker.retry_task(task_id))
         if snapshot["status"] == TaskStatus.QUEUED.value:
             assistant_task_runner.start_message(task_id, snapshot["conversation_id"])
         return snapshot
@@ -446,16 +478,8 @@ async def stream_assistant_message(
 ):
     """Run the navigation assistant through PanAgent and stream its portable events."""
     if isinstance(service, AssistantService):
-        try:
-            user_message = service.record_user_message(conversation_id, body.content)
-            task = service.create_task(conversation_id, user_message.id)
-            assistant_task_runner.start_message(task.id, conversation_id)
-            return _task_stream_response(
-                task.id,
-                after_sequence=0,
-            )
-        except AssistantNotFoundError as exc:
-            raise api_error(404, "assistant_resource_not_found", "助手资源不存在") from exc
+        snapshot = await create_assistant_task(conversation_id, body, service)
+        return _task_stream_response(snapshot["task_id"], after_sequence=0)
 
     task = None
     context_result = None
@@ -522,7 +546,12 @@ async def stream_assistant_approval_decision(
 ):
     """Consume one approval card and resume its tool call immediately."""
     try:
-        outcome = service.resolve_approval_decision(approval_id, body.decision)
+        if isinstance(service, AssistantService):
+            outcome = await service.in_worker(
+                lambda worker: worker.resolve_approval_decision(approval_id, body.decision)
+            )
+        else:
+            outcome = service.resolve_approval_decision(approval_id, body.decision)
     except AssistantNotFoundError as exc:
         raise api_error(404, "assistant_resource_not_found", "助手资源不存在") from exc
     except (AssistantApprovalConflictError, AssistantApprovalExpiredError) as exc:
@@ -609,9 +638,8 @@ async def compress_context(
 ) -> ContextDetailDTO:
     try:
         result = await service.compress_context(conversation_id, mode=body.mode)
-        return service.get_context_detail(
-            conversation_id,
-            compression_result=result,
+        return await service.in_worker(
+            lambda worker: worker.get_context_detail(conversation_id, compression_result=result)
         )
     except AssistantNotFoundError as exc:
         raise api_error(404, "assistant_resource_not_found", "助手资源不存在") from exc
@@ -692,6 +720,87 @@ def get_conversation(
         return service.get_conversation(conversation_id)
     except AssistantNotFoundError as exc:
         raise api_error(404, "assistant_resource_not_found", "助手资源不存在") from exc
+
+
+@router.patch("/conversations/{conversation_id}", response_model=ConversationDTO)
+def rename_conversation(
+    conversation_id: int,
+    body: RenameConversationCommand,
+    service: AssistantService = Depends(get_assistant_service),
+) -> ConversationDTO:
+    try:
+        return service.rename_conversation(conversation_id, body)
+    except AssistantNotFoundError as exc:
+        raise api_error(404, 'assistant_resource_not_found', '助手资源不存在') from exc
+
+
+@router.post('/conversations/{conversation_id}/export', response_model=ContextExportJobDTO, status_code=202)
+async def export_conversation_context(
+    conversation_id: int,
+    body: ExportContextCommand,
+    service: AssistantService = Depends(get_assistant_service),
+) -> ContextExportJobDTO:
+    try:
+        def create(worker):
+            repository = ExportJobRepository(worker._repository.session)
+            return repository.dto(repository.create(conversation_id, body.language))
+
+        snapshot = await service.in_worker(create)
+        if snapshot.status == 'queued':
+            context_export_runner.start(snapshot.id)
+        return snapshot
+    except AssistantNotFoundError as exc:
+        raise api_error(404, 'assistant_resource_not_found', '助手资源不存在') from exc
+    except ContextExportError as exc:
+        raise api_error(422 if exc.code != 'assistant_export_invalid' else 502, exc.code, str(exc)) from exc
+
+
+@router.get('/exports', response_model=ContextExportHistoryDTO)
+def list_context_exports(
+    conversation_id: int | None = Query(None, ge=1),
+    before_id: int | None = Query(None, ge=1),
+    ids: list[PositiveInt] | None = Query(None, max_length=50),
+    limit: int = Query(20, ge=1, le=50),
+    service: AssistantService = Depends(get_assistant_service),
+):
+    try:
+        if conversation_id is not None:
+            service._require_conversation(conversation_id)
+        return ExportJobRepository(service._repository.session).history(
+            conversation_id=conversation_id, before_id=before_id, ids=ids, limit=limit,
+        )
+    except AssistantNotFoundError as exc:
+        raise api_error(404, 'assistant_resource_not_found', '助手资源不存在') from exc
+
+
+@router.get('/exports/{export_id}', response_model=ContextExportJobDTO)
+async def get_context_export(export_id: int, service: AssistantService = Depends(get_assistant_service)):
+    try:
+        def get(worker):
+            repository = ExportJobRepository(worker._repository.session)
+            return repository.dto(repository.get(export_id))
+
+        snapshot = await service.in_worker(get)
+        if snapshot.status == 'queued':
+            context_export_runner.start(snapshot.id)
+        return snapshot
+    except LookupError as exc:
+        raise api_error(404, 'assistant_resource_not_found', '助手资源不存在') from exc
+
+
+@router.post('/exports/{export_id}/retry', response_model=ContextExportJobDTO, status_code=202)
+async def retry_context_export(export_id: int, service: AssistantService = Depends(get_assistant_service)):
+    try:
+        def retry(worker):
+            repository = ExportJobRepository(worker._repository.session)
+            return repository.dto(repository.retry(export_id))
+
+        snapshot = await service.in_worker(retry)
+        if snapshot.status == 'queued':
+            context_export_runner.start(snapshot.id)
+        return snapshot
+    except LookupError as exc:
+        raise api_error(404, 'assistant_resource_not_found', '助手资源不存在') from exc
 
 
 @router.delete("/conversations/{conversation_id}")

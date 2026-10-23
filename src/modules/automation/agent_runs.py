@@ -11,7 +11,9 @@ logger = logging.getLogger(__name__)
 
 # 采集阶段可能在外部数据源限流/重试时暂时没有进度日志，不能沿用
 # “5 分钟无日志即 stale”的规则；但服务重启后也不能无限恢复旧任务。
-ACTIVE_RUN_TTL_SEC = 45 * 60
+# Cover the UI's 60-minute analysis limit plus up to three 5-minute collection
+# batches and startup slack, so a configured long run is not restored as stale.
+ACTIVE_RUN_TTL_SEC = 90 * 60
 
 
 def _as_utc(value: datetime | None) -> datetime | None:
@@ -38,7 +40,7 @@ def start_agent_run(
     try:
         existing = (
             db.query(AgentRun)
-            .filter(AgentRun.trace_id == trace_id, AgentRun.status == "running")
+            .filter(AgentRun.trace_id == trace_id)
             .order_by(AgentRun.id.desc())
             .first()
         )
@@ -77,7 +79,7 @@ def record_agent_run(
     Args:
         agent_name: Agent 名称
         status: success / failed
-        result: 简要结果（会截断）
+        result: 运行结果（通知列表不复制全文）
         error: 错误信息（会截断）
         duration_ms: 执行耗时（毫秒）
         trace_id: 运行链路追踪 id
@@ -93,10 +95,12 @@ def record_agent_run(
         if trace_id:
             existing = (
                 db.query(AgentRun)
-                .filter(AgentRun.trace_id == trace_id, AgentRun.status == "running")
+                .filter(AgentRun.trace_id == trace_id)
                 .order_by(AgentRun.id.desc())
                 .first()
             )
+        if existing and existing.status in ("success", "failed"):
+            return
         values = {
             "agent_name": agent_name,
             "status": status,
@@ -106,7 +110,7 @@ def record_agent_run(
             "notify_sent": bool(notify_sent),
             "context_chars": max(0, int(context_chars or 0)),
             "model_label": (model_label or "")[:255],
-            "result": (result or "")[:2000],
+            "result": result or "",
             "error": (error or "")[:2000],
             "duration_ms": duration_ms,
         }
@@ -114,7 +118,12 @@ def record_agent_run(
             for key, value in values.items():
                 setattr(existing, key, value)
         else:
-            db.add(AgentRun(**values))
+            existing = AgentRun(**values)
+            db.add(existing)
+        db.flush()
+        if status in ("success", "failed"):
+            from src.modules.notifications.sources import agent_result
+            agent_result(db, existing)
         db.commit()
     except Exception as e:
         logger.warning(f"写入 AgentRun 失败: {e}")

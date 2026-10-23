@@ -77,7 +77,7 @@ make install-hooks
 3. Keep network calls mocked in unit tests; tests must not require paid APIs or send real notifications.
 4. Update both language resources and public documentation when user-visible behavior changes.
 5. Run checks proportional to the affected area, followed by `git diff --check`.
-6. Open a pull request using the format below.
+6. Open a pull request using the template and [scope and acceptance policy](docs/pr-policy.md).
 
 ## Validation
 
@@ -90,6 +90,7 @@ Run the smallest focused test while iterating, then the relevant suite before op
 # Frontend suite, translation guard, type/build verification
 pnpm --dir frontend exec vitest run
 pnpm --dir frontend run check:i18n
+pnpm --dir frontend run check:ui
 pnpm --dir frontend run build
 
 # Whitespace and conflict-marker check
@@ -191,14 +192,26 @@ Pull-request titles and descriptions must be written in English. Titles should a
 
 1. **Background** — the problem and user impact.
 2. **Changes** — implementation and behavior changes grouped by module.
-3. **Validation** — exact commands that were run and their results.
-4. **Boundaries and risks** — compatibility, untested paths, and known limitations.
-5. **Follow-up** — only concrete work intentionally left for later.
+3. **Scope** — one independently usable outcome, exclusions, and the agreed proposal where applicable.
+4. **Validation** — current tested commit, exact commands and actual results.
+5. **Acceptance evidence** — reproducible steps, expected/observed behavior and accessible evidence.
+6. **Boundaries and risks** — compatibility, untested paths, and known limitations.
+7. **Follow-up** — only concrete work intentionally left for later.
 
-Use a `codex/`-prefixed branch when changes are made through Codex unless a maintainer requests otherwise. The repository normally uses squash merge.
+Use `<type>/<short-english-kebab-case>` branches, for example `fix/report-symbol` or `feature/market-enablement`. The repository normally uses squash merge.
+
+The initial scope budget is 20 production files and 800 added + deleted production lines, excluding tests, Markdown docs and known lockfiles. Maintainers can approve a current-head exception. See the [complete policy](docs/pr-policy.md) for evidence proportional to risk, read-only rollout, 7-day reminders, 14-day closure notices, and hold/exception labels. Existing PRs receive a full notice period; compliant PRs waiting for maintainer review are not automatically closed.
 
 ## Reporting bugs and security issues
 
 For ordinary bugs, open an issue with reproduction steps, expected and actual behavior, version information, and sanitized logs. Remove tokens, cookies, account identifiers, positions, and other private financial data.
 
 For a security-sensitive issue, do not publish exploit details or credentials in a public issue. Follow the private reporting instructions in [SECURITY.md](SECURITY.md).
+
+## Shared UI conventions
+
+Read the [UI guide](frontend/UI_GUIDELINES.md) ([简体中文](frontend/UI_GUIDELINES.zh-CN.md)) before changing controls or scrolling panels. Run `pnpm --dir frontend check:ui` to catch native selects, browser dialogs, and unstyled scroll regions; verify desktop/mobile and light/dark rendering as well.
+
+## Exchange calendar coverage
+
+Published annual closures and half-days live in `src/platform/scheduling/exchange_calendar_data.py` (currently 2026). Runtime warmup materializes only the previous 30 and upcoming 90 days without fetching historical calendars. Unpublished weekdays are unknown and cannot authorize automatic execution. Update the bundled annual data from exchange publications before the next year; preserve market-local dates, daylight-saving offsets, and half-day regression coverage. Configured Agent Cron/interval cycles remain unchanged; execution and preview share calendar gates.

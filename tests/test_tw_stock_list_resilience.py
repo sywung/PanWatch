@@ -13,6 +13,28 @@ import pytest
 
 from src.platform.marketdata import stock_list as sl
 
+
+@pytest.fixture(autouse=True)
+def _offline_upstream_catalogs(monkeypatch):
+    """其他市场 catalog、akshare 备援与期货清单一律离线(个别用例可再覆写)。"""
+    import concurrent.futures
+
+    from src.platform.marketdata import futures as _futures
+    from src.platform.marketdata import stock_list as _sl
+
+    for name in ("_fetch_from_eastmoney", "_fetch_hk_from_eastmoney", "_fetch_us_from_eastmoney",
+                 "_fetch_bj_from_eastmoney", "_fetch_etf_from_eastmoney", "_fetch_etf_from_sina"):
+        monkeypatch.setattr(_sl, name, lambda: [])
+    monkeypatch.setattr(_futures, "search_futures", lambda *args, **kwargs: [])
+
+    def _no_akshare():
+        future = concurrent.futures.Future()
+        future.set_result([])
+        return future
+
+    monkeypatch.setattr(_sl, "_akshare_fallback", _no_akshare)
+
+
 TWSE = [{"Code": "2330", "Name": "台積電"}]
 TPEX = [{"SecuritiesCompanyCode": "00887", "CompanyName": "永豐中國科技50大"},
         {"SecuritiesCompanyCode": "6488", "CompanyName": "環球晶"}]
@@ -23,9 +45,11 @@ ESB = [{"SecuritiesCompanyCode": "1260", "CompanyAbbreviation": "富味鄉"}]
 def env(monkeypatch, tmp_path):
     monkeypatch.setattr(sl, "DATA_DIR", tmp_path)
     monkeypatch.setattr(sl, "CACHE_FILE", tmp_path / "stock_list_cache.json")
-    for name in ("_fetch_from_eastmoney", "_fetch_hk_from_eastmoney", "_fetch_us_from_eastmoney",
-                 "_fetch_bj_from_eastmoney"):
-        monkeypatch.setattr(sl, name, lambda: [])
+    # 其他市场 catalog 给一档假资料:空 catalog 会被视为失败而缩短缓存寿命
+    for name, market in (("_fetch_from_eastmoney", "CN"), ("_fetch_hk_from_eastmoney", "HK"),
+                         ("_fetch_us_from_eastmoney", "US"), ("_fetch_bj_from_eastmoney", "CN"),
+                         ("_fetch_etf_from_eastmoney", "CN")):
+        monkeypatch.setattr(sl, name, lambda m=market, n=name: [{"symbol": n, "name": n, "market": m}])
     monkeypatch.setattr(sl, "_fetch_twse_raw", lambda: TWSE)
     monkeypatch.setattr(sl, "_fetch_tpex_raw", lambda: TPEX)
     monkeypatch.setattr(sl, "_fetch_esb_raw", lambda: ESB)

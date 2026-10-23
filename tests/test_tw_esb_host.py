@@ -9,6 +9,28 @@ import pytest
 
 from marketdata.vendors import tw_bulk
 
+
+@pytest.fixture(autouse=True)
+def _offline_upstream_catalogs(monkeypatch):
+    """其他市场 catalog、akshare 备援与期货清单一律离线(个别用例可再覆写)。"""
+    import concurrent.futures
+
+    from src.platform.marketdata import futures as _futures
+    from src.platform.marketdata import stock_list as _sl
+
+    for name in ("_fetch_from_eastmoney", "_fetch_hk_from_eastmoney", "_fetch_us_from_eastmoney",
+                 "_fetch_bj_from_eastmoney", "_fetch_etf_from_eastmoney", "_fetch_etf_from_sina"):
+        monkeypatch.setattr(_sl, name, lambda: [])
+    monkeypatch.setattr(_futures, "search_futures", lambda *args, **kwargs: [])
+
+    def _no_akshare():
+        future = concurrent.futures.Future()
+        future.set_result([])
+        return future
+
+    monkeypatch.setattr(_sl, "_akshare_fallback", _no_akshare)
+
+
 ROOT = Path(__file__).resolve().parents[1]
 FX = ROOT / "packages/marketdata/tests/fixtures/tw"
 

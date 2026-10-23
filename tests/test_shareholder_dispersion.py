@@ -350,7 +350,4 @@ def test_dispersion_line_never_fetches_network(db, monkeypatch):
     assert fetched == [] and backfilled == []
 
 
-@pytest.mark.parametrize("module", ["daily_report", "premarket_outlook", "intraday_monitor"])
-def test_agents_include_dispersion_line(module):
-    source = (ROOT / "src" / "modules" / "automation" / f"{module}.py").read_text(encoding="utf-8")
-    assert "dispersion_line_for" in source
+# 集保摘要进入研究图证据的合约见 tests/test_tw_research_evidence.py。

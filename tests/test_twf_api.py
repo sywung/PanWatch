@@ -86,7 +86,7 @@ def test_search_stocks_twf_only_futures(monkeypatch):
 def test_search_all_markets_lists_futures_after_tw(monkeypatch):
     tw = [{"symbol": "2330", "name": "台積電", "market": "TW", "board": "TSE"}]
     us = [{"symbol": "TSM", "name": "Taiwan Semiconductor", "market": "US"}]
-    monkeypatch.setattr(sl, "_cached_search", lambda q, market, limit: tw if market == "TW" else [])
+    monkeypatch.setattr(sl, "_cached_search", lambda q, market, limit, **kwargs: tw if market == "TW" else [])
     monkeypatch.setattr(sl, "_lookup_tw_code", lambda q: [])
     monkeypatch.setattr(sl, "_realtime_search", lambda q, market, limit: us)
     monkeypatch.setattr(sl, "_yahoo_search", lambda q, market, limit: [])

@@ -286,13 +286,7 @@ def test_chan_api_endpoint(chan_inputs):
     assert data30["level"] == "30m" and len(data30["zs"]) == 2
 
 
-def test_agents_put_chan_into_prompt_context():
-    for rel in ("src/modules/automation/daily_report.py",
-                "src/modules/automation/premarket_outlook.py",
-                "src/modules/automation/intraday_monitor.py"):
-        assert "format_chan_summary" in (ROOT / rel).read_text(encoding="utf-8"), rel
-    for rel in ("prompts/daily_report.txt", "prompts/premarket_outlook.txt", "prompts/intraday_monitor.txt"):
-        assert "缠论" in (ROOT / rel).read_text(encoding="utf-8"), rel
+# 缠论摘要进入研究图证据的合约见 tests/test_tw_research_evidence.py。
 
 
 # ---------------------------------------------------------------- 真实资料踩到的坑

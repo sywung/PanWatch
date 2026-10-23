@@ -171,12 +171,17 @@ def test_tw_stock_sessions_unchanged(tw_calendar, when, expected):
     assert MARKETS[MarketCode.TW].is_trading_time(when) is expected
 
 
-def test_twf_without_calendar_degrades_to_weekend_rule():
-    # 日历拉不到:与 TW 相同,只判周末;夜盘跨午夜规则仍成立
+def test_twf_uses_bundled_calendar_without_network():
+    # 不联网也认得内建的 2026 休市日;夜盘跨午夜规则仍成立
     md = MARKETS[MarketCode.TWF]
-    assert md.is_trading_time(_tpe(2026, 9, 25, 10, 0)) is True  # 不知道是中秋
-    assert md.is_trading_time(_tpe(2026, 10, 3, 3, 0)) is True
+    assert md.is_trading_time(_tpe(2026, 9, 25, 10, 0)) is False  # 中秋
+    assert md.is_trading_time(_tpe(2026, 10, 3, 3, 0)) is True  # 周五夜盘延续到周六清晨
     assert md.is_trading_time(_tpe(2026, 10, 4, 3, 0)) is False
+
+
+def test_twf_unpublished_year_does_not_authorize_trading():
+    # 未公布年度的平日一律视为未知,不得当成交易时段
+    assert MARKETS[MarketCode.TWF].is_trading_time(_tpe(2027, 1, 4, 10, 0)) is False
 
 
 # ---------------------------------------------------------------- 结算日
@@ -196,8 +201,12 @@ def test_futures_settlement_date(tw_calendar, year, month, expected):
     assert tc.futures_settlement_date(year, month) == expected
 
 
-def test_futures_settlement_date_without_calendar_is_third_wednesday():
-    assert tc.futures_settlement_date(2026, 2) == date(2026, 2, 18)
+def test_futures_settlement_date_uses_bundled_calendar_without_network():
+    assert tc.futures_settlement_date(2026, 2) == date(2026, 2, 23)
+
+
+def test_futures_settlement_date_unpublished_year_is_third_wednesday():
+    assert tc.futures_settlement_date(2027, 2) == date(2027, 2, 17)
 
 
 # ---------------------------------------------------------------- 市场状态

@@ -1,3 +1,4 @@
+import { useToast } from '@panwatch/base-ui/components/ui/toast'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
@@ -26,8 +27,9 @@ import {
 import { Switch } from '@panwatch/base-ui/components/ui/switch'
 import { useTranslation } from 'react-i18next'
 import { buildAnalysisSections } from '@panwatch/biz-ui/analysis-sections'
+import { AnalysisMetadata } from '@panwatch/biz-ui/components/analysis-metadata'
 import ShareCardModal from '../components/ShareCardModal'
-import { normalizeSuggestionAction } from '@panwatch/biz-ui/components/suggestion-action'
+import { suggestionPresentation, type SuggestionStateInput } from '@panwatch/biz-ui/components/suggestion-action'
 import { marketSignTextClass } from '@/lib/market-colors'
 
 const DECISION_COLOR: Record<string, string> = {
@@ -106,6 +108,7 @@ function parseHeadings(markdown: string): { text: string; slug: string }[] {
 
 export default function AnalysisDetailPage() {
   const { t, i18n } = useTranslation('configuration')
+  const { toast } = useToast()
   const analysisT = t as unknown as (key: string, options?: Record<string, unknown>) => string
   const { symbol = '', date = '' } = useParams()
   const navigate = useNavigate()
@@ -130,7 +133,7 @@ export default function AnalysisDetailPage() {
     try {
       await tradingAgentsApi.downloadAnalysisPdf(symbol, date)
     } catch (e) {
-      alert(e instanceof Error ? e.message : analysisT('assistantPage.analysis.exportFailed'))
+      toast(e instanceof Error ? e.message : analysisT('assistantPage.analysis.exportFailed'), 'error')
     } finally {
       setPdfBusy(false)
     }
@@ -160,13 +163,11 @@ export default function AnalysisDetailPage() {
 
   const rawData = (result?.raw_data || {}) as Partial<DeepAnalysisResult['raw_data']>
   const sug = rawData.suggestion
-  const reviewRequired = sug?.review_required === true || sug?.rating_raw === 'review'
-  const localizedAction = (action?: string, label?: string) => {
-    const normalized = normalizeSuggestionAction(action, label)
-    return normalized ? analysisT(`bizUi:kline.actions.${normalized}`) : label || action || '--'
-  }
-  const decisionLabel = reviewRequired ? analysisT('assistantPage.analysis.reviewHint') : localizedAction(sug?.action, sug?.action_label)
-  const decisionColor = reviewRequired ? 'text-orange-500' : (sug ? DECISION_COLOR[sug.action] || '' : '')
+  const view = suggestionPresentation(sug || {})
+  const localizedAction = (action?: string, label?: string, state?: SuggestionStateInput) =>
+    analysisT(`bizUi:${suggestionPresentation({ ...state, action, action_label: label }).labelKey}`)
+  const decisionLabel = analysisT(`bizUi:${view.labelKey}`)
+  const decisionColor = view.review ? 'text-orange-500' : DECISION_COLOR[view.action] || ''
   const sections = buildAnalysisSections(rawData, {
     english: (i18n.resolvedLanguage || i18n.language).toLowerCase().startsWith('en'),
   })
@@ -315,18 +316,16 @@ export default function AnalysisDetailPage() {
 
           {/* 正文 */}
           <article>
+          <div className="mb-4"><AnalysisMetadata result={result} /></div>
           {/* 决策摘要(移动端在正文顶部;桌面端移到右侧目录区,见下方 aside) */}
           {sug && (
             <div className="lg:hidden rounded-xl bg-accent/30 p-4 mb-6 flex items-center gap-3 flex-wrap">
               <span className={`text-[24px] font-bold ${decisionColor}`}>
                 {decisionLabel}
               </span>
-              {reviewRequired && <span className="text-[12px] text-orange-600">{analysisT('assistantPage.analysis.reviewHint')}</span>}
+              {view.review && <span className="text-[12px] text-orange-600">{analysisT('assistantPage.analysis.reviewHint')}</span>}
               <span className="text-[13px] text-muted-foreground">
                 {analysisT('assistantPage.analysis.confidence')} {sug.confidence?.toFixed(1) ?? '-'} / 10
-              </span>
-              <span className="ml-auto text-[11px] text-muted-foreground">
-                {analysisT('assistantPage.analysis.cost')} ${rawData.cost_usd?.toFixed(4) ?? '-'}
               </span>
             </div>
           )}
@@ -401,7 +400,7 @@ export default function AnalysisDetailPage() {
               </div>
             )}
             {items.length > 0 ? (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto scrollbar">
                 <table className="w-full text-[13px]">
                   <thead>
                     <tr className="border-b border-border text-muted-foreground text-[12px]">
@@ -418,7 +417,7 @@ export default function AnalysisDetailPage() {
                     {items.map((it, i) => (
                       <tr key={i} className="border-b border-border/50">
                         <td className="py-2 pr-3">{it.analysis_date}</td>
-                        <td className="py-2 px-2">{localizedAction(it.action, it.action_label)}{it.confidence != null ? ` (${it.confidence.toFixed(1)})` : ''}</td>
+                        <td className="py-2 px-2">{localizedAction(it.action, it.action_label, it)}{it.confidence != null ? ` (${it.confidence.toFixed(1)})` : ''}</td>
                         <td className="text-right py-2 px-2">{it.price_at_analysis ?? '-'}</td>
                         <td className={`text-right py-2 px-2 ${pctClass(it.return_1d_pct)}`}>{fmtPct(it.return_1d_pct)}</td>
                         <td className={`text-right py-2 px-2 ${pctClass(it.return_5d_pct)}`}>{fmtPct(it.return_5d_pct)}</td>
@@ -451,11 +450,8 @@ export default function AnalysisDetailPage() {
                   <span className={`text-[22px] font-bold leading-none ${decisionColor}`}>
                     {decisionLabel}
                   </span>
-                  <span className="text-[11px] text-muted-foreground shrink-0">
-                    ${rawData.cost_usd?.toFixed(4) ?? '-'}
-                  </span>
                 </div>
-                {reviewRequired && (
+                {view.review && (
                   <p className="mt-2 text-[11px] leading-4 text-orange-600">
                     {analysisT('assistantPage.analysis.unsafe')}
                   </p>

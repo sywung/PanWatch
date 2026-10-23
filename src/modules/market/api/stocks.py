@@ -19,10 +19,14 @@ from src.platform.persistence.models import (
     PriceAlertHit,
 )
 from src.platform.marketdata.stock_list import search_stocks, refresh_stock_list
+from src.platform.marketdata.instruments import AssetType, infer_asset_type
 from src.platform.marketdata.marketdata_client import md_quote_rows
 from src.platform.marketdata.models import DEFAULT_MARKET, MarketCode, MarketDef, MARKETS
 from src.platform.marketdata import futures
-from src.platform.scheduling.trading_calendar import is_trading_day
+from src.platform.marketdata.quote_display import daily_quote_fields
+from src.platform.scheduling import trading_calendar
+from src.platform.scheduling.schedule_parser import parse_schedule
+from src.modules.automation.scheduling_policy import request_scheduler_reload
 from src.modules.automation.agent_catalog import AGENT_KIND_WORKFLOW, infer_agent_kind
 from src.web.errors import api_error
 
@@ -34,10 +38,12 @@ class StockCreate(BaseModel):
     symbol: str
     name: str
     market: str = DEFAULT_MARKET.value
+    asset_type: AssetType | None = None
 
 
 class StockUpdate(BaseModel):
     name: str | None = None
+    asset_type: AssetType | None = None
 
 
 class StockAgentInfo(BaseModel):
@@ -53,6 +59,7 @@ class StockResponse(BaseModel):
     symbol: str
     name: str
     market: str
+    asset_type: AssetType = "stock"
     sort_order: int
     agents: list[StockAgentInfo] = []
 
@@ -105,6 +112,7 @@ def _stock_to_response(stock: Stock, agent_display_names: dict[str, str] | None 
         "symbol": stock.symbol,
         "name": stock.name,
         "market": stock.market,
+        "asset_type": infer_asset_type(stock.name, getattr(stock, "asset_type", None)),
         "sort_order": stock.sort_order or 0,
         "agents": [
             {
@@ -128,7 +136,7 @@ def get_market_status():
     for market_code in market_codes:
         market_def = MARKETS[market_code]
         try:
-            now = datetime.now(market_def.get_tz())
+            now = trading_calendar._now_in_market_tz(market_code)
             result.append(build_market_status(market_def, now))
         except Exception as e:
             # 单个市场获取失败不影响其他市场
@@ -149,70 +157,57 @@ def get_market_status():
 
 
 def build_market_status(market_def: MarketDef, now: datetime) -> dict:
-    """根据市场定义和当地时间生成单个市场状态。"""
-    if now.tzinfo is not None:
-        now = now.astimezone(market_def.get_tz())
+    """根据市场定义和当地时间生成单个市场状态(交易日历决定开休市)。"""
+    tz = market_def.get_tz()
+    now = now.astimezone(tz) if now.tzinfo is not None else now.replace(tzinfo=tz)
+    code = market_def.code
 
-    is_trading = market_def.is_trading_time(now)
-    sessions_desc = [
-        f"{session.start.strftime('%H:%M')}-{session.end.strftime('%H:%M')}"
-        for session in market_def.sessions
-    ]
-    current_time = now.time()
-
-    if is_trading:
-        status = "trading"
-        status_text = "交易中"
-    elif not is_trading_day(market_def.code, now.date()):
-        status = "closed"
+    status = trading_calendar.market_status(code, now)
+    sessions = trading_calendar.trading_sessions(code, now)
+    overnight_starts = [s.start for s in sessions if s.crosses_midnight]
+    if status == "after_hours" and overnight_starts and now.time() < min(overnight_starts):
+        status_text = "休息"
+        status = "break"
+    elif status == "closed":
         status_text = "休市（周末）" if now.weekday() >= 5 else "休市"
     else:
-        first_day_session = min(
-            (session for session in market_def.sessions if not session.crosses_midnight),
-            key=lambda session: session.start,
-            default=min(market_def.sessions, key=lambda session: session.start),
-        )
-        non_overnight_sessions = [
-            session for session in market_def.sessions if not session.crosses_midnight
-        ]
-        overnight_sessions = [
-            session for session in market_def.sessions if session.crosses_midnight
-        ]
-
-        if current_time < first_day_session.start:
-            status = "pre_market"
-            status_text = "盘前"
-        elif any(
-            left.end < current_time < right.start
-            for left, right in zip(
-                sorted(non_overnight_sessions, key=lambda session: session.start),
-                sorted(non_overnight_sessions, key=lambda session: session.start)[1:],
-            )
-        ):
-            status = "break"
-            status_text = "午间休市"
-        elif (
-            overnight_sessions
-            and non_overnight_sessions
-            and max(session.end for session in non_overnight_sessions) < current_time
-            and current_time < min(session.start for session in overnight_sessions)
-        ):
-            status = "break"
-            status_text = "休息"
-        else:
-            status = "after_hours"
-            status_text = "已收盘"
+        status_text = {
+            "trading": "交易中", "pre_market": "盘前", "after_hours": "已收盘",
+            "break": "午间休市", "unknown": "未知",
+        }[status]
 
     return {
-        "code": market_def.code.value,
+        "code": code.value,
         "name": market_def.name,
         "status": status,
         "status_text": status_text,
-        "is_trading": is_trading,
-        "sessions": sessions_desc,
+        "is_trading": status == "trading",
+        "sessions": [f"{s.start.strftime('%H:%M')}-{s.end.strftime('%H:%M')}" for s in sessions],
         "local_time": now.strftime("%H:%M"),
+        "local_date": now.date().isoformat(),
         "timezone": market_def.timezone,
     }
+
+
+@router.get("/markets/calendar")
+def get_market_calendars(days: int = Query(default=14, ge=1, le=31), timezone: str = "Asia/Taipei"):
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+    try:
+        display_tz = ZoneInfo(timezone)
+    except (ValueError, ZoneInfoNotFoundError) as exc:
+        raise api_error(400, "timezone_invalid", "时区无效") from exc
+    now = trading_calendar._now_in_market_tz(MarketCode.CN).astimezone(display_tz)
+    return {"timezone": timezone, "start_date": now.date().isoformat(),
+            "markets": [trading_calendar.upcoming_calendar(code, days=days, start_date=now.date())
+                        for code in MARKETS]}
+
+
+@router.get("/markets/{market}/calendar")
+def get_market_calendar(market: str, days: int = Query(default=14, ge=1, le=31)):
+    code = trading_calendar._to_market_code(market)
+    if code is None:
+        raise api_error(400, "market_invalid", "市场代码无效")
+    return trading_calendar.upcoming_calendar(code, days=days)
 
 
 @router.get("/search")
@@ -263,6 +258,7 @@ def get_quotes(db: Session = Depends(get_db)):
                     "change_pct": item["change_pct"],
                     "change_amount": item["change_amount"],
                     "prev_close": item["prev_close"],
+                    **daily_quote_fields(market, item),
                 }
                 if market == "TWF":
                     quote.update({
@@ -293,6 +289,7 @@ def create_stock(stock: StockCreate, db: Session = Depends(get_db)):
         raise api_error(400, "stock_already_exists", f"股票 {data['symbol']} 已存在")
 
     max_order = db.query(func.max(Stock.sort_order)).scalar() or 0
+    data["asset_type"] = infer_asset_type(data.get("name", ""), data.get("asset_type"))
     db_stock = Stock(**data, sort_order=int(max_order) + 1)
     db.add(db_stock)
     db.commit()
@@ -324,7 +321,7 @@ def update_stock(stock_id: int, stock: StockUpdate, db: Session = Depends(get_db
     if not db_stock:
         raise api_error(404, "stock_not_found", "股票不存在")
 
-    for key, value in stock.model_dump(exclude_unset=True).items():
+    for key, value in stock.model_dump(exclude_unset=True, exclude_none=True).items():
         setattr(db_stock, key, value)
 
     db.commit()
@@ -366,6 +363,7 @@ def delete_stock(stock_id: int, db: Session = Depends(get_db)):
 
     db.delete(db_stock)
     db.commit()
+    request_scheduler_reload()
     return {"ok": True}
 
 
@@ -377,6 +375,11 @@ def update_stock_agents(stock_id: int, body: StockAgentUpdate, db: Session = Dep
         raise api_error(404, "stock_not_found", "股票不存在")
 
     for item in body.agents:
+        if item.schedule:
+            try:
+                parse_schedule(item.schedule)
+            except ValueError as exc:
+                raise api_error(400, "agent_schedule_invalid", "调度表达式无法解析") from exc
         agent = db.query(AgentConfig).filter(AgentConfig.name == item.agent_name).first()
         if not agent:
             raise api_error(400, "agent_not_found", f"Agent {item.agent_name} 不存在")
@@ -397,6 +400,7 @@ def update_stock_agents(stock_id: int, body: StockAgentUpdate, db: Session = Dep
 
     db.commit()
     db.refresh(db_stock)
+    request_scheduler_reload()
     return _stock_to_response(db_stock, _agent_display_names(db, [db_stock]))
 
 

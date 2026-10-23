@@ -189,7 +189,7 @@ export function FuturesPositionDialog({ open, onOpenChange, accountId, position,
                 <Input value={query} onChange={event => { setQuery(event.target.value); setProduct(null); setOptions(null) }} placeholder={tr('productSearchPlaceholder')} className="pl-9" autoComplete="off" />
                 {searching && <span className="absolute right-3 top-3 w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />}
                 {products.length > 0 && (
-                  <div className="absolute z-50 w-full mt-1 max-h-52 overflow-auto rounded-xl border border-border bg-card shadow-lg">
+                  <div className="absolute z-50 w-full mt-1 max-h-52 overflow-auto scrollbar rounded-xl border border-border bg-card shadow-lg">
                     {products.map(item => (
                       <button key={item.symbol} type="button" onClick={() => void selectProduct(item)} className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-accent/50">
                         <span className="font-mono text-xs text-muted-foreground">{item.symbol}</span>

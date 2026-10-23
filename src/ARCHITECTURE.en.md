@@ -120,7 +120,7 @@ Database models and migrations live in `platform/persistence/`. Do not restore
 | `automation` | `modules/automation/api/` | agents, recommendation pool, templates |
 | `market` | `modules/market/api/` | symbols, quotes, candlesticks, news, discovery, price alerts |
 | `portfolio` | `modules/portfolio/api/` | accounts, position history, dashboard |
-| `research` | `modules/research/api/` | context, insights, evaluation, feedback, suggestions |
+| `research` | `modules/research/api/` | context, insights, evaluation, suggestions |
 | `strategy` | `modules/strategy/api/` | factor endpoints |
 | `paper_trading` | `modules/paper_trading/api/` | simulated-trading endpoints |
 
@@ -163,7 +163,7 @@ handling.
 ### TradingAgents deep analysis
 
 The TradingAgents integration prepares PanWatch market and portfolio context,
-checks cache and budget policy, invokes the upstream multi-agent graph, then
+checks the cache, invokes the upstream multi-agent graph, then
 maps its decision to PanWatch recommendations and optional paper-trading
 signals. The full user-facing flow is documented in
 [the English flowchart](../docs/tradingagents-flow.en.md) and

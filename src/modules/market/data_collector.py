@@ -4,7 +4,7 @@ import asyncio
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable
 
 from marketdata import PACKAGE_VENDORS_BY_TYPE, capture_errors
@@ -121,7 +121,7 @@ class DataCollectorManager:
     ):
         """记录日志"""
         log = CollectorLog(
-            timestamp=datetime.now(),
+            timestamp=datetime.now(timezone.utc),
             source_name=source_name,
             source_type=source_type,
             action=action,
@@ -256,7 +256,7 @@ class DataCollectorManager:
         try:
             market_code = MarketCode(market)
             collector = KlineCollector(market_code)
-            summary = collector.get_kline_summary(symbol)
+            summary = await asyncio.to_thread(collector.get_kline_summary, symbol)
 
             duration_ms = int((datetime.now() - start_time).total_seconds() * 1000)
 
@@ -300,7 +300,7 @@ class DataCollectorManager:
 
         try:
             collector = CapitalFlowCollector(MarketCode.CN)
-            data = collector.get_capital_flow(symbol)
+            data = await asyncio.to_thread(collector.get_capital_flow, symbol)
 
             duration_ms = int((datetime.now() - start_time).total_seconds() * 1000)
 
@@ -459,7 +459,7 @@ class DataCollectorManager:
             collector = CapitalFlowCollector(MarketCode.CN)
             results = []
             for symbol in test_symbols[:_TEST_SYMBOL_LIMIT]:
-                data = collector.get_capital_flow(symbol)
+                data = await asyncio.to_thread(collector.get_capital_flow, symbol)
                 if data:
                     results.append(
                         {
@@ -625,7 +625,7 @@ class DataCollectorManager:
         for symbol in test_symbols[:_TEST_SYMBOL_LIMIT]:
             market = Symbol.parse(symbol).market.value
             try:
-                bars = md.klines(symbol, market=market, days=30)
+                bars = await asyncio.to_thread(md.klines, symbol, market=market, days=30)
                 if bars:
                     last = bars[-1]
                     results.append(
@@ -678,9 +678,11 @@ class DataCollectorManager:
             if source.provider == "taifex":
                 from src.platform.marketdata.marketdata_client import futures_quote_rows
 
-                rows = futures_quote_rows(md, list(test_symbols[:_TEST_SYMBOL_LIMIT]))
+                rows = await asyncio.to_thread(
+                    futures_quote_rows, md, list(test_symbols[:_TEST_SYMBOL_LIMIT])
+                )
             else:
-                quotes = md.quotes(list(test_symbols[:_TEST_SYMBOL_LIMIT]))
+                quotes = await asyncio.to_thread(md.quotes, list(test_symbols[:_TEST_SYMBOL_LIMIT]))
                 rows = [_quote_to_row(q) for q in quotes]
         except Exception as e:
             return CollectorResult(success=False, error=str(e))
@@ -724,14 +726,16 @@ class DataCollectorManager:
             )
         )
 
-        names = self._get_stock_names(test_symbols)
+        names = await asyncio.to_thread(self._get_stock_names, test_symbols)
 
         try:
             # 包内 news publish_time 是 aware(UTC),now 也须 aware,否则 since 过滤崩
             from datetime import timezone
             cls = VENDOR_CLASSES_BY_TYPE["news"].get(source.provider)
             market = next(iter(cls.supports_markets)) if cls and len(cls.supports_markets) == 1 else DEFAULT_MARKET.value
-            news = md.news(test_symbols, market=market, names=names, now=datetime.now(timezone.utc))
+            news = await asyncio.to_thread(
+                md.news, test_symbols, market=market, names=names, now=datetime.now(timezone.utc)
+            )
         except Exception as e:
             return CollectorResult(success=False, error=str(e))
 
@@ -771,7 +775,7 @@ class DataCollectorManager:
         try:
             cls = VENDOR_CLASSES_BY_TYPE["flash_news"].get(source.provider)
             market = next(iter(cls.supports_markets)) if cls and len(cls.supports_markets) == 1 else DEFAULT_MARKET.value
-            items = md.flash_news(market=market, limit=20)
+            items = await asyncio.to_thread(md.flash_news, market=market, limit=20)
         except Exception as e:
             return CollectorResult(success=False, error=str(e))
 
@@ -819,7 +823,7 @@ class DataCollectorManager:
         )
 
         try:
-            items = md.fundamentals(syms)
+            items = await asyncio.to_thread(md.fundamentals, syms)
         except Exception as e:
             return CollectorResult(success=False, error=str(e))
 
@@ -870,7 +874,7 @@ class DataCollectorManager:
         try:
             cls = VENDOR_CLASSES_BY_TYPE["dragon_tiger"].get(source.provider)
             market = next(iter(cls.supports_markets)) if cls and len(cls.supports_markets) == 1 else DEFAULT_MARKET.value
-            items = md.dragon_tiger(date=test_date, market=market)
+            items = await asyncio.to_thread(md.dragon_tiger, date=test_date, market=market)
         except Exception as e:
             return CollectorResult(success=False, error=str(e))
 
@@ -915,7 +919,7 @@ class DataCollectorManager:
         )
 
         try:
-            items = md.margin(syms)
+            items = await asyncio.to_thread(md.margin, syms)
         except Exception as e:
             return CollectorResult(success=False, error=str(e))
 
@@ -962,7 +966,7 @@ class DataCollectorManager:
         )
 
         try:
-            items = md.shareholders(syms)
+            items = await asyncio.to_thread(md.shareholders, syms)
         except Exception as e:
             return CollectorResult(success=False, error=str(e))
 
@@ -1005,7 +1009,7 @@ class DataCollectorManager:
         )
 
         try:
-            items = md.dividend(syms)
+            items = await asyncio.to_thread(md.dividend, syms)
         except Exception as e:
             return CollectorResult(success=False, error=str(e))
 
@@ -1048,7 +1052,7 @@ class DataCollectorManager:
         )
 
         try:
-            items = md.northbound()
+            items = await asyncio.to_thread(md.northbound)
         except Exception as e:
             return CollectorResult(success=False, error=str(e))
 

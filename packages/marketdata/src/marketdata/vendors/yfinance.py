@@ -22,11 +22,23 @@ def _yf_ticker(sym: Symbol) -> str:
 
 
 def _attr(info, name: str) -> float | None:
-    """读 fast_info 属性;缺失/异常/非数值 → None。"""
+    """读 fast_info 栏位;缺失/异常/非数值 → None。
+
+    yfinance>=1.x 的属性用 snake_case(last_price),映射键却是 camelCase(lastPrice),两者都试。
+    """
     try:
         value = getattr(info, name)
     except Exception:
-        return None
+        value = None
+    if value is None and hasattr(info, "get"):
+        head, *rest = name.split("_")
+        camel = head + "".join(part.title() for part in rest)
+        try:
+            value = info.get(camel)
+            if value is None:
+                value = info.get(name)
+        except Exception:
+            return None
     try:
         return float(value) if value is not None else None
     except (TypeError, ValueError):

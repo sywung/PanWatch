@@ -14,6 +14,28 @@ import pytest
 
 from src.platform.marketdata import stock_list as sl
 
+
+@pytest.fixture(autouse=True)
+def _offline_upstream_catalogs(monkeypatch):
+    """其他市场 catalog、akshare 备援与期货清单一律离线(个别用例可再覆写)。"""
+    import concurrent.futures
+
+    from src.platform.marketdata import futures as _futures
+    from src.platform.marketdata import stock_list as _sl
+
+    for name in ("_fetch_from_eastmoney", "_fetch_hk_from_eastmoney", "_fetch_us_from_eastmoney",
+                 "_fetch_bj_from_eastmoney", "_fetch_etf_from_eastmoney", "_fetch_etf_from_sina"):
+        monkeypatch.setattr(_sl, name, lambda: [])
+    monkeypatch.setattr(_futures, "search_futures", lambda *args, **kwargs: [])
+
+    def _no_akshare():
+        future = concurrent.futures.Future()
+        future.set_result([])
+        return future
+
+    monkeypatch.setattr(_sl, "_akshare_fallback", _no_akshare)
+
+
 TW_2330 = {"symbol": "2330", "name": "台積電", "market": "TW", "board": "TSE"}
 
 
@@ -31,7 +53,8 @@ def cache_file(monkeypatch, tmp_path):
 
 
 def _write_cache(path, stocks, age_sec):
-    path.write_text(json.dumps({"ts": time.time() - age_sec, "stocks": stocks,
+    path.write_text(json.dumps({"version": sl.CACHE_VERSION, "ts": time.time() - age_sec,
+                                "ttl": sl.CACHE_TTL, "stocks": stocks,
                                 "partial": False, "failed": []}), encoding="utf-8")
 
 
@@ -136,7 +159,7 @@ def test_background_refresh_is_single_flight(monkeypatch, cache_file):
 
     assert second is None
     assert calls == [1]
-    assert json.loads(cache_file.read_text(encoding="utf-8"))["stocks"] == [TW_2330]
+    assert json.loads(cache_file.read_text(encoding="utf-8"))["stocks"] == [{**TW_2330, "asset_type": "stock"}]
 
 
 def test_sync_refresh_waits_for_running_background(monkeypatch, cache_file):
@@ -154,7 +177,7 @@ def test_sync_refresh_waits_for_running_background(monkeypatch, cache_file):
     t.join(5)
 
     assert calls == [1]
-    assert result["stocks"] == [TW_2330]
+    assert result["stocks"] == [{**TW_2330, "asset_type": "stock"}]
 
 
 def test_background_refresh_can_run_again_after_finishing(monkeypatch, cache_file):

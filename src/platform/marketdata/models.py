@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import datetime, time, timedelta
+from datetime import datetime, time
 from enum import Enum
 from zoneinfo import ZoneInfo
 
@@ -48,27 +48,9 @@ class MarketDef:
 
     def is_trading_time(self, dt: datetime | None = None) -> bool:
         """判断给定时间是否在交易时段内"""
-        if dt is None:
-            dt = datetime.now(self.get_tz())
-        else:
-            dt = dt.astimezone(self.get_tz())
-
         # 延迟导入:trading_calendar 依赖本模块的 MarketCode/MARKETS。
-        from src.platform.scheduling.trading_calendar import is_trading_day
-
-        current_time = dt.time()
-        for session in self.sessions:
-            if session.crosses_midnight:
-                if current_time >= session.start:
-                    if is_trading_day(self.code, dt.date()):
-                        return True
-                elif current_time <= session.end:
-                    if is_trading_day(self.code, dt.date() - timedelta(days=1)):
-                        return True
-            elif session.start <= current_time <= session.end:
-                if is_trading_day(self.code, dt.date()):
-                    return True
-        return False
+        from src.platform.scheduling.trading_calendar import market_status
+        return market_status(self.code, dt) == "trading"
 
     def is_day_session_time(self, dt: datetime | None = None) -> bool:
         """判断给定时间是否在日盘时段内。"""

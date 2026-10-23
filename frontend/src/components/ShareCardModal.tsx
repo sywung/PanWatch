@@ -1,5 +1,5 @@
 import { type DeepAnalysisResult } from '@panwatch/api'
-import { normalizeSuggestionAction } from '@panwatch/biz-ui/components/suggestion-action'
+import { suggestionPresentation } from '@panwatch/biz-ui/components/suggestion-action'
 import ShareCardDialog from './ShareCardDialog'
 import { useTranslation } from 'react-i18next'
 import { useMarketColors } from '@/hooks/use-market-colors'
@@ -99,8 +99,9 @@ export default function ShareCardModal({ open, onClose, result, symbol, date }: 
   const sug = result.raw_data?.suggestion
   // 评级来源:优先后端五档原值，否则用 action，再叠加中文 action_label 兜底。
   const ratingRaw = mapRatingRaw(sug?.rating_raw)
-  const normalized = normalizeSuggestionAction(ratingRaw || sug?.action, sug?.action_label)
-  const reviewRequired = sug?.review_required === true || sug?.rating_raw === 'review'
+  const view = suggestionPresentation({ ...sug, rating_raw: ratingRaw || sug?.rating_raw })
+  const normalized = view.action
+  const reviewRequired = view.review
   const visuals = ratingVisuals(palette)
   const visual = reviewRequired ? REVIEW_VISUAL : (normalized && visuals[normalized]) || RATING_FALLBACK
   const visualLabel = reviewRequired
@@ -111,7 +112,11 @@ export default function ShareCardModal({ open, onClose, result, symbol, date }: 
 
   const stockName = parseStockName(result.title || '', symbol)
   const confidence = sug?.confidence
-  const costUsd = result.raw_data?.cost_usd
+  const usage = result.raw_data?.token_usage
+  const usageLabel = usage?.recorded_calls
+    ? shareT('bizUi:deepAnalysis.usage.total', { value: usage.total_tokens.toLocaleString() })
+      + (usage.complete ? '' : ` · ${shareT('bizUi:deepAnalysis.usage.partial', { recorded: usage.recorded_calls, total: usage.completed_calls })}`)
+    : ''
   const conclusion = cleanConclusion(sug?.signal || sug?.reason || '')
   const confPct = Math.max(0, Math.min(100, (confidence ?? 0) * 10))
 
@@ -202,7 +207,7 @@ export default function ShareCardModal({ open, onClose, result, symbol, date }: 
             />
           </div>
           <div style={{ marginTop: 10, fontSize: 12, opacity: 0.85 }}>
-            {tr('cost', { value: costUsd != null ? costUsd.toFixed(4) : '-' })}
+            {usageLabel}
           </div>
         </div>
       </div>

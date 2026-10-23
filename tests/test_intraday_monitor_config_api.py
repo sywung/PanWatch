@@ -84,6 +84,9 @@ def env(monkeypatch):
 
     fake_server.reload_scheduler = reload_scheduler
     monkeypatch.setitem(sys.modules, "server", fake_server)
+    # 上游改由 request_scheduler_reload 在排程 event loop 上重载;测试没有跑排程,直接记录呼叫
+    import src.modules.automation.api.agents as agents_api
+    monkeypatch.setattr(agents_api, "request_scheduler_reload", reload_scheduler)
 
     def stored(name="intraday_monitor", field="config"):
         with Session() as s:

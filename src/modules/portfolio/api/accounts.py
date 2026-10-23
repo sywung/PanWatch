@@ -1,5 +1,7 @@
 """账户和持仓管理 API"""
+import asyncio
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from fastapi import APIRouter, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -14,6 +16,7 @@ from src.platform.marketdata.collectors.market_http import TTLCache
 from src.platform.marketdata.models import DEFAULT_MARKET, FUTURES_MARKETS, MarketCode
 from src.platform.marketdata.models import BASE_CURRENCY
 from src.platform.marketdata import fx
+from src.platform.marketdata.quote_display import daily_quote_fields
 from src.modules.portfolio.api import futures_positions as futures_positions_api
 from src.web.errors import ai_api_error, api_error
 
@@ -319,6 +322,7 @@ def reorder_positions(data: PositionReorderRequest, db: Session = Depends(get_db
 def get_portfolio_summary(
     account_id: int | None = None,
     include_quotes: bool = True,
+    refresh_exchange_rates: bool = True,
     db: Session = Depends(get_db),
 ):
     """
@@ -418,11 +422,12 @@ def get_portfolio_summary(
 
             quote = quotes.get(stock.symbol)
             current_price = quote["current_price"] if quote else None
-            change_pct = quote["change_pct"] if quote else None
+            daily_fields = daily_quote_fields(stock.market, quote)
+            change_pct = daily_fields["change_pct"]
             prev_close = quote.get("prev_close") if quote else None
 
             # 根据市场确定汇率；换算后的值为基准币别 BASE_CURRENCY。
-            rate = fx.rate_for_market(stock.market)
+            rate = fx.rate_for_market(stock.market, refresh=refresh_exchange_rates)
             is_foreign = fx.market_currency(stock.market) != BASE_CURRENCY
 
             market_value = None
@@ -432,7 +437,9 @@ def get_portfolio_summary(
             daily_pnl = None
             daily_pnl_pct = None
 
-            if current_price is not None and prev_close and prev_close > 0:
+            if daily_fields["daily_move_status"] in ("closed", "pre_market"):
+                daily_pnl = 0.0
+            elif daily_fields["daily_move_status"] == "current" and current_price is not None and prev_close and prev_close > 0:
                 daily_pnl = (current_price - prev_close) * pos.quantity * rate
                 daily_pnl_pct = (current_price - prev_close) / prev_close * 100
                 acc_daily_pnl += daily_pnl
@@ -455,6 +462,7 @@ def get_portfolio_summary(
                 "symbol": stock.symbol,
                 "name": stock.name,
                 "market": stock.market,
+                "asset_type": stock.asset_type,
                 "cost_price": pos.cost_price,
                 "quantity": pos.quantity,
                 "invested_amount": pos.invested_amount,
@@ -470,6 +478,8 @@ def get_portfolio_summary(
                 "daily_pnl": round(daily_pnl, 2) if daily_pnl is not None else None,
                 "daily_pnl_pct": round(daily_pnl_pct, 2) if daily_pnl_pct is not None else None,
                 "exchange_rate": rate if is_foreign else None,
+                "daily_move_status": daily_fields["daily_move_status"],
+                "quote_date": daily_fields["quote_date"],
             })
 
         if include_quotes:
@@ -525,7 +535,7 @@ def get_portfolio_summary(
         for symbol, quote in quotes.items():
             quotes_dict[symbol] = {
                 "current_price": quote.get("current_price"),
-                "change_pct": quote.get("change_pct"),
+                **daily_quote_fields(quote.get("market", DEFAULT_MARKET.value), quote),
             }
 
     return {
@@ -542,7 +552,7 @@ def get_portfolio_summary(
             "futures_unrealized_pnl": round(grand_futures_unrealized_pnl, 2),
             "futures_margin_used": round(grand_futures_margin_used, 2),
         },
-        "exchange_rates": fx.exchange_rates_snapshot(),
+        "exchange_rates": fx.exchange_rates_snapshot(refresh=refresh_exchange_rates),
         "quotes": quotes_dict,  # 可选：返回行情数据
     }
 
@@ -557,22 +567,31 @@ def _fetch_quotes_for_stocks(stocks: list[Stock]) -> dict:
     for s in stocks:
         market_stocks.setdefault(s.market, []).append(s)
 
-    quotes = {}
+    batches = []
     for market, stock_list in market_stocks.items():
         try:
             market_code = MarketCode(market)
         except ValueError:
             continue
 
-        symbols = [s.symbol for s in stock_list]
+        batches.append((market_code.value, [s.symbol for s in stock_list]))
+
+    def fetch_batch(batch):
+        market, symbols = batch
         try:
-            items = md_quote_rows(symbols, market_code.value)
-            for item in items:
-                quotes[item["symbol"]] = item
+            return md_quote_rows(symbols, market)
         except Exception as e:
             logger.error(f"获取 {market} 行情失败: {e}")
+            return []
 
-    return quotes
+    # 只把普通行情参数交给线程；数据库 Session/ORM 对象留在调用线程。
+    if len(batches) > 1:
+        with ThreadPoolExecutor(max_workers=len(batches)) as pool:
+            results = list(pool.map(fetch_batch, batches))
+    else:
+        results = [fetch_batch(batch) for batch in batches]
+
+    return {item["symbol"]: item for items in results for item in items}
 
 
 # 组合基准/归因结果缓存:重建全持仓 NAV 很贵(逐只拉 K 线),按持仓指纹缓存结果。
@@ -770,94 +789,102 @@ def _gather_account_totals(db: Session, *, market_value: float) -> dict:
     }
 
 
+def _prepare_portfolio_review(model_id, bind):
+    """Own the session and all blocking market-data work in the worker."""
+    with Session(bind) as db:
+        from src.modules.portfolio.portfolio_benchmark import build_attribution, build_portfolio_benchmark
+        from src.modules.portfolio.portfolio_diagnostics import diagnose_positions
+        from src.platform.ai.ai_failover import get_configured_failover_client
+        from src.platform.language import resolve_report_language
+
+        holdings = _gather_holdings(db)
+        if not holdings:
+            return {"empty": True, "reason": "no_holdings"}
+
+        diag = diagnose_positions(holdings)
+        totals = _gather_account_totals(db, market_value=diag["total_market_value"])
+        bench = build_portfolio_benchmark(holdings, days=60) or {}
+        attr = build_attribution(holdings, days=60)
+        top = attr[:3]
+        worst = list(reversed(attr[-3:])) if len(attr) > 3 else []
+
+        english = resolve_report_language(db) == "en-US"
+        lines = (
+            [
+                f"{diag['position_count']} holdings; market value {diag['total_market_value']:.0f} {BASE_CURRENCY}; unrealized P&L {diag['total_unrealized_pnl']:.0f} {BASE_CURRENCY}",
+                f"Concentration within invested capital: HHI {diag['hhi']}; largest position {diag['max_weight'] * 100:.0f}%",
+                f"Total assets across enabled accounts: {totals['total_assets']:.0f} {BASE_CURRENCY} (cash/available funds {totals['available_funds']:.0f} {BASE_CURRENCY})",
+                (f"Total-asset exposure: equities are {totals['equity_ratio'] * 100:.1f}% of total assets"
+                 if totals['equity_ratio'] is not None else "Total-asset exposure: unavailable because total assets are not positive"),
+            ]
+            if english
+            else [
+                f"持仓 {diag['position_count']} 只,总市值 {diag['total_market_value']:.0f},浮盈 {diag['total_unrealized_pnl']:.0f}",
+                f"持仓内部集中度 HHI {diag['hhi']},最大单仓占已投资金额 {diag['max_weight'] * 100:.0f}%",
+                f"启用账户总资产 {totals['total_assets']:.0f} {BASE_CURRENCY}（现金/可用资金 {totals['available_funds']:.0f} {BASE_CURRENCY}）",
+                (f"总资产敞口：权益类仓位占总资产 {totals['equity_ratio'] * 100:.1f}%"
+                 if totals['equity_ratio'] is not None else "总资产敞口：总资产非正，比例不可计算"),
+            ]
+        )
+        if bench.get("excess_return") is not None:
+            label = bench.get("benchmark_code") or bench.get("benchmark_label", "benchmark" if english else "基准")
+            lines.append(
+                (f"Last 60 days vs {label}: excess return {bench['excess_return']}% "
+                 f"(portfolio {bench.get('portfolio_return')}% / benchmark {bench.get('benchmark_return')}%); "
+                 f"relative drawdown {bench.get('relative_drawdown')}%")
+                if english
+                else f"近60日 vs {label}:超额 {bench['excess_return']}%"
+                     f"(组合 {bench.get('portfolio_return')}% / 基准 {bench.get('benchmark_return')}%),"
+                     f"相对回撤 {bench.get('relative_drawdown')}%"
+            )
+        if diag.get("by_market"):
+            prefix = f"Market distribution within holdings ({BASE_CURRENCY}): " if english else f"持仓内部市场分布（市值 {BASE_CURRENCY}）:"
+            lines.append(prefix + ", ".join(f"{k} {v:.0f}" for k, v in diag["by_market"].items()))
+        if diag.get("alerts"):
+            if english:
+                details = diag.get("alert_details") or []
+                localized_alerts = []
+                for detail in details:
+                    if detail.get("code") == "single_concentration":
+                        localized_alerts.append(f"largest position is {detail.get('weight')}%")
+                    elif detail.get("code") == "hhi_concentration":
+                        localized_alerts.append(f"high concentration (HHI={detail.get('hhi')})")
+                    elif detail.get("code") == "too_few_positions":
+                        localized_alerts.append(f"only {detail.get('count')} holdings")
+                    elif detail.get("code") == "market_concentration":
+                        localized_alerts.append(f"{detail.get('market')} exposure is {detail.get('weight')}%")
+                lines.append("Risk flags: " + "; ".join(localized_alerts))
+            else:
+                lines.append("风险提示:" + "; ".join(diag["alerts"]))
+        if top:
+            lines.append(("Top contributors: " if english else "贡献最大:") + ", ".join(f"{r['name']}({r['contribution_pct']:+.2f}%)" for r in top))
+        if worst:
+            lines.append(("Largest drags: " if english else "拖累最大:") + ", ".join(f"{r['name']}({r['contribution_pct']:+.2f}%)" for r in worst))
+
+        system_prompt = (
+            (
+                "You are a prudent portfolio adviser. Based on the supplied diagnostics, benchmark comparison, and attribution, write a concise health check and 2-3 actionable rebalancing suggestions in English. Distinguish concentration within invested capital from equity exposure relative to total assets. Never describe total-asset exposure using the within-holdings concentration percentage. Cash is the recorded available balance and is not broker-verified. If total assets are not positive, do not invent an exposure ratio. This is read-only analysis: do not place orders or promise returns. Use exactly this structure:\nHealth check: one-sentence summary\nSuggestions:\n- 2-3 concrete actions\nRisk: the largest risk in one sentence"
+                if english
+                else "你是稳健的组合顾问。基于给定的组合诊断/基准对比/个股归因,给一段简短体检 + 可执行调仓建议,"
+                     "务必区分持仓内部集中度（已投资金额中的分布）和相对总资产的实际权益敞口。"
+                     "不得用持仓内部的集中度百分比形容总资产敞口。现金按启用账户已录入的可用资金计算，未核验券商余额。"
+                     "总资产非正时不得编造敞口比例；输出必须包含‘持仓内部集中度’和‘总资产敞口’两项。"
+                     "只读分析、不下单、不承诺收益。严格格式:\n体检: 一句话总评\n建议:\n- (2~3 条具体可执行)\n风险: 一句话最大风险"
+            )
+        )
+        user_content = ("Portfolio overview:\n" if english else "组合概况:\n") + "\n".join(lines)
+        return {"client": get_configured_failover_client(db, model_id), "system_prompt": system_prompt,
+                "user_content": user_content, "result": {"top": top, "worst": worst, "diagnostics": diag, "benchmark": bench, "account_totals": totals}}
+
+
 @router.post("/portfolio/ai-review")
 async def portfolio_ai_review(model_id: int | None = None, db: Session = Depends(get_db)):
-    """组合 AI 体检:诊断+基准+归因 → 叙述结论 + 调仓建议(只读,不下单)。"""
-    from src.modules.portfolio.portfolio_benchmark import build_attribution, build_portfolio_benchmark
-    from src.modules.portfolio.portfolio_diagnostics import diagnose_positions
-    from src.platform.ai.ai_failover import get_configured_failover_client
-    from src.platform.language import resolve_report_language
-
-    holdings = _gather_holdings(db)
-    if not holdings:
-        return {"empty": True, "reason": "no_holdings"}
-
-    diag = diagnose_positions(holdings)
-    totals = _gather_account_totals(db, market_value=diag["total_market_value"])
-    bench = build_portfolio_benchmark(holdings, days=60) or {}
-    attr = build_attribution(holdings, days=60)
-    top = attr[:3]
-    worst = list(reversed(attr[-3:])) if len(attr) > 3 else []
-
-    english = resolve_report_language(db) == "en-US"
-    lines = (
-        [
-            f"{diag['position_count']} holdings; market value {diag['total_market_value']:.0f} {BASE_CURRENCY}; unrealized P&L {diag['total_unrealized_pnl']:.0f} {BASE_CURRENCY}",
-            f"Concentration within invested capital: HHI {diag['hhi']}; largest position {diag['max_weight'] * 100:.0f}%",
-            f"Total assets across enabled accounts: {totals['total_assets']:.0f} {BASE_CURRENCY} (cash/available funds {totals['available_funds']:.0f} {BASE_CURRENCY})",
-            (f"Total-asset exposure: equities are {totals['equity_ratio'] * 100:.1f}% of total assets"
-             if totals['equity_ratio'] is not None else "Total-asset exposure: unavailable because total assets are not positive"),
-        ]
-        if english
-        else [
-            f"持仓 {diag['position_count']} 只,总市值 {diag['total_market_value']:.0f},浮盈 {diag['total_unrealized_pnl']:.0f}",
-            f"持仓内部集中度 HHI {diag['hhi']},最大单仓占已投资金额 {diag['max_weight'] * 100:.0f}%",
-            f"启用账户总资产 {totals['total_assets']:.0f} {BASE_CURRENCY}（现金/可用资金 {totals['available_funds']:.0f} {BASE_CURRENCY}）",
-            (f"总资产敞口：权益类仓位占总资产 {totals['equity_ratio'] * 100:.1f}%"
-             if totals['equity_ratio'] is not None else "总资产敞口：总资产非正，比例不可计算"),
-        ]
-    )
-    if bench.get("excess_return") is not None:
-        label = bench.get("benchmark_code") or bench.get("benchmark_label", "benchmark" if english else "基准")
-        lines.append(
-            (f"Last 60 days vs {label}: excess return {bench['excess_return']}% "
-             f"(portfolio {bench.get('portfolio_return')}% / benchmark {bench.get('benchmark_return')}%); "
-             f"relative drawdown {bench.get('relative_drawdown')}%")
-            if english
-            else f"近60日 vs {label}:超额 {bench['excess_return']}%"
-                 f"(组合 {bench.get('portfolio_return')}% / 基准 {bench.get('benchmark_return')}%),"
-                 f"相对回撤 {bench.get('relative_drawdown')}%"
-        )
-    if diag.get("by_market"):
-        prefix = f"Market distribution within holdings ({BASE_CURRENCY}): " if english else f"持仓内部市场分布（市值 {BASE_CURRENCY}）:"
-        lines.append(prefix + ", ".join(f"{k} {v:.0f}" for k, v in diag["by_market"].items()))
-    if diag.get("alerts"):
-        if english:
-            details = diag.get("alert_details") or []
-            localized_alerts = []
-            for detail in details:
-                if detail.get("code") == "single_concentration":
-                    localized_alerts.append(f"largest position is {detail.get('weight')}%")
-                elif detail.get("code") == "hhi_concentration":
-                    localized_alerts.append(f"high concentration (HHI={detail.get('hhi')})")
-                elif detail.get("code") == "too_few_positions":
-                    localized_alerts.append(f"only {detail.get('count')} holdings")
-                elif detail.get("code") == "market_concentration":
-                    localized_alerts.append(f"{detail.get('market')} exposure is {detail.get('weight')}%")
-            lines.append("Risk flags: " + "; ".join(localized_alerts))
-        else:
-            lines.append("风险提示:" + "; ".join(diag["alerts"]))
-    if top:
-        lines.append(("Top contributors: " if english else "贡献最大:") + ", ".join(f"{r['name']}({r['contribution_pct']:+.2f}%)" for r in top))
-    if worst:
-        lines.append(("Largest drags: " if english else "拖累最大:") + ", ".join(f"{r['name']}({r['contribution_pct']:+.2f}%)" for r in worst))
-
-    system_prompt = (
-        (
-            "You are a prudent portfolio adviser. Based on the supplied diagnostics, benchmark comparison, and attribution, write a concise health check and 2-3 actionable rebalancing suggestions in English. Distinguish concentration within invested capital from equity exposure relative to total assets. Never describe total-asset exposure using the within-holdings concentration percentage. Cash is the recorded available balance and is not broker-verified. If total assets are not positive, do not invent an exposure ratio. This is read-only analysis: do not place orders or promise returns. Use exactly this structure:\nHealth check: one-sentence summary\nSuggestions:\n- 2-3 concrete actions\nRisk: the largest risk in one sentence"
-            if english
-            else "你是稳健的组合顾问。基于给定的组合诊断/基准对比/个股归因,给一段简短体检 + 可执行调仓建议,"
-                 "务必区分持仓内部集中度（已投资金额中的分布）和相对总资产的实际权益敞口。"
-                 "不得用持仓内部的集中度百分比形容总资产敞口。现金按启用账户已录入的可用资金计算，未核验券商余额。"
-                 "总资产非正时不得编造敞口比例；输出必须包含‘持仓内部集中度’和‘总资产敞口’两项。"
-                 "只读分析、不下单、不承诺收益。严格格式:\n体检: 一句话总评\n建议:\n- (2~3 条具体可执行)\n风险: 一句话最大风险"
-        )
-    )
-    user_content = ("Portfolio overview:\n" if english else "组合概况:\n") + "\n".join(lines)
+    prepared = await asyncio.to_thread(_prepare_portfolio_review, model_id, db.get_bind())
+    if prepared.get("empty"):
+        return prepared
     try:
-        content = await get_configured_failover_client(db, model_id).chat(system_prompt, user_content, temperature=0.3)
+        content = await prepared["client"].chat(prepared["system_prompt"], prepared["user_content"], temperature=0.3)
     except Exception as e:
         logger.exception("AI 体检失败")
         raise ai_api_error(e) from e
-
-    return {"content": content, "top": top, "worst": worst, "diagnostics": diag, "benchmark": bench, "account_totals": totals}
+    return {"content": content, **prepared["result"]}

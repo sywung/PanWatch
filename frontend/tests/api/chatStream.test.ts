@@ -95,6 +95,32 @@ describe('assistant task stream', () => {
     })
   })
 
+  it.each(['empty', 'disconnected'])('resumes past the prior approval pause after an %s decision response', async (mode) => {
+    const onDone = vi.fn()
+    const onPaused = vi.fn()
+    const calls: Array<{ path: string; lastEventId?: number }> = []
+    readSSE.mockImplementation(async (path: string, options: { lastEventId?: number; onEvent: (event: any) => void }) => {
+      calls.push({ path, lastEventId: options.lastEventId })
+      if (path.includes('/decision/stream')) {
+        if (mode === 'disconnected') throw new Error('decision accepted; response lost before first event')
+        return { lastEventId: 0 }
+      }
+      if ((options.lastEventId || 0) < 20) {
+        options.onEvent({ id: 20, event: 'paused', data: { task_id: 42, reason: 'approval_required' } })
+      } else {
+        options.onEvent({ id: 21, event: 'done', data: { message_id: 10, content: 'created once', created_at: '' } })
+      }
+      return { lastEventId: 21 }
+    })
+    await chatApi.decideAssistantApprovalStream('approval-1', 'approved', { onDone, onPaused }, 42, undefined, 20)
+    expect(calls).toEqual([
+      { path: '/assistant/approvals/approval-1/decision/stream', lastEventId: undefined },
+      { path: '/assistant/tasks/42/events', lastEventId: 20 },
+    ])
+    expect(onPaused).not.toHaveBeenCalled()
+    expect(onDone).toHaveBeenCalledTimes(1)
+  })
+
   it('preserves a structured result on the terminal event', async () => {
     const result = {
       schema_version: 1,
@@ -149,5 +175,39 @@ describe('assistant task stream', () => {
       message: 'AI 服务额度已用尽，请充值或切换可用模型后重试。',
       retryable: false,
     })
+  })
+
+  it('ends cancellation normally without reconnecting or reporting failure', async () => {
+    readSSE.mockImplementation(async (_path: string, options: { onEvent: (event: unknown) => void }) => {
+      options.onEvent({ id: 1, event: 'task_created', data: { task_id: 42 } })
+      options.onEvent({ id: 2, event: 'cancelled', data: {} })
+      return { lastEventId: 2 }
+    })
+    const onCancelled = vi.fn()
+    const onError = vi.fn()
+    await chatApi.sendAssistantMessageStream(1, '问题', { onCancelled, onError })
+    expect(readSSE).toHaveBeenCalledTimes(1)
+    expect(onCancelled).toHaveBeenCalledTimes(1)
+    expect(onError).not.toHaveBeenCalled()
+  })
+
+  it('does not reconnect a known terminal error even if the stream contained a task ID', async () => {
+    readSSE.mockImplementation(async (_path: string, options: { onEvent: (event: unknown) => void }) => {
+      options.onEvent({ id: 1, event: 'run_started', data: { task_id: 42 } })
+      options.onEvent({ id: 2, event: 'error', data: { code: 'run_timeout', message: 'timeout' } })
+      return { lastEventId: 2 }
+    })
+    await expect(chatApi.sendAssistantMessageStream(1, '问题', {})).rejects.toThrow('timeout')
+    expect(readSSE).toHaveBeenCalledTimes(1)
+  })
+
+  it('resumes a retry after the previous terminal events', async () => {
+    readSSE.mockImplementation(async (_path: string, options: { lastEventId?: number; onEvent: (event: unknown) => void }) => {
+      expect(options.lastEventId).toBe(21)
+      options.onEvent({ id: 22, event: 'done', data: { message_id: 7, content: '完成' } })
+      return { lastEventId: 22 }
+    })
+    await chatApi.subscribeAssistantTaskStream(42, {}, undefined, 21)
+    expect(readSSE).toHaveBeenCalledTimes(1)
   })
 })

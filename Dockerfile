@@ -2,7 +2,8 @@
 # 多阶段构建，减小最终镜像大小
 
 # ===== Stage 1: 前端构建 =====
-FROM node:24.14.0-alpine AS frontend-builder
+# 静态资源与目标架构无关，使用构建机原生平台，避免 ARM 镜像构建时通过 QEMU 跑 pnpm。
+FROM --platform=$BUILDPLATFORM node:24.14.0-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
@@ -20,8 +21,32 @@ COPY frontend/ ./
 RUN pnpm build
 
 
-# ===== Stage 2: Python 运行环境 =====
-FROM python:3.11-slim
+# ===== Stage 2: Python 依赖构建 =====
+# 构建与运行使用相同的 Python / Debian 版本，保证原生 wheel 的 ABI 一致。
+FROM python:3.11-slim-bookworm AS python-builder
+
+WORKDIR /app
+
+ARG DEBIAN_MIRROR=
+
+# Git 只用于构建 TradingAgents，不带入最终镜像及其 Perl 依赖。
+RUN if [ -n "$DEBIAN_MIRROR" ]; then \
+        sed -i "s|^URIs: http://deb.debian.org/debian$|URIs: ${DEBIAN_MIRROR}|" /etc/apt/sources.list.d/debian.sources; \
+    fi \
+    && apt-get update && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements-runtime.txt ./
+COPY packages/ ./packages/
+
+# 本地开发保留 editable 安装；镜像内安装正常包，不依赖源码目录。
+# 不预编译字节码，避免把 .pyc 缓存打进镜像。
+RUN sed 's/^-e //' requirements-runtime.txt > /tmp/requirements-runtime.txt \
+    && pip install --no-cache-dir --no-compile --prefix=/install -r /tmp/requirements-runtime.txt
+
+
+# ===== Stage 3: Python 运行环境 =====
+FROM python:3.11-slim-bookworm
 
 WORKDIR /app
 
@@ -32,28 +57,28 @@ ARG DEBIAN_MIRROR=
 # 安装系统依赖
 # - tzdata: 时区数据（zoneinfo 模块需要）
 # - 中文字体（K线截图需要）
-# - Playwright Chromium 依赖的系统库
+# - Playwright 1.57 的 Debian 12 Chromium 依赖（无头截图）
+#   https://github.com/microsoft/playwright/blob/v1.57.0/packages/playwright-core/src/server/registry/nativeDeps.ts
+# 固定 Bookworm：Trixie 的 libgbm1 会强制引入 Mesa / LLVM 图形驱动栈。
+# 不额外安装 GTK / EGL，截图使用 Chromium 自带的软件渲染。
 RUN if [ -n "$DEBIAN_MIRROR" ]; then \
         sed -i "s|^URIs: http://deb.debian.org/debian$|URIs: ${DEBIAN_MIRROR}|" /etc/apt/sources.list.d/debian.sources; \
     fi \
     && apt-get update && apt-get install -y --no-install-recommends \
     tzdata \
-    # git: requirements.txt 中含 git+https 直链(tradingagents)
-    git \
     # 中文字体
     fonts-noto-cjk \
-    # Playwright Chromium 依赖
-    # (这些库缺失会导致 playwright 提示 Host system is missing dependencies)
-    libxcursor1 \
-    libgtk-3-0 \
+    # PDF 导出所需的字体排版库
+    libpangoft2-1.0-0 \
     libpangocairo-1.0-0 \
-    libcairo-gobject2 \
-    libgdk-pixbuf-2.0-0 \
+    # Playwright Chromium 依赖
     libnss3 \
     libnspr4 \
     libatk1.0-0 \
     libatk-bridge2.0-0 \
+    libatspi2.0-0 \
     libcups2 \
+    libdbus-1-3 \
     libdrm2 \
     libxkbcommon0 \
     libxcomposite1 \
@@ -64,35 +89,16 @@ RUN if [ -n "$DEBIAN_MIRROR" ]; then \
     libasound2 \
     libpango-1.0-0 \
     libcairo2 \
-    # 常见的 Chromium 运行时依赖（不同版本/发行版可能会缺）
     libx11-6 \
-    libx11-xcb1 \
     libxcb1 \
     libxext6 \
-    libxi6 \
-    libxrender1 \
-    libxss1 \
-    libxtst6 \
-    libxshmfence1 \
-    libegl1 \
     libfontconfig1 \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/* \
     && fc-cache -fv
 
-# 复制依赖文件
-COPY requirements.txt ./
-
-# 先装第三方依赖：这一层只随 requirements.txt 变化，改 packages/ 源码不会让它重装
-RUN --mount=type=cache,target=/root/.cache/pip \
-    grep -v '^-e ' requirements.txt > /tmp/requirements-external.txt \
-    && pip install -r /tmp/requirements-external.txt
-
-# 复制本仓内本地包(requirements.txt 里 -e ./packages/marketdata 需要它先在)
-COPY packages/ ./packages/
-
-# 安装本仓包(第三方依赖已满足，这步很快)
-RUN --mount=type=cache,target=/root/.cache/pip pip install -r requirements.txt
+# 仅复制安装产物，构建工具和本地包测试留在 builder 中。
+COPY --from=python-builder /install/ /usr/local/
 
 # 注意: Playwright 浏览器将在首次启动时自动安装到 data 目录
 # 这样可以减小镜像体积，并支持跨版本持久化
@@ -100,9 +106,8 @@ RUN --mount=type=cache,target=/root/.cache/pip pip install -r requirements.txt
 # 复制后端代码
 COPY src/ ./src/
 COPY server.py ./
-COPY prompts/ ./prompts/
 
-# 写入版本号（构建时传入；放在最后面，换版号只影响这一层之后）
+# 写入版本号；延后声明，避免换版本号时让系统依赖安装缓存失效。
 ARG VERSION=dev
 RUN echo "${VERSION}" > VERSION
 
@@ -114,6 +119,7 @@ RUN mkdir -p /app/data
 
 # 环境变量
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
 ENV DATA_DIR=/app/data
 ENV DOCKER=1
 

@@ -1,16 +1,14 @@
-"""从环境和项目配置文件读取运行期设置的技术边界。
+"""从环境变量读取运行期设置，定义应用运行所需的配置结构。
 
 该模块可同时被 HTTP、后台任务和平台适配器使用；它不包含任何投资或产品决策。
 """
 
 from dataclasses import dataclass, field
-from pathlib import Path
-
-import yaml
 from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings
 
 from src.platform.marketdata.models import MarketCode
+from src.platform.marketdata.instruments import infer_asset_type
 
 
 class Settings(BaseSettings):
@@ -56,7 +54,7 @@ class Settings(BaseSettings):
     # day_of_week 使用 POSIX cron 语义(1-5=周一到周五)
     daily_report_cron: str = "0 14 * * 1-5"
 
-    # 默认时区（用于调度、时间展示等）。
+    # 部署执行时区（任务调度、通知静默时段；浏览器显示使用用户本地时区）。
     # 统一使用一个环境变量控制：TZ（默认 Asia/Taipei）。
     # 建议使用 IANA 时区名，如 Asia/Shanghai, America/New_York。
     app_timezone: str = Field(
@@ -87,6 +85,10 @@ class StockConfig:
     symbol: str
     name: str
     market: MarketCode
+    asset_type: str | None = None
+
+    def __post_init__(self):
+        self.asset_type = infer_asset_type(self.name, self.asset_type)
 
 
 @dataclass
@@ -95,34 +97,3 @@ class AppConfig:
 
     settings: Settings
     watchlist: list[StockConfig] = field(default_factory=list)
-
-
-def load_watchlist(path: str | Path = "config/watchlist.yaml") -> list[StockConfig]:
-    """从 YAML 加载自选股列表"""
-    path = Path(path)
-    if not path.exists():
-        return []
-
-    with open(path, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
-
-    stocks = []
-    for market_group in data.get("markets", []):
-        market_code = MarketCode(market_group["code"])
-        for stock in market_group.get("stocks", []):
-            stocks.append(
-                StockConfig(
-                    symbol=stock["symbol"],
-                    name=stock["name"],
-                    market=market_code,
-                )
-            )
-
-    return stocks
-
-
-def load_config() -> AppConfig:
-    """加载完整配置"""
-    settings = Settings()
-    watchlist = load_watchlist()
-    return AppConfig(settings=settings, watchlist=watchlist)

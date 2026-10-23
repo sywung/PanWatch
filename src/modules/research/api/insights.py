@@ -1,3 +1,4 @@
+from src.web.datetime import as_utc
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from typing import List
@@ -143,11 +144,11 @@ def _parse_verdict(text: str) -> str:
     return "未知"
 
 
-async def _fetch_fundamental_context(symbol: str, market: str) -> str:
+async def _fetch_fundamental_context(symbol: str, market: str, *, quotes=None) -> str:
     """基本面摘要:PE / 换手率 / 市值 / 今日振幅(取自实时行情,失败返回空)。"""
     try:
         mc = MarketCode(market) if market in ALL_MARKETS else DEFAULT_MARKET
-        rows = await asyncio.to_thread(md_quote_rows, [symbol], mc.value)
+        rows = quotes if quotes is not None else await asyncio.to_thread(md_quote_rows, [symbol], mc.value)
         if not rows:
             return ""
         q = rows[0]
@@ -220,10 +221,20 @@ async def add_position_eval(req: AddPositionEvalRequest, db: Session = Depends(g
     action = "加仓" if is_add else "建仓"
 
     # 上下文:实时行情 + 基本面 + 技术面 + 消息面(新闻/公告/本地观点)
-    realtime = await fetch_realtime_context(req.symbol, market)
-    fundamental = await _fetch_fundamental_context(req.symbol, market)
-    technical = await fetch_technical_context(req.symbol, market)
-    message = await _fetch_message_context(db, req.symbol, market)
+    async def quote_contexts():
+        try:
+            rows = await asyncio.to_thread(md_quote_rows, [req.symbol], market)
+        except Exception:
+            rows = []
+        return await asyncio.gather(
+            fetch_realtime_context(req.symbol, market, quotes=rows),
+            _fetch_fundamental_context(req.symbol, market, quotes=rows),
+        )
+    (realtime, fundamental), technical, message = await asyncio.gather(
+        quote_contexts(),
+        fetch_technical_context(req.symbol, market),
+        _fetch_message_context(db, req.symbol, market),
+    )
 
     holding_line = (
         f"当前持仓 {cur_q:.0f} 股,成本(单价) {cur_c:.3f}"
@@ -297,7 +308,7 @@ async def _fetch_recent_announcements(symbol: str, name: str, limit: int = 5) ->
         return [
             {
                 "title": a.title,
-                "time": a.publish_time.strftime("%Y-%m-%d %H:%M"),
+                "time": as_utc(a.publish_time).isoformat(),
                 "content": (a.content or "")[:200],
             }
             for a in anns

@@ -1,9 +1,12 @@
+import { useConfirm } from '@panwatch/base-ui/components/ui/confirm-dialog'
 import { useState, useEffect, useRef } from 'react'
-import { Check, Eye, EyeOff, Plus, Pencil, Trash2, Star, Send, Cpu, Play, Download, Upload, BarChart3, User, Radar, AlertTriangle, Palette } from 'lucide-react'
+import { Check, Eye, EyeOff, Plus, Pencil, Trash2, Star, Send, Cpu, Play, Download, Upload, Radar, AlertTriangle, Palette } from 'lucide-react'
 import { fetchAPI, type AIService, type AIModel, type NotifyChannel } from '@panwatch/api'
 import { useAvatar, saveAvatar, fileToAvatarDataUrl } from '@/hooks/use-avatar'
 import { buildTemplateImportFeedback, type TemplateImportSummary } from '@/lib/template-import-feedback'
 import PatSection from '@/components/PatSection'
+import { useGuidedTour } from '@/components/onboarding/GuidedTour'
+import { UserAvatar } from '@/components/UserAvatar'
 import { Input } from '@panwatch/base-ui/components/ui/input'
 import { Label } from '@panwatch/base-ui/components/ui/label'
 import { Button } from '@panwatch/base-ui/components/ui/button'
@@ -15,6 +18,7 @@ import { useTranslation } from 'react-i18next'
 import { useMarketColors } from '@/hooks/use-market-colors'
 import type { MarketColorPreference } from '@/lib/market-colors'
 import { formatModelExtraParams, parseModelExtraParams } from '@/lib/model-extra-params'
+import { browserTimezone } from '@panwatch/base-ui'
 
 interface Setting {
   key: string
@@ -71,15 +75,6 @@ const detectTemplateModules = (payload: TemplatePayload): TemplateModule[] => {
   return detected
 }
 
-interface FeedbackStats {
-  range_days: number
-  total: number
-  useful: number
-  useless: number
-  useful_rate: number
-  by_day: Array<{ day: string; total: number; useful: number; useless: number; useful_rate: number }>
-  by_agent: Array<{ agent_name: string; total: number; useful: number; useless: number; useful_rate: number }>
-}
 
 interface AgentsHealth {
   timezone: string
@@ -189,7 +184,9 @@ const emptyModelForm: ModelForm = { name: '', service_id: null, model: '', extra
 const emptyChannelForm: ChannelForm = { name: '', type: 'telegram', config: {} }
 
 export default function SettingsPage() {
+  const tour = useGuidedTour()
   const { t } = useTranslation(['configuration', 'common'])
+  const confirmAction = useConfirm()
   const configT = t as unknown as (key: string, options?: Record<string, unknown>) => string
   const { preference: marketColorPreference, setPreference: setMarketColorPreference } = useMarketColors()
   const [settings, setSettings] = useState<Setting[]>([])
@@ -197,6 +194,12 @@ export default function SettingsPage() {
   const [channels, setChannels] = useState<NotifyChannel[]>([])
   const [version, setVersion] = useState<string>('')
   const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    if (!loading && window.location.hash) {
+      document.getElementById(window.location.hash.slice(1))?.scrollIntoView({ block: 'start' })
+    }
+  }, [loading])
+  const [executionTimezone, setExecutionTimezone] = useState<string | null>(null)
   const [health, setHealth] = useState<AgentsHealth | null>(null)
   const [saving, setSaving] = useState<string | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
@@ -249,33 +252,24 @@ export default function SettingsPage() {
   const [availableImportModules, setAvailableImportModules] = useState<TemplateModule[]>([])
   const [pendingImport, setPendingImport] = useState<TemplatePayload | null>(null)
 
-  // Feedback stats
-  const [fbStats, setFbStats] = useState<FeedbackStats | null>(null)
-  const [fbLoading, setFbLoading] = useState(false)
-
   const importFileRef = useRef<HTMLInputElement | null>(null)
 
   const { toast } = useToast()
 
+  const loadGeneration = useRef(0)
   const load = async () => {
-    try {
-      const [settingsData, servicesData, channelsData, versionData, healthData] = await Promise.all([
-        fetchAPI<Setting[]>('/settings'),
-        fetchAPI<AIService[]>('/providers/services'),
-        fetchAPI<NotifyChannel[]>('/channels'),
-        fetchAPI<{ version: string }>('/settings/version'),
-        fetchAPI<AgentsHealth>('/agents/health'),
-      ])
-      setSettings(settingsData)
-      setServices(servicesData)
-      setChannels(channelsData)
-      setVersion(versionData.version)
-      setHealth(healthData)
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setLoading(false)
-    }
+    const generation = ++loadGeneration.current
+    const current = () => generation === loadGeneration.current
+    const publish = <T,>(setter: (value: T) => void) => (value: T) => { if (current()) setter(value) }
+    const results = await Promise.allSettled([
+      fetchAPI<Setting[]>('/settings').then(publish(setSettings)).finally(() => { if (current()) setLoading(false) }),
+      fetchAPI<AIService[]>('/providers/services').then(publish(setServices)),
+      fetchAPI<NotifyChannel[]>('/channels').then(publish(setChannels)),
+      fetchAPI<{ version: string }>('/settings/version').then(publish(data => setVersion(data.version))),
+      fetchAPI<AgentsHealth>('/agents/health').then(publish(setHealth)),
+      fetchAPI<{ execution_timezone: string }>('/settings/timezone').then(publish(data => setExecutionTimezone(data.execution_timezone))),
+    ])
+    if (current()) results.forEach(result => { if (result.status === 'rejected') console.error(result.reason) })
   }
 
   const downloadJson = (name: string, obj: any) => {
@@ -360,20 +354,7 @@ export default function SettingsPage() {
     setImportDialogOpen(true)
   }
 
-  const loadFeedbackStats = async () => {
-    setFbLoading(true)
-    try {
-      const stats = await fetchAPI<FeedbackStats>('/feedback/stats?days=14')
-      setFbStats(stats)
-    } catch (e) {
-      console.error(e)
-      setFbStats(null)
-    } finally {
-      setFbLoading(false)
-    }
-  }
-
-  useEffect(() => { load(); loadFeedbackStats() }, [])
+  useEffect(() => { void load(); return () => { loadGeneration.current++ } }, [])
 
   const onPickAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -519,7 +500,7 @@ export default function SettingsPage() {
   }
 
   const deleteService = async (id: number) => {
-    if (!confirm(configT('configuration:settingsPage.messages.deleteServiceConfirm'))) return
+    if (!(await confirmAction(configT('configuration:settingsPage.messages.deleteServiceConfirm'), { destructive: true }))) return
     try {
       await fetchAPI(`/providers/services/${id}`, { method: 'DELETE' })
       load()
@@ -573,7 +554,7 @@ export default function SettingsPage() {
   }
 
   const deleteModel = async (id: number) => {
-    if (!confirm(configT('configuration:settingsPage.messages.deleteModelConfirm'))) return
+    if (!(await confirmAction(configT('configuration:settingsPage.messages.deleteModelConfirm'), { destructive: true }))) return
     try {
       await fetchAPI(`/providers/models/${id}`, { method: 'DELETE' })
       load()
@@ -586,6 +567,7 @@ export default function SettingsPage() {
     try {
       await fetchAPI(`/providers/models/${id}`, { method: 'PUT', body: JSON.stringify({ is_default: true }) })
       load()
+      void tour?.refresh()
     } catch {
       toast(configT('configuration:settingsPage.messages.settingFailed'), 'error')
     }
@@ -594,12 +576,13 @@ export default function SettingsPage() {
   const testModel = async (id: number) => {
     setTestingModel(id)
     try {
-      await fetchAPI(`/providers/models/${id}/test`, { method: 'POST' })
+      await fetchAPI(`/providers/models/${id}/test`, { method: 'POST', timeoutMs: 60000 })
       toast(configT('configuration:settingsPage.messages.modelTested'), 'success')
     } catch (e) {
       toast(e instanceof Error ? e.message : configT('configuration:settingsPage.messages.testFailed'), 'error')
     } finally {
       setTestingModel(null)
+      void tour?.refresh()
     }
   }
 
@@ -649,7 +632,7 @@ export default function SettingsPage() {
   }
 
   const deleteChannel = async (id: number) => {
-    if (!confirm(configT('configuration:settingsPage.messages.deleteChannelConfirm'))) return
+    if (!(await confirmAction(configT('configuration:settingsPage.messages.deleteChannelConfirm'), { destructive: true }))) return
     try {
       await fetchAPI(`/channels/${id}`, { method: 'DELETE' })
       load()
@@ -662,6 +645,7 @@ export default function SettingsPage() {
     try {
       await fetchAPI(`/channels/${id}`, { method: 'PUT', body: JSON.stringify({ is_default: true }) })
       load()
+      void tour?.refresh()
     } catch {
       toast(configT('configuration:settingsPage.messages.settingFailed'), 'error')
     }
@@ -685,6 +669,7 @@ export default function SettingsPage() {
       toast(e instanceof Error ? e.message : configT('configuration:settingsPage.messages.testFailed'), 'error')
     } finally {
       setTesting(null)
+      void tour?.refresh()
     }
   }
 
@@ -718,7 +703,6 @@ export default function SettingsPage() {
     { id: 'sec-ai', label: configT('configuration:settingsPage.nav.ai'), hint: `${services.length} ${configT('configuration:settingsPage.hero.providers')} / ${allModels.length} ${configT('configuration:settingsPage.hero.models')}` },
     { id: 'sec-notify', label: configT('configuration:settingsPage.nav.notifications'), hint: `${enabledChannels.length}/${channels.length} ${configT('configuration:settingsPage.hero.channelsEnabled')}` },
     { id: 'sec-system', label: configT('configuration:settingsPage.nav.system'), hint: health?.timezone ? `TZ ${health.timezone}` : undefined },
-    { id: 'sec-feedback', label: configT('configuration:settingsPage.nav.feedback') },
     { id: 'sec-appearance', label: configT('configuration:settingsPage.nav.appearance') },
     { id: 'sec-pat', label: configT('configuration:settingsPage.nav.pat') },
   ]
@@ -731,6 +715,7 @@ export default function SettingsPage() {
 
   return (
     <div>
+
       <input
         ref={importFileRef}
         type="file"
@@ -764,11 +749,7 @@ export default function SettingsPage() {
                 title={configT('configuration:settingsPage.hero.uploadAvatar')}
                 className="group relative h-9 w-9 rounded-full overflow-hidden bg-gradient-to-br from-primary to-primary/70 text-white shadow-sm flex items-center justify-center ring-1 ring-border/40 hover:ring-primary/40 transition-all shrink-0"
               >
-                {avatar ? (
-                  <img src={avatar} alt={configT('configuration:settingsPage.hero.avatarAlt')} className="w-full h-full object-cover" />
-                ) : (
-                  <User className="w-4 h-4" />
-                )}
+                <UserAvatar src={avatar} alt={configT('configuration:settingsPage.hero.avatarAlt')} />
                 <span className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
                   <Upload className="w-3.5 h-3.5 text-white" />
                 </span>
@@ -897,6 +878,8 @@ export default function SettingsPage() {
                           <div className="flex items-center gap-0.5">
                             <Button
                               variant="ghost" size="icon" className="h-6 w-6"
+                              data-tour={m.is_default ? 'test-default-model' : undefined}
+                              aria-label={configT('configuration:settingsPage.ai.test')}
                               onClick={() => testModel(m.id)}
                               disabled={testingModel === m.id}
                               title={configT('configuration:settingsPage.ai.test')}
@@ -957,6 +940,8 @@ export default function SettingsPage() {
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <Button
                       variant="ghost" size="icon" className="h-7 w-7"
+                      data-tour="test-channel"
+                      aria-label={configT('configuration:settingsPage.notifications.sendTest')}
                       onClick={() => testChannel(ch.id)}
                       disabled={testing === ch.id || !ch.enabled}
                       title={configT('configuration:settingsPage.notifications.sendTest')}
@@ -1018,6 +1003,9 @@ export default function SettingsPage() {
                 return (
                   <div key={setting.key}>
                     <Label>{label}</Label>
+                    {setting.key === 'notify_quiet_hours' && executionTimezone ? (
+                      <p className="mb-1 text-[11px] text-muted-foreground">{configT('configuration:settingsPage.timezone.quietHours', { timezone: executionTimezone })}</p>
+                    ) : null}
                     <div className="flex items-center gap-2.5">
                       {setting.key === 'stock_link_platform' ? (
                         <Select
@@ -1066,57 +1054,7 @@ export default function SettingsPage() {
           </section>
         )}
 
-        {/* Feedback Stats */}
-        <section id="sec-feedback" className="card p-4 md:p-5 lg:col-span-7">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-[12px] md:text-[13px] font-semibold text-foreground">{configT('configuration:settingsPage.feedback.title')}</h3>
-              <p className="text-[11px] text-muted-foreground mt-1">{configT('configuration:settingsPage.feedback.description')}</p>
-            </div>
-            <Button variant="secondary" size="sm" className="h-8" onClick={loadFeedbackStats} disabled={fbLoading}>
-              <BarChart3 className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">{configT('configuration:settingsPage.feedback.refresh')}</span>
-            </Button>
-          </div>
-
-          {fbStats ? (
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2 text-[12px] text-muted-foreground">
-                <span>{configT('configuration:settingsPage.feedback.days', { days: fbStats.range_days })}</span>
-                <span className="opacity-50">|</span>
-                <span>{configT('configuration:settingsPage.feedback.total')}: <span className="font-mono text-foreground/90">{fbStats.total}</span></span>
-                <span className="opacity-50">|</span>
-                <span>{configT('configuration:settingsPage.feedback.useful')}: <span className="font-mono text-emerald-600">{fbStats.useful}</span></span>
-                <span className="opacity-50">|</span>
-                <span>{configT('configuration:settingsPage.feedback.useless')}: <span className="font-mono text-rose-600">{fbStats.useless}</span></span>
-                <span className="opacity-50">|</span>
-                <span>{configT('configuration:settingsPage.feedback.usefulRate')}: <span className="font-mono text-foreground/90">{Math.round(fbStats.useful_rate * 100)}%</span></span>
-              </div>
-
-              {fbStats.by_agent?.length ? (
-                <div className="rounded-xl border border-border/40 bg-accent/20 p-3">
-                  <div className="text-[12px] font-semibold text-foreground">{configT('configuration:settingsPage.feedback.byAgent')}</div>
-                  <div className="mt-2 space-y-1">
-                    {fbStats.by_agent.slice(0, 6).map(a => (
-                      <div key={a.agent_name} className="flex items-center justify-between text-[11px]">
-                        <span className="font-mono text-muted-foreground">{a.agent_name}</span>
-                        <span className="font-mono text-muted-foreground">
-                          {a.useful}/{a.total} ({Math.round(a.useful_rate * 100)}%)
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div className="text-[12px] text-muted-foreground">{configT('configuration:settingsPage.feedback.empty')}</div>
-              )}
-            </div>
-          ) : (
-            <div className="text-[12px] text-muted-foreground">{configT('configuration:settingsPage.feedback.empty')}</div>
-          )}
-        </section>
-
-        {/* Compact display preferences, grouped with lower-frequency feedback analytics. */}
+        {/* Display preferences */}
         <section id="sec-appearance" className="card p-4 md:p-5 lg:col-span-5">
           <div className="flex items-start gap-2.5">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -1126,6 +1064,11 @@ export default function SettingsPage() {
               <h3 className="text-[12px] md:text-[13px] font-semibold text-foreground">{configT('configuration:settingsPage.appearance.title')}</h3>
               <p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">{configT('configuration:settingsPage.appearance.description')}</p>
             </div>
+          </div>
+          <div className="mt-3 space-y-1 text-[11px] text-muted-foreground" data-testid="timezone-policy">
+            <p>{configT('configuration:settingsPage.timezone.display', { timezone: browserTimezone() })}</p>
+            {executionTimezone ? <p>{configT('configuration:settingsPage.timezone.execution', { timezone: executionTimezone })}</p> : null}
+            <p>{configT('configuration:settingsPage.timezone.market')}</p>
           </div>
           <div className="mt-3 space-y-1.5" role="radiogroup" aria-label={configT('configuration:settingsPage.appearance.marketColors')}>
             {(['auto', 'red-up', 'green-up'] as MarketColorPreference[]).map(option => {
@@ -1157,7 +1100,7 @@ export default function SettingsPage() {
         </section>
 
         {/* MCP 访问令牌 */}
-        <PatSection />
+        <PatSection className="lg:col-span-7" />
 
       </div>
 
@@ -1276,11 +1219,12 @@ export default function SettingsPage() {
 
       {/* Service Dialog */}
       <Dialog open={serviceDialogOpen} onOpenChange={setServiceDialogOpen}>
-        <DialogContent>
+        <DialogContent data-tour="provider-form">
           <DialogHeader>
             <DialogTitle>{editServiceId ? configT('configuration:settingsPage.dialogs.providerEdit') : configT('configuration:settingsPage.dialogs.providerAdd')}</DialogTitle>
             <DialogDescription>{configT('configuration:settingsPage.dialogs.providerDescription')}</DialogDescription>
           </DialogHeader>
+          <div data-tour-instructions />
           <div className="space-y-4 mt-2">
             <div>
               <Label>{configT('configuration:settingsPage.dialogs.name')}</Label>
@@ -1330,11 +1274,12 @@ export default function SettingsPage() {
 
       {/* Model Dialog */}
       <Dialog open={modelDialogOpen} onOpenChange={setModelDialogOpen}>
-        <DialogContent>
+        <DialogContent data-tour="model-form">
           <DialogHeader>
             <DialogTitle>{editModelId ? configT('configuration:settingsPage.dialogs.modelEdit') : configT('configuration:settingsPage.dialogs.modelAdd')}</DialogTitle>
             <DialogDescription>{configT('configuration:settingsPage.dialogs.modelDescription')}</DialogDescription>
           </DialogHeader>
+          <div data-tour-instructions />
           <div className="space-y-4 mt-2">
             <div>
               <Label>{configT('configuration:settingsPage.dialogs.provider')}</Label>
@@ -1404,11 +1349,12 @@ export default function SettingsPage() {
 
       {/* 批量选择嗅探到的模型 */}
       <Dialog open={batchOpen} onOpenChange={setBatchOpen}>
-        <DialogContent>
+        <DialogContent data-tour="model-discovery">
           <DialogHeader>
             <DialogTitle>{configT('configuration:settingsPage.dialogs.discovered', { count: batchCandidates.length })}</DialogTitle>
             <DialogDescription>{configT('configuration:settingsPage.dialogs.discoveredDescription')}</DialogDescription>
           </DialogHeader>
+          <div data-tour-instructions />
           <div className="mt-3 flex items-center justify-between px-0.5 text-xs text-muted-foreground">
             <span>{configT('configuration:settingsPage.dialogs.selected')} <span className="font-mono text-foreground">{batchChecked.size}</span> / {batchCandidates.length}</span>
             <button
@@ -1478,11 +1424,12 @@ export default function SettingsPage() {
 
       {/* Channel Dialog */}
       <Dialog open={channelDialogOpen} onOpenChange={setChannelDialogOpen}>
-        <DialogContent>
+        <DialogContent data-tour="channel-form">
           <DialogHeader>
             <DialogTitle>{editChannelId ? configT('configuration:settingsPage.dialogs.channelEdit') : configT('configuration:settingsPage.dialogs.channelAdd')}</DialogTitle>
             <DialogDescription>{configT('configuration:settingsPage.dialogs.channelDescription')}</DialogDescription>
           </DialogHeader>
+          <div data-tour-instructions />
           <div className="space-y-4 mt-2">
             <div>
               <Label>{configT('configuration:settingsPage.dialogs.channelName')}</Label>

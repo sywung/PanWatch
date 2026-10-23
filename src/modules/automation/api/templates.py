@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from src.platform.persistence.database import get_db
 from src.platform.marketdata.models import FUTURES_MARKETS
+from src.platform.marketdata.instruments import AssetType, infer_asset_type
 from src.web.errors import api_error
 from src.platform.persistence.models import (
     AIModel,
@@ -21,7 +22,7 @@ from src.platform.persistence.models import (
     Stock,
     StockAgent,
 )
-from src.modules.automation.agent_catalog import AGENT_KIND_CAPABILITY, infer_agent_kind
+from src.modules.automation.agent_catalog import AGENT_KIND_CAPABILITY, RETIRED_AGENT_NAMES, infer_agent_kind
 
 
 logger = logging.getLogger(__name__)
@@ -93,6 +94,7 @@ class TemplateStock(BaseModel):
     symbol: str
     name: str
     market: str
+    asset_type: AssetType | None = None
     sort_order: int = 0
     agents: list[TemplateStockAgent] = Field(default_factory=list)
 
@@ -101,6 +103,7 @@ class TemplatePosition(BaseModel):
     symbol: str
     name: str
     market: str
+    asset_type: AssetType | None = None
     cost_price: float
     quantity: int
     invested_amount: float | None = None
@@ -306,6 +309,7 @@ def export_template(
                     "symbol": stock.symbol,
                     "name": stock.name,
                     "market": stock.market,
+                    "asset_type": stock.asset_type,
                     "sort_order": int(stock.sort_order or 0),
                     "agents": [
                         {
@@ -344,6 +348,7 @@ def export_template(
                         "symbol": position.stock.symbol,
                         "name": position.stock.name,
                         "market": position.stock.market,
+                        "asset_type": position.stock.asset_type,
                         "cost_price": float(position.cost_price),
                         "quantity": int(position.quantity),
                         "invested_amount": position.invested_amount,
@@ -645,6 +650,9 @@ def import_template(
 
     # Agents
     for a in payload.agents if "agents" in selected else []:
+        if a.name in RETIRED_AGENT_NAMES:
+            warnings.append({"code": "retired_agent", "resource": "agent", "resource_key": a.name})
+            continue
         row = db.query(AgentConfig).filter(AgentConfig.name == a.name).first()
         if not row:
             # Minimal create; display_name/description fall back to name.
@@ -704,18 +712,21 @@ def import_template(
             .first()
         )
         if not stock:
-            stock = Stock(symbol=s.symbol, name=s.name, market=s.market)
+            stock = Stock(symbol=s.symbol, name=s.name, market=s.market,
+                          asset_type=infer_asset_type(s.name, s.asset_type))
             db.add(stock)
             db.flush()  # assign id
             created_stocks += 1
         else:
             updated_stocks += 1
             stock.name = s.name or stock.name
+            if s.asset_type is not None:
+                stock.asset_type = s.asset_type
         stock.sort_order = int(s.sort_order or 0)
 
         existing = db.query(StockAgent).filter(StockAgent.stock_id == stock.id).all()
         existing_map = {x.agent_name: x for x in existing}
-        desired_names = {x.agent_name for x in s.agents}
+        desired_names = {x.agent_name for x in s.agents if x.agent_name not in RETIRED_AGENT_NAMES}
 
         # replace mode: remove stock-agent not in payload for this stock
         if mode == "replace":
@@ -728,6 +739,9 @@ def import_template(
 
         for sa in s.agents:
             resource_key = f"{s.market}:{s.symbol}:{sa.agent_name}"
+            if sa.agent_name in RETIRED_AGENT_NAMES:
+                warnings.append({"code": "retired_agent", "resource": "stock_agent", "resource_key": resource_key})
+                continue
             ai_model_id = resolve_model_id(
                 sa.ai_model_id,
                 sa.ai_model_ref,
@@ -801,12 +815,15 @@ def import_template(
                     symbol=position_data.symbol,
                     name=position_data.name,
                     market=position_data.market,
+                    asset_type=infer_asset_type(position_data.name, position_data.asset_type),
                 )
                 db.add(stock)
                 db.flush()
                 created_stocks += 1
             elif position_data.name:
                 stock.name = position_data.name
+            if position_data.asset_type is not None:
+                stock.asset_type = position_data.asset_type
 
             position_key = (position_data.market, position_data.symbol)
             position = existing_positions.get(position_key)

@@ -48,8 +48,11 @@ def _fetch_yahoo_rate(symbol) -> float | None:
         return None
 
 
-def get_rate_to_base(currency) -> float:
-    """获取指定币别兑基准币别的汇率。"""
+def get_rate_to_base(currency, *, refresh: bool = True) -> float:
+    """获取指定币别兑基准币别的汇率。
+
+    refresh=False 只用缓存(没有就用后备汇率),不等外部来源;供储存后的元数据刷新使用。
+    """
     currency = str(getattr(currency, "value", currency)).upper()
     if currency == BASE_CURRENCY:
         return 1.0
@@ -57,6 +60,8 @@ def get_rate_to_base(currency) -> float:
     now = _now()
     with _cache_lock:
         entry = _cache.setdefault(currency, {})
+        if not refresh:
+            return entry.get("rate", FALLBACK_RATES.get(currency, 1.0))
         if now - entry.get("success_ts", float("-inf")) < _SUCCESS_TTL:
             return entry["rate"]
         if now - entry.get("failure_ts", float("-inf")) < _FAILURE_BACKOFF:
@@ -82,13 +87,13 @@ def get_rate_to_base(currency) -> float:
         return entry.get("rate", FALLBACK_RATES.get(currency, 1.0))
 
 
-def rate_for_market(market) -> float:
-    return get_rate_to_base(market_currency(market))
+def rate_for_market(market, *, refresh: bool = True) -> float:
+    return get_rate_to_base(market_currency(market), refresh=refresh)
 
 
-def exchange_rates_snapshot() -> dict:
+def exchange_rates_snapshot(*, refresh: bool = True) -> dict:
     return {
-        f"{currency}_{BASE_CURRENCY}": get_rate_to_base(currency)
+        f"{currency}_{BASE_CURRENCY}": get_rate_to_base(currency, refresh=refresh)
         for currency in CURRENCY_BY_MARKET.values()
         if currency != BASE_CURRENCY
     }

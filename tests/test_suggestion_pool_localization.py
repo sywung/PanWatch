@@ -112,11 +112,4 @@ def test_identical_suggestion_is_deduped_on_sqlite(db_factory):
         assert db.query(StockSuggestion).count() == 1
 
 
-def test_less_severe_action_within_window_keeps_previous(db_factory):
-    """稳定性规则:窗口内降级(减仓→持有)不新增,保留较严重的那条。"""
-    _set_language(db_factory, "zh-CN")
-    _save(action="reduce", action_label="减仓", signal="a")
-    _save(action="hold", action_label="持有", signal="b")
-    with db_factory() as db:
-        rows = db.query(StockSuggestion).all()
-        assert [r.action for r in rows] == ["reduce"]
+# 上游 fc491d4 移除了「窗口内降级保留旧建议」的稳定性规则,对应用例一并移除。

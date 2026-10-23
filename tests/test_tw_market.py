@@ -104,13 +104,16 @@ def test_tw_weekend_closed_without_calendar():
     assert tc.is_trading_day("TW", date(2026, 10, 3)) is False  # 周六
 
 
-def test_tw_without_calendar_degrades_to_weekend_only():
-    assert tc.is_trading_day("TW", date(2026, 9, 25)) is True
+def test_tw_bundled_calendar_works_without_network():
+    assert tc.is_trading_day("TW", date(2026, 9, 25)) is False  # 中秋
+    assert tc.is_trading_day("TW", date(2026, 10, 26)) is False  # 光复节补假
+    assert tc.is_trading_day("TW", date(2026, 9, 30)) is True
 
 
-def test_tw_outside_covered_years_degrades_to_weekend_only(tw_calendar):
-    # 清单只覆盖 2026 年;2027-01-01(周五)不在覆盖范围 → 只判周末
-    assert tc.is_trading_day("TW", date(2027, 1, 1)) is True
+def test_tw_unpublished_year_is_unknown_not_trading(tw_calendar):
+    # 清单只覆盖 2026 年;2027 未公布的平日不得授权自动任务
+    assert tc.calendar_known("TW", date(2027, 1, 4)) is False
+    assert tc.is_trading_day("TW", date(2027, 1, 4)) is False
 
 
 def test_tw_calendar_not_applied_to_other_markets(tw_calendar):
@@ -124,7 +127,8 @@ def test_tw_refresh_failure_keeps_degraded(monkeypatch):
 
     monkeypatch.setattr(tc, "_fetch_tw_holidays_raw", _boom)
     assert tc.refresh_tw_blocking() is False
-    assert tc.is_trading_day("TW", date(2026, 9, 25)) is True
+    # 拉取失败沿用内建资料
+    assert tc.is_trading_day("TW", date(2026, 9, 25)) is False
 
 
 def test_tw_refresh_empty_result_is_failure(monkeypatch):
@@ -138,9 +142,16 @@ def test_tw_async_refresh(monkeypatch):
     assert tc.is_trading_day("TW", date(2026, 9, 25)) is False
 
 
-def test_reset_cache_clears_tw(tw_calendar):
+def test_runtime_overlay_extends_unpublished_year_and_reset_clears_it(monkeypatch):
+    monkeypatch.setattr(tc, "_fetch_tw_holidays_raw", lambda: [
+        {"Date": "1160101", "Name": "中華民國開國紀念日"},
+        {"Date": "1160104", "Name": "國曆新年開始交易日"},
+    ])
+    assert tc.refresh_tw_blocking() is True
+    assert tc.is_trading_day("TW", date(2027, 1, 1)) is False
+    assert tc.is_trading_day("TWF", date(2027, 1, 4)) is True
     tc.reset_cache()
-    assert tc.is_trading_day("TW", date(2026, 9, 25)) is True
+    assert tc.calendar_known("TW", date(2027, 1, 4)) is False
 
 
 def test_any_market_trading_day_includes_tw(monkeypatch, tw_calendar):
@@ -154,13 +165,12 @@ def test_any_market_trading_day_includes_tw(monkeypatch, tw_calendar):
     assert tc.any_market_trading_day(date(2026, 9, 25)) is False
 
 
-def test_cn_refresh_does_not_touch_tw_network(monkeypatch):
-    """A 股 refresh_blocking() 语义不变:不得顺带拉 TW(避免既有测试打网络)。"""
+def test_local_refresh_does_not_touch_tw_network(monkeypatch):
+    """refresh_blocking() 只暖本地窗口:不得顺带拉 TW(避免既有测试打网络)。"""
     def _forbidden():
         raise AssertionError("refresh_blocking() 不应拉取 TW 日历")
 
     monkeypatch.setattr(tc, "_fetch_tw_holidays_raw", _forbidden)
-    monkeypatch.setattr(tc, "_fetch_cn_trading_dates", lambda: frozenset({date(2026, 9, 30)}))
     assert tc.refresh_blocking() is True
 
 

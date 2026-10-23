@@ -5,18 +5,19 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+import math
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from src.platform.marketdata.collectors.kline_collector import KlineCollector, kline_source
-from src.platform.notifications.notifier import NotifierManager
 from src.platform.marketdata.marketdata_client import md_quote_rows
 from src.platform.marketdata.models import DEFAULT_MARKET, MarketCode, MARKETS
+from src.platform.marketdata.quote_display import quote_date_is_current
 from src.platform.persistence.database import SessionLocal
-from src.platform.persistence.models import NotifyChannel, PriceAlertHit, PriceAlertRule, Stock
+from src.platform.persistence.models import PriceAlertHealth, PriceAlertScanHealth, PriceAlertHit, PriceAlertRule, Stock
 from src.platform.language import resolve_report_language
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,8 @@ def _safe_float(v: Any) -> float | None:
     try:
         if v is None:
             return None
-        return float(v)
+        value = float(v)
+        return value if math.isfinite(value) and not isinstance(v, bool) else None
     except Exception:
         return None
 
@@ -49,8 +51,8 @@ def _is_trading_time(market: MarketCode) -> bool:
     return market_def.is_trading_time()
 
 
-def _day_key(now: datetime) -> str:
-    return now.astimezone(timezone.utc).strftime("%Y-%m-%d")
+def _day_key(now: datetime, market: str) -> str:
+    return now.astimezone(MARKETS[_to_market(market)].get_tz()).strftime("%Y-%m-%d")
 
 
 def _minute_bucket(now: datetime) -> str:
@@ -122,7 +124,13 @@ class PriceAlertEngine:
             symbols = [s.symbol for s in items]
             if not symbols:
                 continue
-            rows = await asyncio.to_thread(md_quote_rows, symbols, market.value)
+            try:
+                rows = await asyncio.to_thread(md_quote_rows, symbols, market.value)
+            except Exception:
+                # One unavailable market must not suppress healthy markets.
+                for sym in symbols:
+                    out[(market.value, sym)] = {"_fetch_error": True}
+                continue
             by_symbol = {str(r.get("symbol")): r for r in rows}
             for sym in symbols:
                 q = by_symbol.get(sym)
@@ -235,17 +243,21 @@ class PriceAlertEngine:
             if now > exp:
                 return False, "expired"
 
+        # Automatic alerts always require a confirmed trading day. "always"
+        # means all hours on that day; dry-run tests may inspect historical quotes.
+        if not bypass_market_hours:
+            from src.platform.scheduling.trading_calendar import is_trading_day
+            if not is_trading_day(rule.stock.market):
+                return False, "non_trading_day"
         if rule.market_hours_mode == "trading_only" and not bypass_market_hours:
             if not _is_trading_time(_to_market(rule.stock.market)):
                 return False, "non_trading"
 
-        today = _day_key(now)
-        if (rule.trigger_date or "") != today:
-            rule.trigger_date = today
-            rule.trigger_count_today = 0
+        today = _day_key(now, rule.stock.market)
+        count_today = int(rule.trigger_count_today or 0) if (rule.trigger_date or "") == today else 0
 
         max_per_day = int(rule.max_triggers_per_day or 0)
-        if max_per_day > 0 and int(rule.trigger_count_today or 0) >= max_per_day:
+        if max_per_day > 0 and count_today >= max_per_day:
             return False, "daily_limit"
 
         if rule.repeat_mode == "once" and rule.last_trigger_at:
@@ -262,29 +274,7 @@ class PriceAlertEngine:
 
         return True, "ok"
 
-    def _resolve_channels(self, db: Session, rule: PriceAlertRule) -> list[NotifyChannel]:
-        ids = rule.notify_channel_ids or []
-        if ids:
-            return (
-                db.query(NotifyChannel)
-                .filter(NotifyChannel.enabled == True, NotifyChannel.id.in_(ids))
-                .all()
-            )
-        return (
-            db.query(NotifyChannel)
-            .filter(NotifyChannel.enabled == True, NotifyChannel.is_default == True)
-            .all()
-        )
-
-    async def _send_notify(self, db: Session, rule: PriceAlertRule, snapshot: dict) -> tuple[bool, str]:
-        channels = self._resolve_channels(db, rule)
-        try:
-            notifier = NotifierManager(language=resolve_report_language(db))
-        except TypeError:  # compatibility with lightweight notifier test doubles
-            notifier = NotifierManager()
-        for ch in channels:
-            notifier.add_channel(ch.type, ch.config or {})
-
+    def _notification_payload(self, db: Session, rule: PriceAlertRule, snapshot: dict) -> tuple[str, str]:
         symbol = rule.stock.symbol
         name = rule.stock.name or symbol
         quote = snapshot.get("quote") or {}
@@ -325,14 +315,75 @@ class PriceAlertEngine:
             lines.extend(hit_lines[:4])
         content = "\n".join(lines)
 
-        try:
-            result = await notifier.notify_with_result(title, content)
-            if result.get("success"):
-                return True, ""
-            err = str(result.get("error") or result.get("skipped") or "notify_failed")
-            return False, err
-        except Exception as e:
-            return False, str(e)
+        return title, content
+
+    def _persist_hit(self, rule_id, now, snapshot, price):
+        from sqlalchemy.exc import IntegrityError
+        from src.modules.notifications.sources import price_hit
+        with SessionLocal() as db:
+            rule = db.get(PriceAlertRule, rule_id)
+            if rule is None or not rule.enabled:
+                return None
+            can, _reason = self._can_trigger(rule, now)
+            if not can:
+                return None
+            hit = PriceAlertHit(
+                rule_id=rule.id, stock_id=rule.stock.id, trigger_time=now,
+                trigger_bucket=_minute_bucket(now), trigger_snapshot=snapshot,
+            )
+            db.add(hit)
+            try:
+                db.flush()
+            except IntegrityError:
+                db.rollback()
+                return None
+            rule.last_trigger_at = now
+            rule.last_trigger_price = _safe_float(price)
+            today = _day_key(now, rule.stock.market)
+            count_today = int(rule.trigger_count_today or 0) if rule.trigger_date == today else 0
+            rule.trigger_count_today = count_today + 1
+            rule.trigger_date = today
+            if rule.repeat_mode == "once":
+                rule.enabled = False
+            price_hit(db, hit, rule)
+            from src.modules.market.alert_delivery import enqueue, update_hit_receipt
+            title, content = self._notification_payload(db, rule, snapshot)
+            enqueue(db, hit, rule, title, content)
+            db.flush()
+            update_hit_receipt(db, hit.id)
+            hit_id = hit.id
+            db.commit()
+            return hit_id
+
+    def _persist_health(self, now, items=(), *, started=False, failed=False):
+        with SessionLocal() as db:
+            scan = db.get(PriceAlertScanHealth, 1)
+            if scan is None:
+                scan = PriceAlertScanHealth(id=1)
+                db.add(scan)
+            scan.next_scan_at = (now + timedelta(seconds=80)).replace(tzinfo=None)
+            if started:
+                scan.last_started_at = now
+                scan.status = "running"
+            else:
+                scan.last_completed_at = _utc_now()
+                scan.status = "failed" if failed else "completed"
+            for item in items:
+                if db.get(PriceAlertRule, item["rule_id"]) is None:
+                    continue
+                row = db.get(PriceAlertHealth, item["rule_id"])
+                if row is None:
+                    row = PriceAlertHealth(rule_id=item["rule_id"], consecutive_failures=0)
+                    db.add(row)
+                row.last_checked_at = now
+                row.next_scan_at = scan.next_scan_at
+                row.status = item.get("reason") if item["status"] == "gated" else item["status"]
+                if row.status in {"no_stock", "no_quote", "stale_quote", "source_failed", "check_failed", "incomplete_data"}:
+                    row.consecutive_failures = (row.consecutive_failures or 0) + 1
+                elif row.status in {"not_matched", "triggered", "duplicated"}:
+                    row.last_success_at = now
+                    row.consecutive_failures = 0
+            db.commit()
 
     async def scan_once(
         self,
@@ -341,18 +392,29 @@ class PriceAlertEngine:
         dry_run: bool = False,
         bypass_market_hours: bool = False,
     ) -> dict:
+        bypass_market_hours = bool(bypass_market_hours and dry_run)
         now = _utc_now()
         db = SessionLocal()
+        if not dry_run:
+            await asyncio.to_thread(self._persist_health, now, started=True)
         try:
             query = db.query(PriceAlertRule).join(Stock).filter(PriceAlertRule.enabled == True)
             if only_rule_id:
                 query = query.filter(PriceAlertRule.id == only_rule_id)
             rules = query.all()
             if not rules:
+                if not dry_run:
+                    await asyncio.to_thread(self._persist_health, now)
                 return {"total_rules": 0, "triggered": 0, "skipped": 0, "items": []}
 
-            stocks = [r.stock for r in rules if r.stock is not None]
-            quote_map = await self._fetch_quotes_map(stocks)
+            # Apply the gate before any quote/K-line request.
+            gates = {r.id: self._can_trigger(r, now, bypass_market_hours=bypass_market_hours)
+                     for r in rules if r.stock is not None}
+            stocks = [r.stock for r in rules if r.stock is not None and gates[r.id][0]]
+            try:
+                quote_map = await self._fetch_quotes_map(stocks)
+            except Exception:
+                quote_map = {(s.market, s.symbol): {"_fetch_error": True} for s in stocks}
 
             items: list[dict] = []
             triggered = 0
@@ -364,11 +426,26 @@ class PriceAlertEngine:
                     skipped += 1
                     items.append({"rule_id": rule.id, "status": "no_stock"})
                     continue
+                can, reason = gates[rule.id]
+                if not can:
+                    skipped += 1
+                    items.append({"rule_id": rule.id, "status": "gated", "reason": reason})
+                    continue
                 market = _to_market(stock.market)
                 quote = quote_map.get((market.value, stock.symbol))
                 if not quote:
                     skipped += 1
                     items.append({"rule_id": rule.id, "status": "no_quote"})
+                    continue
+
+                if quote.get("_fetch_error"):
+                    skipped += 1
+                    items.append({"rule_id": rule.id, "status": "source_failed"})
+                    continue
+
+                if not dry_run and not quote_date_is_current(stock.market, quote):
+                    skipped += 1
+                    items.append({"rule_id": rule.id, "status": "stale_quote"})
                     continue
 
                 can, reason = self._can_trigger(
@@ -379,7 +456,16 @@ class PriceAlertEngine:
                     items.append({"rule_id": rule.id, "status": "gated", "reason": reason})
                     continue
 
-                ev = await self.eval_rule(rule, quote)
+                try:
+                    ev = await self.eval_rule(rule, quote)
+                except Exception:
+                    skipped += 1
+                    items.append({"rule_id": rule.id, "status": "check_failed"})
+                    continue
+                if ev.snapshot.get("error") or any(h.get("error") or h.get("actual") is None for h in ev.snapshot.get("conditions", [])):
+                    skipped += 1
+                    items.append({"rule_id": rule.id, "status": "incomplete_data"})
+                    continue
                 if not ev.matched:
                     skipped += 1
                     items.append({"rule_id": rule.id, "status": "not_matched"})
@@ -396,45 +482,28 @@ class PriceAlertEngine:
                     )
                     continue
 
-                bucket = _minute_bucket(now)
-                hit = PriceAlertHit(
-                    rule_id=rule.id,
-                    stock_id=stock.id,
-                    trigger_time=now,
-                    trigger_bucket=bucket,
-                    trigger_snapshot=ev.snapshot,
+                hit_id = await asyncio.to_thread(
+                    self._persist_hit, rule.id, now, ev.snapshot, quote.get("current_price"),
                 )
-                db.add(hit)
-                try:
-                    db.flush()
-                except Exception:
-                    db.rollback()
+                if hit_id is None:
                     skipped += 1
                     items.append({"rule_id": rule.id, "status": "duplicated"})
                     continue
-
-                notify_ok, notify_err = await self._send_notify(db, rule, ev.snapshot)
-                hit.notify_success = bool(notify_ok)
-                hit.notify_error = notify_err or ""
-
-                rule.last_trigger_at = now
-                rule.last_trigger_price = _safe_float(quote.get("current_price"))
-                rule.trigger_count_today = int(rule.trigger_count_today or 0) + 1
-                rule.trigger_date = _day_key(now)
-                if rule.repeat_mode == "once":
-                    rule.enabled = False
-
-                db.commit()
+                # The independent worker recovers this durable queue even when
+                # the rule has become disabled by its once-only trigger.
                 triggered += 1
                 items.append(
                     {
                         "rule_id": rule.id,
                         "status": "triggered",
-                        "notify_success": bool(notify_ok),
-                        "notify_error": notify_err,
+                        "notify_success": False,
+                        "notify_error": "pending",
+                        "hit_id": hit_id,
                     }
                 )
 
+            if not dry_run:
+                await asyncio.to_thread(self._persist_health, now, items)
             return {
                 "total_rules": len(rules),
                 "triggered": triggered,
@@ -442,6 +511,10 @@ class PriceAlertEngine:
                 "items": items,
                 "scanned_at": now.isoformat(),
             }
+        except Exception:
+            if not dry_run:
+                await asyncio.to_thread(self._persist_health, now, failed=True)
+            raise
         finally:
             db.close()
 

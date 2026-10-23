@@ -23,7 +23,7 @@ from pan_agent import (
     ToolRisk,
     ToolSpec,
 )
-from pan_agent_tool_research import ToolResearchPlugin, ToolResearchService
+from pan_agent_tool_research import ToolResearchPlugin, ToolResearchService, ToolSelectionPolicy
 from pan_agent_token_meter import HeuristicTokenMeter
 
 from src.platform.ai.ai_failover import (
@@ -40,6 +40,7 @@ from src.platform.persistence.models import (
 )
 from src.platform.runtime.config import Settings
 from src.platform.marketdata.models import DEFAULT_MARKET
+from src.platform.persistence.worker import run_db_operation
 
 from .context_schemas import (
     AssistantConfigDTO,
@@ -52,13 +53,16 @@ from .context_schemas import (
 from .context_summarizer import FailoverContextSummarizer
 from .llm_adapter import FailoverModelAdapter
 from .prompt import build_assistant_messages
+from .watch_request import alert_capability_error, condition_summary, is_watch_retry, resolve_watch_request
 from .portfolio_diagnosis import PortfolioDiagnosisExtension
 from .repository import AssistantRepository
 from .result_builder import build_deterministic_assistant_result
 from .schemas import (
     ConversationDetailDTO,
+    AssistantActivityDTO,
     ConversationDTO,
     CreateConversationCommand,
+    RenameConversationCommand,
     MessageDTO,
 )
 from .result_schemas import AssistantResult
@@ -96,6 +100,9 @@ class PanWatchToolPolicy:
         self._permissions = permissions
 
     def is_tool_visible(self, request: RunRequest, tool: ToolSpec) -> bool:
+        allowed_writes = request.context.get("allowed_write_tool_names")
+        if tool.risk is not ToolRisk.READ and allowed_writes is not None and tool.name not in allowed_writes:
+            return False
         allowed_tool_names = request.context.get("allowed_tool_names")
         if allowed_tool_names is not None and tool.name not in set(allowed_tool_names):
             return False
@@ -107,6 +114,17 @@ class PanWatchToolPolicy:
         tool: ToolSpec,
         _call: ToolCall,
     ) -> ToolPermissionDecision:
+        error = alert_capability_error(_request, tool.name, _call.arguments)
+        if error:
+            return ToolPermissionDecision.deny(error)
+        plan = _request.context.get("watch_request") or {}
+        if tool.name == "create_price_alert" and plan.get("requested_channels"):
+            from src.platform.persistence.models import NotifyChannel
+            ids = _call.arguments.get("notify_channel_ids") or []
+            channels = self._repository.session.query(NotifyChannel).filter(NotifyChannel.id.in_(ids), NotifyChannel.enabled == True).all()
+            types = {c.type.lower() for c in channels}
+            if any(kind not in types for kind in plan["requested_channels"]):
+                return ToolPermissionDecision.deny("The selected channels do not match the requested delivery types.")
         return self._decision(tool)
 
     def _decision(self, tool: ToolSpec) -> ToolPermissionDecision:
@@ -117,6 +135,12 @@ class AssistantService:
     def __init__(self, repository: AssistantRepository, settings: Settings | None = None) -> None:
         self._repository = repository
         self._settings = settings or Settings()
+
+    async def in_worker(self, operation):
+        return await run_db_operation(
+            self._repository.session.get_bind(),
+            lambda db: operation(AssistantService(AssistantRepository(db), self._settings)),
+        )
 
     def create_conversation(
         self, command: CreateConversationCommand
@@ -129,6 +153,31 @@ class AssistantService:
             self._conversation_dto(row)
             for row in self._repository.list_conversations(limit)
         ]
+
+    def rename_conversation(self, conversation_id: int, command: RenameConversationCommand) -> ConversationDTO:
+        return self._conversation_dto(self._repository.rename_conversation(
+            self._require_conversation(conversation_id), command.title))
+
+    async def generate_conversation_title(self, conversation_id: int, *, persist=None) -> bool:
+        from .titles import summarize_title
+        conversation = self._require_conversation(conversation_id)
+        if conversation.title_source not in ('provisional', 'legacy'):
+            return False
+        rows = self._repository.list_messages(conversation_id)
+        question = next((row.content for row in rows if row.role == 'user'), '')
+        answer = next((row.content for row in rows if row.role == 'assistant'), '')
+        if not question or not answer:
+            return False
+        expected_title = conversation.title or ''
+        client = self.build_context_compression_client()
+        # Release the read transaction before waiting for the model.
+        self._repository.session.rollback()
+        title = await summarize_title(client, question, answer)
+        if not title:
+            return False
+        return await (persist or self.in_worker)(
+            lambda worker: worker._repository.set_automatic_title(conversation_id, title, expected_title)
+        )
 
     def get_suggested_questions(self, symbol: str, market: str = DEFAULT_MARKET.value) -> list[str]:
         """Build deterministic prompts from the current local stock context."""
@@ -193,6 +242,7 @@ class AssistantService:
                 ).model_dump(mode="json")
         return ConversationDetailDTO(
             conversation=self._conversation_dto(conversation),
+            latest_task=self._repository.latest_task_snapshot(conversation_id),
             messages=[
                 self._message_dto(
                     row,
@@ -301,6 +351,7 @@ class AssistantService:
         *,
         mode: ContextCompressionMode = ContextCompressionMode.BALANCED,
         force_compress: bool = False,
+        persist=None,
     ):
         conversation = self._require_conversation(conversation_id)
         rows = self._repository.list_messages(conversation_id)
@@ -328,15 +379,17 @@ class AssistantService:
             covered_until = (
                 non_system_rows[old_count - 1].id if old_count > 0 else None
             )
-            self._repository.save_context_snapshot(
-                conversation_id,
-                mode=mode,
-                summary=result.summary,
-                covered_until_message_id=covered_until,
-                source_message_count=old_count,
-                usage_before=result.usage_before,
-                usage_after=result.usage_after,
-            )
+            def save(worker):
+                return worker._repository.save_context_snapshot(
+                    conversation_id,
+                    mode=mode,
+                    summary=result.summary,
+                    covered_until_message_id=covered_until,
+                    source_message_count=old_count,
+                    usage_before=result.usage_before,
+                    usage_after=result.usage_after,
+                )
+            await (persist or self.in_worker)(save)
         return result
 
     def _context_model_name(self) -> str | None:
@@ -403,6 +456,12 @@ class AssistantService:
             return self._repository.get_task_snapshot(task_run_id)
         except LookupError as exc:
             raise AssistantNotFoundError(str(exc)) from exc
+
+    def get_activity(self) -> AssistantActivityDTO:
+        return AssistantActivityDTO.model_validate(self._repository.get_activity())
+
+    def read_notifications(self, *, ids: list[int], through_id: int | None = None) -> int:
+        return self._repository.read_notifications(ids=ids, through_id=through_id)
 
     def pause_task(self, task_id: int, result) -> list:
         """Persist a waiting runtime before exposing any approval to a browser."""
@@ -480,11 +539,12 @@ class AssistantService:
                     PortfolioDiagnosisExtension(
                         self._repository.session,
                         failover_client,
-                        execute_tool,
+                        registry=tools,
                     ),
                     ToolResearchPlugin(
                         ToolResearchService(
                             tools,
+                            selection_policy=ToolSelectionPolicy(max_write_tools=3),
                             descriptors=list(
                                 localized_tool_descriptors(
                                     self._report_language()
@@ -492,6 +552,7 @@ class AssistantService:
                             ),
                         ),
                         mode="active",
+                        include_write_tools=True,
                     )
                 ]
                 if self._settings.tool_research_enabled
@@ -713,13 +774,33 @@ class AssistantService:
         )
 
     def create_task(self, conversation_id: int, user_message_id: int):
-        self._require_conversation(conversation_id)
+        plan = self.watch_request_for_message(conversation_id, user_message_id)
         message = self._repository.get_message(user_message_id)
+        content = message.content if message else ""
         return self._repository.create_task(
             conversation_id=conversation_id,
             user_message_id=user_message_id,
-            context=self._write_action_context(message.content if message else ""),
+            context={**self._write_action_context(content), "watch_request": plan},
         )
+
+    def watch_request_for_message(self, conversation_id: int, user_message_id: int) -> dict:
+        conversation = self._require_conversation(conversation_id)
+        message = self._repository.get_message(user_message_id)
+        content = message.content if message else ""
+        history = [row for row in self._repository.list_messages(conversation_id) if row.id < user_message_id]
+        plan = resolve_watch_request(content, history, context={"stock_symbol": conversation.stock_symbol, "stock_market": conversation.stock_market})
+        source_id = plan.get("referenced_user_message_id")
+        if source_id:
+            saved = self._repository.watch_request_for_message(conversation_id, source_id)
+            if saved and saved.get("original_text") == plan["original_text"] and saved.get("horizon"):
+                # Recheck current capabilities but never extend a saved expiry.
+                plan["horizon"] = saved.get("horizon")
+        return plan
+
+    def refresh_legacy_watch_retry(self, task_run, plan: dict) -> dict:
+        if task_run.user_message_id and is_watch_retry(plan.get("original_text", "")) and not plan.get("request_source"):
+            return self.watch_request_for_message(task_run.conversation_id, task_run.user_message_id)
+        return plan
 
     @staticmethod
     def _write_action_context(content: str) -> dict:
@@ -749,7 +830,8 @@ class AssistantService:
             return {}
         return {
             "tool_choice": "required",
-            "allowed_tool_names": ["create_price_alert"],
+            "allowed_tool_names": ["check_watch_request", "get_notification_channels", "get_price_alerts", "search_stocks", "get_stock_quote", "create_price_alert", "tool_search"],
+            "allowed_write_tool_names": ["create_price_alert"],
             "action_source": "explicit_user_request",
         }
 
@@ -860,37 +942,46 @@ class AssistantService:
         english = resolve_report_language(self._repository.session) == "en-US"
         arguments = pending.arguments
 
-        if pending.tool_name == "update_price_alert":
-            rule_id = arguments.get("rule_id", "?")
-            changes: list[str] = []
-            if "target_price" in arguments:
-                try:
-                    display_price = f"{float(arguments['target_price']):g}"
-                except (TypeError, ValueError):
-                    display_price = str(arguments["target_price"])
-                if "direction" in arguments:
-                    direction = "≥" if arguments.get("direction") == "above" else "≤"
-                    changes.append((f"Target price {direction} {display_price}" if english else f"目标价 {direction} {display_price}"))
-                else:
-                    changes.append((f"Target price to {display_price} (direction unchanged)" if english else f"目标价改为 {display_price}（方向保持不变）"))
-            elif "direction" in arguments:
-                direction = "≥" if arguments.get("direction") == "above" else "≤"
-                changes.append((f"Direction to {direction}" if english else f"方向改为 {direction}"))
-            if "enabled" in arguments:
-                changes.append(("Enable" if arguments["enabled"] else "Disable") if english else ("启用" if arguments["enabled"] else "停用"))
-            if "name" in arguments:
-                changes.append((f"Rename to {arguments['name']}" if english else f"名称改为 {arguments['name']}"))
-            if "cooldown_minutes" in arguments:
-                changes.append((f"Cooldown {arguments['cooldown_minutes']} minutes" if english else f"冷却 {arguments['cooldown_minutes']} 分钟"))
-            if "max_triggers_per_day" in arguments:
-                changes.append((f"At most {arguments['max_triggers_per_day']} triggers per day" if english else f"每日最多触发 {arguments['max_triggers_per_day']} 次"))
-            if "repeat_mode" in arguments:
-                changes.append((f"Repeat mode to {arguments['repeat_mode']}" if english else f"重复模式改为 {arguments['repeat_mode']}"))
-            summary = ("; " if english else "；").join(changes) or ("Update the rule" if english else "更新规则")
-            return {
-                "tool_title": "Update price alert" if english else "修改价格提醒",
-                "summary": f"Update price alert #{rule_id}: {summary}." if english else f"修改价格提醒 #{rule_id}：{summary}。",
-            }
+        if pending.tool_name in {"create_price_alert", "update_price_alert"}:
+            from src.platform.persistence.models import NotifyChannel
+            create = pending.tool_name == "create_price_alert"
+            values = ({"cooldown_minutes": 30, "max_triggers_per_day": 3, "repeat_mode": "repeat", "market_hours_mode": "trading_only", "expire_at": None, "notify_channel_ids": [], **arguments} if create else arguments)
+            parts = []
+            if values.get("condition_group"):
+                parts.append(condition_summary(values["condition_group"], english))
+            elif "direction" in values or "target_price" in values:
+                direction = {"above": "≥", "below": "≤"}.get(values.get("direction"), "unchanged" if english else "方向不变")
+                price = values.get("target_price", "unchanged" if english else "目标不变")
+                parts.append(f"{'Price' if english or create else '目标价'} {direction} {price}" if english or not create else f"价格 {direction} {price}")
+            if "name" in values:
+                parts.append(f"{'Name' if english else '名称'}: {values['name']}")
+            if "enabled" in values:
+                parts.append(("Enable" if values["enabled"] else "Disable") if english else ("启用" if values["enabled"] else "停用"))
+            if "cooldown_minutes" in values:
+                parts.append(f"Cooldown {values['cooldown_minutes']} minutes" if english else f"冷却 {values['cooldown_minutes']} 分钟")
+            if "max_triggers_per_day" in values:
+                maximum = values["max_triggers_per_day"]
+                parts.append((f"At most {maximum} triggers per day" if english else f"每日最多触发 {maximum} 次") if maximum else ("Unlimited daily triggers" if english else "每日不限次数"))
+            if "repeat_mode" in values:
+                once = values["repeat_mode"] == "once"
+                parts.append(("Trigger once" if once else "Repeat triggers") if english else ("仅触发一次" if once else "重复提醒"))
+            if "market_hours_mode" in values:
+                trading = values["market_hours_mode"] == "trading_only"
+                parts.append(("Trading hours only" if trading else "All hours") if english else ("仅交易时段" if trading else "全天检测"))
+            if "expire_at" in values:
+                expiry = values["expire_at"] or ("Unlimited" if english else "无限期")
+                parts.append(f"{'Expiry' if english else '到期'}: {expiry}")
+            if "notify_channel_ids" in values:
+                ids = values["notify_channel_ids"] or []
+                query = self._repository.session.query(NotifyChannel)
+                channels = query.filter(NotifyChannel.id.in_(ids)).all() if ids else query.filter(NotifyChannel.enabled == True, NotifyChannel.is_default == True).all()
+                channel_text = ", ".join(f"{c.name} ({c.type}, #{c.id})" for c in channels)
+                if not channel_text:
+                    channel_text = "No enabled default channels; delivery unavailable" if english else "无启用的默认渠道，无法投递"
+                parts.append(f"{'Channels' if english else '通知渠道'}: {channel_text}")
+            target = f"{arguments.get('market') or DEFAULT_MARKET.value}:{arguments.get('symbol', '')}" if create else f"#{arguments.get('rule_id', '?')}"
+            title = ("Create price alert" if create else "Update price alert") if english else ("创建价格提醒" if create else "修改价格提醒")
+            return {"tool_title": title, "summary": f"{title} {target}" + (": " if english else "：") + ("; " if english else "；").join(parts) + ("." if english else "。")}
 
         if pending.tool_name == "delete_price_alert":
             rule_id = arguments.get("rule_id", "?")
@@ -899,34 +990,9 @@ class AssistantService:
                 "summary": f"Delete price alert #{rule_id} and its trigger history." if english else f"删除价格提醒 #{rule_id} 及其历史命中记录。",
             }
 
-        if pending.tool_name != "create_price_alert":
-            return {
-                "tool_title": "Action requiring approval" if english else "需要授权的操作",
-                "summary": f"Run {pending.tool_name}." if english else f"将调用 {pending.tool_name}。",
-            }
-
-        market = str(arguments.get("market") or DEFAULT_MARKET.value).upper()
-        symbol = str(arguments.get("symbol") or "").upper()
-        direction = "≥" if arguments.get("direction") == "above" else "≤"
-        target_price = arguments.get("target_price")
-        cooldown_minutes = arguments.get("cooldown_minutes", 30)
-        try:
-            display_price = f"{float(target_price):g}"
-        except (TypeError, ValueError):
-            display_price = str(target_price or ("unknown price" if english else "未知价格"))
-        try:
-            display_cooldown = f"{int(cooldown_minutes)}"
-        except (TypeError, ValueError):
-            display_cooldown = "30"
         return {
-            "tool_title": "Create price alert" if english else "创建价格提醒",
-            "summary": (
-                f"Create an intraday alert for {market}:{symbol} at price {direction} {display_price}, "
-                f"with a {display_cooldown}-minute cooldown."
-                if english else
-                f"为 {market}:{symbol} 创建价格 {direction} {display_price} 的盘中提醒，"
-                f"冷却 {display_cooldown} 分钟。"
-            ),
+            "tool_title": "Action requiring approval" if english else "需要授权的操作",
+            "summary": f"Run {pending.tool_name}." if english else f"将调用 {pending.tool_name}。",
         }
 
     @staticmethod
@@ -954,6 +1020,7 @@ class AssistantService:
         return ConversationDTO(
             id=conversation.id,
             title=conversation.title or "",
+            title_source=conversation.title_source,
             stock_symbol=conversation.stock_symbol,
             stock_market=conversation.stock_market,
             created_at=conversation.created_at,

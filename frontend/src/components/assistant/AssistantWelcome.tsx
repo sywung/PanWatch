@@ -41,7 +41,7 @@ export function AssistantWelcome({ onSubmit, onSelectStock, disabled = false }: 
   }
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col items-center justify-start overflow-y-auto px-4 py-8 text-center sm:justify-center sm:px-10 sm:py-12">
+    <section className="flex min-h-0 flex-1 flex-col items-center justify-start overflow-y-auto px-4 py-8 text-center sm:justify-center sm:px-10 sm:py-12 scrollbar">
       <p className="mb-4 text-[11px] font-semibold tracking-[0.16em] text-primary sm:text-[12px]">
         PANWATCH · {uiT('assistantPage.welcome.brandLabel')}
       </p>
@@ -60,7 +60,7 @@ export function AssistantWelcome({ onSubmit, onSelectStock, disabled = false }: 
         />
       ) : (
         <>
-          <form
+          <form data-tour="assistant-composer"
             className="mt-6 flex w-full max-w-3xl items-center gap-2 rounded-2xl border border-border/70 bg-background p-2 shadow-[0_18px_50px_-32px_hsl(var(--foreground)/0.5)] transition-shadow focus-within:ring-2 focus-within:ring-primary/20 sm:mt-9"
             onSubmit={(event) => {
               event.preventDefault()

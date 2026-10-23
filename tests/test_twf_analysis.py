@@ -159,10 +159,11 @@ def test_futures_prompt_note():
     assert "futures" in fc.futures_prompt_note([twf], "en-US").lower()
 
 
-def test_agents_use_shared_futures_note():
-    root = Path(__file__).resolve().parents[1] / "src/modules/automation"
-    for name in ("intraday_monitor.py", "daily_report.py", "premarket_outlook.py"):
-        assert "futures_prompt_note" in (root / name).read_text(encoding="utf-8"), name
+def test_research_evidence_uses_shared_futures_note():
+    # 研究图证据的期货规则沿用同一份说明
+    from src.modules.research.orchestration import taiwan
+    from src.platform.marketdata.futures_context import futures_prompt_note
+    assert taiwan.market_rules("TWF", "zh-TW") == futures_prompt_note([{"market": "TWF"}], "zh-TW").strip()
 
 
 # ---------------------------------------------------------------- 日盘 / 夜盘
@@ -207,41 +208,7 @@ def test_intraday_market_label_futures():
 # ---------------------------------------------------------------- 盘中监测提示词
 
 
-def _intraday_prompt(futures_ctx, market="TWF", symbol="TXF"):
-    from src.modules.automation.intraday_monitor import IntradayMonitorAgent
-    from src.platform.marketdata.models import MarketCode, StockData
-
-    stock = StockData(
-        symbol=symbol, name="台指期", market=MarketCode(market), current_price=48461.0,
-        change_pct=-0.49, change_amount=-237.0, open_price=48622.0, high_price=48661.0,
-        low_price=48250.0, prev_close=48698.0, volume=15421, turnover=0,
-    )
-
-    class _Portfolio:
-        total_available_funds = 0.0
-        accounts: list = []
-
-        def get_positions_for_stock(self, symbol):
-            return []
-
-    class _Ctx:
-        portfolio = _Portfolio()
-        watchlist = [SimpleNamespace(market=MarketCode(market), symbol=symbol)]
-        report_language = "zh-TW"
-
-    data = {"stock_data": stock, "kline_summary": {"trend": "多头排列"}, "symbol_context": {},
-            "futures_context": futures_ctx}
-    return IntradayMonitorAgent(price_alert_threshold=3.0).build_prompt(data, _Ctx())
-
-
-def test_intraday_prompt_includes_futures_context(spot):
-    from src.platform.marketdata import futures_context as fc
-
-    ctx = fc.build_futures_context("TXF", {"current_price": 48461.0, "contract": "TXFJ6", "session": "night"}, now=NIGHT)
-    system, user = _intraday_prompt(ctx)
-    assert "期貨" in system and "價差" in system
-    assert "台股说明" not in system                                   # 不能套用台股(三大法人、融资融券)说明
-    assert "TXFJ6" in user and "正價差" in user
+# 期货脉络进入研究图证据的合约见 tests/test_tw_research_evidence.py。
 
 
 def test_intraday_collect_attaches_futures_context(monkeypatch):
@@ -270,8 +237,6 @@ def test_intraday_collect_attaches_futures_context(monkeypatch):
 
     monkeypatch.setattr(im, "SignalPackBuilder", FakePackBuilder)
     monkeypatch.setattr(im, "ContextBuilder", FakeContextBuilder)
-    monkeypatch.setattr(im, "get_latest_analysis", lambda **kw: None)
-    monkeypatch.setattr(im, "get_analysis", lambda **kw: None)
     monkeypatch.setattr(im, "build_futures_context", fake_build)
 
     agent = im.IntradayMonitorAgent(price_alert_threshold=3.0)

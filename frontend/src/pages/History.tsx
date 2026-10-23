@@ -1,7 +1,8 @@
+import { useConfirm } from '@panwatch/base-ui/components/ui/confirm-dialog'
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Clock, Trash2, FileText, ArrowLeft } from 'lucide-react'
-import ReactMarkdown from 'react-markdown'
+import { ResearchReport, type ResearchReportData } from '@/components/ResearchReport'
 import { fetchAPI } from '@panwatch/api'
 import { Button } from '@panwatch/base-ui/components/ui/button'
 import { Badge } from '@panwatch/base-ui/components/ui/badge'
@@ -18,6 +19,7 @@ interface HistoryRecord {
   analysis_date: string
   title: string
   content: string
+  research_report?: ResearchReportData | null
   context_payload?: Record<string, unknown> | null
   prompt_context?: string | null
   prompt_stats?: Record<string, unknown> | null
@@ -32,6 +34,7 @@ const CAPABILITY_AGENT_KEYS = ['news_digest', 'chart_analyst']
 export default function HistoryPage() {
   const { toast } = useToast()
   const { t } = useTranslation('configuration')
+  const confirmAction = useConfirm()
   const historyT = t as unknown as (key: string, options?: Record<string, unknown>) => string
   const tr = (key: string, options?: Record<string, unknown>) => historyT(`p4.history.${key}`, options)
   const agentLabel = (key: string) => {
@@ -120,7 +123,7 @@ export default function HistoryPage() {
   }, [records, selectedId])
 
   const deleteRecord = async (id: number) => {
-    if (!confirm(tr('deleteConfirm'))) return
+    if (!(await confirmAction(tr('deleteConfirm'), { destructive: true }))) return
     try {
       await fetchAPI(`/history/${id}`, { method: 'DELETE' })
       toast(tr('deleted'), 'success')
@@ -158,7 +161,7 @@ export default function HistoryPage() {
   }
 
   return (
-    <div className="w-full space-y-4 md:space-y-6">
+    <div data-tour="analysis-history" className="w-full space-y-4 md:space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2 md:gap-3">
           <div className="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-gradient-to-br from-amber-500 to-amber-500/70 flex items-center justify-center shadow-sm">
@@ -229,7 +232,7 @@ export default function HistoryPage() {
           </div>
 
           {/* List */}
-          <div className={`md:col-span-5 card overflow-hidden ${mobileView === 'reader' ? 'hidden md:block' : ''}`}>
+          <div className={`md:col-span-4 min-w-0 card overflow-hidden ${mobileView === 'reader' ? 'hidden md:block' : ''}`}>
             <div className="px-4 py-3 bg-accent/20 border-b border-border/50 text-[12px] text-muted-foreground">
               {tr('tocHint')}
             </div>
@@ -259,7 +262,7 @@ export default function HistoryPage() {
           </div>
 
           {/* Reader */}
-          <div className={`md:col-span-7 card p-4 md:p-6 ${mobileView === 'list' ? 'hidden md:block' : ''}`}>
+          <div className={`md:col-span-8 min-w-0 card p-4 md:p-6 ${mobileView === 'list' ? 'hidden md:block' : ''}`}>
             {selectedRecord ? (
               <div>
                 <div className="flex items-start justify-between gap-3">
@@ -275,10 +278,7 @@ export default function HistoryPage() {
                         {tr('toc')}
                       </Button>
                       <Badge variant="outline" className="text-[10px]">{agentLabel(selectedRecord.agent_name)}</Badge>
-                      <span className="text-[11px] text-muted-foreground font-mono">{formatDateTime(displayTime(selectedRecord))}</span>
-                    </div>
-                    <div className="mt-1 text-[15px] md:text-[16px] font-semibold text-foreground truncate">
-                      {formatTitle(selectedRecord)}
+                      <span className="text-[11px] text-muted-foreground" title={formatDateTime(displayTime(selectedRecord))}>{formatTimeShort(displayTime(selectedRecord))}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
@@ -308,8 +308,12 @@ export default function HistoryPage() {
                   </div>
                 </div>
 
-                <div className="mt-4 p-4 bg-accent/20 rounded-xl prose prose-sm dark:prose-invert max-w-none max-h-[62vh] md:max-h-[62vh] overflow-y-auto scrollbar">
-                  <ReactMarkdown>{selectedRecord.content}</ReactMarkdown>
+                <div className="mt-2 text-[15px] md:text-[16px] font-semibold text-foreground break-words">
+                  {formatTitle(selectedRecord)}
+                </div>
+
+                <div key={selectedRecord.id} className="mt-4 max-h-[68vh] overflow-y-auto scrollbar overscroll-contain rounded-xl bg-accent/20 p-3 md:p-5">
+                  <ResearchReport content={selectedRecord.content} report={selectedRecord.research_report} />
                 </div>
               </div>
             ) : (
@@ -332,31 +336,31 @@ export default function HistoryPage() {
               )}
             </DialogDescription>
           </DialogHeader>
-          <div className="mt-4 p-4 bg-accent/20 rounded-lg prose prose-sm dark:prose-invert max-w-none">
-            {detailRecord && <ReactMarkdown>{detailRecord.content}</ReactMarkdown>}
+          <div className="mt-4 p-4 bg-accent/20 rounded-lg">
+            {detailRecord && <ResearchReport key={detailRecord.id} content={detailRecord.content} report={detailRecord.research_report} />}
           </div>
           {detailRecord?.prompt_stats ? (
             <div className="mt-3 rounded-lg border border-border/50 p-3">
               <div className="text-[12px] font-medium mb-1">{tr('promptStats')}</div>
-              <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto">{JSON.stringify(detailRecord.prompt_stats, null, 2)}</pre>
+              <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto scrollbar">{JSON.stringify(detailRecord.prompt_stats, null, 2)}</pre>
             </div>
           ) : null}
           {detailRecord?.context_payload ? (
             <div className="mt-3 rounded-lg border border-border/50 p-3">
               <div className="text-[12px] font-medium mb-1">{tr('contextSnapshot')}</div>
-              <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto max-h-[280px] overflow-y-auto">{JSON.stringify(detailRecord.context_payload, null, 2)}</pre>
+              <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto max-h-[280px] overflow-y-auto scrollbar">{JSON.stringify(detailRecord.context_payload, null, 2)}</pre>
             </div>
           ) : null}
           {detailRecord?.news_debug ? (
             <div className="mt-3 rounded-lg border border-border/50 p-3">
               <div className="text-[12px] font-medium mb-1">{tr('newsDetails')}</div>
-              <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto">{JSON.stringify(detailRecord.news_debug, null, 2)}</pre>
+              <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto scrollbar">{JSON.stringify(detailRecord.news_debug, null, 2)}</pre>
             </div>
           ) : null}
           {detailRecord?.prompt_context ? (
             <div className="mt-3 rounded-lg border border-border/50 p-3">
               <div className="text-[12px] font-medium mb-1">{tr('promptOriginal')}</div>
-              <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto max-h-[280px] overflow-y-auto">{detailRecord.prompt_context}</pre>
+              <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap break-words overflow-x-auto max-h-[280px] overflow-y-auto scrollbar">{detailRecord.prompt_context}</pre>
             </div>
           ) : null}
         </DialogContent>

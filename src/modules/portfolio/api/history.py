@@ -9,6 +9,7 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
+from src.platform.language import localize_payload, resolve_report_language
 from src.platform.persistence.database import get_db
 from src.platform.persistence.models import AnalysisHistory
 from src.platform.runtime.config import Settings
@@ -100,6 +101,15 @@ def _research_reports(records, db):
     return reports
 
 
+_LOCALIZED_FIELDS = ("title", "content", "research_report", "suggestions")
+
+
+def _localized(response: "HistoryResponse", language: str) -> "HistoryResponse":
+    """依介面语言转换使用者可见栏位;资料库原样保留,新闻/来源摘录不动。"""
+    return response.model_copy(update={field: localize_payload(getattr(response, field), language)
+                                       for field in _LOCALIZED_FIELDS})
+
+
 @router.get("")
 def list_history(
     agent_name: str | None = None,
@@ -154,8 +164,9 @@ def list_history(
     )
 
     reports = _research_reports(records, db)
+    language = resolve_report_language(db)
     return [
-        HistoryResponse(
+        _localized(HistoryResponse(
             id=r.id,
             agent_name=r.agent_name,
             agent_kind=(r.agent_kind_snapshot or infer_agent_kind(r.agent_name)),
@@ -174,7 +185,7 @@ def list_history(
             news_debug=r.raw_data.get("news_debug") if r.raw_data else None,
             created_at=_format_datetime(r.created_at),
             updated_at=_format_datetime(r.updated_at),
-        )
+        ), language)
         for r in records
     ]
 
@@ -189,7 +200,7 @@ def get_history_detail(
         raise api_error(404, "analysis_record_not_found", "记录不存在")
 
     report = _research_reports([record], db).get(record.id)
-    return HistoryResponse(
+    return _localized(HistoryResponse(
         id=record.id,
         agent_name=record.agent_name,
         agent_kind=(record.agent_kind_snapshot or infer_agent_kind(record.agent_name)),
@@ -220,7 +231,7 @@ def get_history_detail(
         else None,
         created_at=_format_datetime(record.created_at),
         updated_at=_format_datetime(record.updated_at),
-    )
+    ), resolve_report_language(db))
 
 
 @router.delete("/{history_id}")

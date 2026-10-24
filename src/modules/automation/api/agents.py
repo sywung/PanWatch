@@ -557,6 +557,22 @@ def find_running_for_stock(
     }
 
 
+def _tradingagents_record(record, db: Session) -> dict:
+    """深度分析纪录;使用者可见文字依介面语言转换,资料库原样保留。"""
+    from src.platform.language import localize_payload, resolve_report_language
+
+    return {
+        "id": record.id,
+        "agent_name": record.agent_name,
+        "stock_symbol": record.stock_symbol,
+        "analysis_date": record.analysis_date,
+        **localize_payload({"title": record.title or "", "content": record.content,
+                            "raw_data": record.raw_data or {}}, resolve_report_language(db)),
+        "created_at": _format_datetime(record.created_at),
+        "updated_at": _format_datetime(record.updated_at),
+    }
+
+
 @router.get("/tradingagents/latest")
 def get_tradingagents_latest(
     stock_symbol: str = Query(..., description="股票代码,如 300418"),
@@ -585,17 +601,7 @@ def get_tradingagents_latest(
     if not record:
         return None
 
-    return {
-        "id": record.id,
-        "agent_name": record.agent_name,
-        "stock_symbol": record.stock_symbol,
-        "analysis_date": record.analysis_date,
-        "title": record.title or "",
-        "content": record.content,
-        "raw_data": record.raw_data or {},
-        "created_at": _format_datetime(record.created_at),
-        "updated_at": _format_datetime(record.updated_at),
-    }
+    return _tradingagents_record(record, db)
 
 
 @router.get("/tradingagents/analysis")
@@ -620,17 +626,7 @@ def get_tradingagents_analysis(
     if not record:
         return None
 
-    return {
-        "id": record.id,
-        "agent_name": record.agent_name,
-        "stock_symbol": record.stock_symbol,
-        "analysis_date": record.analysis_date,
-        "title": record.title or "",
-        "content": record.content,
-        "raw_data": record.raw_data or {},
-        "created_at": _format_datetime(record.created_at),
-        "updated_at": _format_datetime(record.updated_at),
-    }
+    return _tradingagents_record(record, db)
 
 
 @router.get("/tradingagents/analysis/pdf")
@@ -664,12 +660,13 @@ def export_tradingagents_analysis_pdf(
         raise api_error(404, "analysis_not_found", "未找到该深度分析记录")
 
     # 用 raw_data 拼详情页同款完整分节(含 4 分析师全文 + 辩论全文);raw_data 缺失时回退 content
-    from src.platform.language import resolve_report_language
+    from src.platform.language import localize_text, resolve_report_language
 
     report_language = resolve_report_language(db)
     report_md = assemble_report_markdown(record.raw_data or {}, language=report_language) or (record.content or "")
+    report_md = localize_text(report_md, report_language) or report_md
     english = report_language == "en-US"
-    pdf_title = f"{stock_symbol} Deep Analysis" if english else (record.title or "深度分析")
+    pdf_title = f"{stock_symbol} Deep Analysis" if english else localize_text(record.title or "深度分析", report_language)
     pdf_bytes = render_analysis_pdf(pdf_title, report_md, language=report_language)
     filename = f"Deep-analysis-{stock_symbol}-{analysis_date}.pdf" if english else f"深度分析-{stock_symbol}-{analysis_date}.pdf"
     return Response(

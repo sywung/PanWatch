@@ -17,6 +17,7 @@ from src.platform.marketdata import fx as fx_module
 from src.platform.marketdata.models import ALL_MARKETS, DEFAULT_MARKET
 from src.modules.strategy.strategy_engine import get_strategy_stats, list_strategy_signals
 from src.platform.ai.ai_failover import get_configured_failover_client
+from src.platform.language import localize_payload, resolve_report_language
 from src.platform.persistence.database import get_db
 from src.platform.persistence.models import (
     AnalysisHistory,
@@ -140,7 +141,7 @@ def _load_latest_insights(db: Session) -> list[dict]:
                 "updated_at": _format_datetime(row.updated_at),
             }
         )
-    return out
+    return localize_payload(out, resolve_report_language(db))
 
 
 @router.get("/overview")
@@ -474,13 +475,12 @@ def get_brief(type: str = Query("eod", description="premarket | eod"), db: Sessi
         )
         .first()
     )
+    language = resolve_report_language(db)
     if not row:
-        return {"empty": True, "type": type, "agent_label": label}
+        return {"empty": True, "type": type, "agent_label": localize_payload(label, language)}
     return {
         "type": type,
-        "agent_label": label,
-        "title": row.title or "",
-        "content": row.content or "",
+        **localize_payload({"agent_label": label, "title": row.title or "", "content": row.content or ""}, language),
         "date": row.analysis_date or "",
         "updated_at": _format_datetime(row.updated_at),
     }

@@ -70,3 +70,16 @@ def localize_text(text: str | None, language: str | None) -> str | None:
     for old, new in POSTPROCESS:
         result = result.replace(old, new)
     return result
+
+
+def localize_payload(value, language: str | None):
+    """递回转换 dict/list 里的字串值(键不动),回传新物件,不修改原值。"""
+    if language != "zh-TW":
+        return value
+    if isinstance(value, str):
+        return localize_text(value, language)
+    if isinstance(value, dict):
+        return {key: localize_payload(item, language) for key, item in value.items()}
+    if isinstance(value, list):
+        return [localize_payload(item, language) for item in value]
+    return value

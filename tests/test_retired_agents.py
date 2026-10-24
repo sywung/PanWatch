@@ -21,6 +21,13 @@ from src.platform.persistence.migrations import _m135_retire_unused_agents
 from src.platform.persistence.models import AgentConfig, AnalysisHistory, Stock, StockAgent, StockSuggestion
 
 
+@pytest.fixture(autouse=True)
+def _zh_cn_interface(monkeypatch):
+    """本档验证投影/退役行为,固定简中介面;繁中读出转换见 test_history_localization。"""
+    import src.modules.portfolio.api.history as history_api
+    monkeypatch.setattr(history_api, "resolve_report_language", lambda db: "zh-CN")
+
+
 @pytest.mark.parametrize('retired', ['chart_analyst', 'news_digest'])
 def test_retirement_removes_configuration_without_losing_reports_or_reseeding(tmp_path, monkeypatch, retired):
     import server

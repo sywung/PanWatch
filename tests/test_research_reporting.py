@@ -13,6 +13,13 @@ from src.platform.persistence.database import Base
 from src.platform.persistence.models import AnalysisHistory
 
 
+@pytest.fixture(autouse=True)
+def _zh_cn_interface(monkeypatch):
+    """本档验证投影/退役行为,固定简中介面;繁中读出转换见 test_history_localization。"""
+    import src.modules.portfolio.api.history as history_api
+    monkeypatch.setattr(history_api, "resolve_report_language", lambda db: "zh-CN")
+
+
 @pytest.fixture
 def sample():
     keys = ["CN:12345", "HK:12345"]
